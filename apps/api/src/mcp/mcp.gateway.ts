@@ -111,7 +111,7 @@ function jsonRpcError(id: string | number | null, code: number, message: string)
 	return { jsonrpc: "2.0" as const, id, error: { code, message } };
 }
 
-function result(id: string | number, value: unknown) {
+function result<Value extends object>(id: string | number, value: Value) {
 	return {
 		jsonrpc: "2.0" as const,
 		id,
@@ -124,10 +124,11 @@ function result(id: string | number, value: unknown) {
 	};
 }
 
-function toolResult(id: string | number, value: unknown) {
+function toolResult(id: string | number, value: unknown, isError = false) {
 	return result(id, {
 		content: [{ type: "text", text: JSON.stringify(value) }],
 		structuredContent: value,
+		isError,
 	});
 }
 
@@ -212,6 +213,8 @@ export function createMcpGateway(router: AnyRouter) {
 					supportedVersions: [MCP.protocolVersion],
 					capabilities: { tools: { listChanged: false } },
 					instructions: "Use the CRM tools for authenticated internal CRM reads and staged signal ingestion.",
+					ttlMs: MCP.toolListTtlMs,
+					cacheScope: "private",
 				}));
 				return;
 			}
@@ -230,19 +233,23 @@ export function createMcpGateway(router: AnyRouter) {
 					res.status(400).json(jsonRpcError(request.id, -32602, "Invalid tool parameters."));
 					return;
 				}
-				const value = await callTool(caller, toolParams.data.name, toolParams.data.arguments);
-				res.json(toolResult(request.id, value));
+				try {
+					const value = await callTool(caller, toolParams.data.name, toolParams.data.arguments);
+					res.json(toolResult(request.id, value));
+				} catch (error) {
+					if (error instanceof z.ZodError) {
+						res.status(400).json(jsonRpcError(request.id, -32602, "Invalid tool arguments."));
+						return;
+					}
+					const message = error instanceof Error ? error.message : "CRM tool call failed.";
+					res.json(toolResult(request.id, { message }, true));
+				}
 				return;
 			}
 
 			res.status(404).json(jsonRpcError(request.id, -32601, "Method not found"));
-		} catch (error) {
-			if (error instanceof z.ZodError) {
-				res.status(400).json(jsonRpcError(request.id, -32602, "Invalid tool arguments."));
-				return;
-			}
-			const message = error instanceof Error ? error.message : "Tool call failed.";
-			res.status(500).json(jsonRpcError(request.id, -32603, message));
+		} catch {
+			res.status(500).json(jsonRpcError(request.id, -32603, "Internal error"));
 		}
 	};
 }
