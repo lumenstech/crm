@@ -48,9 +48,6 @@ export const signalInboxItem = z.object({
 	demandTrigger: z.string().nullable(),
 	nextAction: z.string().nullable(),
 	mapped: z.boolean(),
-	mappedCompanyId: z.string().nullable(),
-	canonicalOpportunityId: z.string().nullable(),
-	dealId: z.string().nullable(),
 	payload: signalPayload,
 });
 
