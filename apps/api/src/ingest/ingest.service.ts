@@ -2,7 +2,12 @@ import type { Db } from "@crm/db";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { InjectDatabase } from "../database/database.constants";
-import type { IngestSignalInput, IngestSignalOutput } from "./ingest.contracts";
+import type {
+	IngestSignalInput,
+	IngestSignalOutput,
+	SignalInboxInput,
+	SignalInboxOutput,
+} from "./ingest.contracts";
 
 type BusinessUnitRow = {
 	id: string;
@@ -11,6 +16,26 @@ type BusinessUnitRow = {
 
 type SourceRecordRow = {
 	id: string;
+};
+
+type InboxRow = {
+	sourceRecordId: string;
+	project: string;
+	source: string;
+	sourceType: string;
+	sourceId: string;
+	sourceUrl: string | null;
+	observedAt: Date;
+	entity: string | null;
+	signalScore: number | null;
+	company: string | null;
+	subject: string | null;
+	stageKey: string | null;
+	priority: string | null;
+	demandTrigger: string | null;
+	nextAction: string | null;
+	mapped: boolean;
+	payload: Record<string, unknown>;
 };
 
 @Injectable()
@@ -114,6 +139,52 @@ export class IngestService {
 			project: input.project,
 			deduplicated: Boolean(existing),
 			promoted: false,
+		};
+	}
+
+	async inbox(input: SignalInboxInput): Promise<SignalInboxOutput> {
+		const rows = await this.db.$queryRaw<InboxRow[]>`
+			SELECT
+				sr.id AS "sourceRecordId",
+				bu.key AS project,
+				sr."sourceSystem" AS source,
+				sr."sourceType" AS "sourceType",
+				sr."sourceId" AS "sourceId",
+				sr."sourceUrl" AS "sourceUrl",
+				sr."observedAt" AS "observedAt",
+				COALESCE(sr.payload->>'entity', sr.payload->>'company') AS entity,
+				NULLIF(sr.payload->>'signal_score','')::float AS "signalScore",
+				sr.payload->>'company' AS company,
+				sr.payload->>'subject' AS subject,
+				sr.payload->>'stage_key' AS "stageKey",
+				sr.payload->>'priority' AS priority,
+				sr.payload->>'demand_trigger' AS "demandTrigger",
+				sr.payload->>'next_action' AS "nextAction",
+				EXISTS (
+					SELECT 1 FROM record_mapping rm WHERE rm."sourceRecordId" = sr.id
+				) AS mapped,
+				sr.payload AS payload
+			FROM source_record sr
+			JOIN business_unit bu ON bu.id = sr."businessUnitId"
+			WHERE (${input.project ?? null}::text IS NULL OR bu.key = ${input.project ?? null})
+				AND (${input.minScore ?? null}::float IS NULL OR COALESCE(NULLIF(sr.payload->>'signal_score','')::float, NULLIF(sr.payload->'metadata'->>'fit_score','')::float, 0) >= ${input.minScore ?? null})
+				AND (
+					${input.status} = 'all'
+					OR (${input.status} = 'mapped' AND EXISTS (SELECT 1 FROM record_mapping rm WHERE rm."sourceRecordId" = sr.id))
+					OR (${input.status} = 'unresolved' AND NOT EXISTS (SELECT 1 FROM record_mapping rm WHERE rm."sourceRecordId" = sr.id))
+				)
+			ORDER BY
+				COALESCE(NULLIF(sr.payload->>'signal_score','')::float, NULLIF(sr.payload->'metadata'->>'fit_score','')::float, 0) DESC,
+				sr."observedAt" DESC
+			LIMIT ${input.limit}
+		`;
+
+		return {
+			rows: rows.map((row) => ({
+				...row,
+				observedAt: row.observedAt.toISOString(),
+			})),
+			count: rows.length,
 		};
 	}
 }
