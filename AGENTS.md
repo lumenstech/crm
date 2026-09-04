@@ -148,7 +148,7 @@ Somebody changing a timeout must not have to know which file to open.
 
 **Don't** — one constant per file, found only by grep:
 
-```ts
+```tsx
 // dispatch.ts
 const DRAIN_TIMEOUT_MS = 4 * 60_000;
 // crm.ts
@@ -159,7 +159,7 @@ const LEASE_MS = 10 * 60_000;
 
 **Do** — one object, grouped by concern, imported where used:
 
-```ts
+```tsx
 // dispatch-config.ts
 export const DISPATCH = {
   sweep: { timeoutMs: 4 * MINUTE_MS, staleQueueMs: 5 * MINUTE_MS },
@@ -186,7 +186,7 @@ runtime bug two files away.
 
 **Don't** — reach into raw JSON, re-deriving the shape at each call site:
 
-```ts
+```tsx
 function manifestActions(value: unknown) {
   const actions = recordOf(value).actions;
   return Array.isArray(actions) ? actions.map(recordOf) : [];
@@ -204,7 +204,7 @@ the compiler cannot help. Rename a field and every one of these silently returns
 
 **Do** — one schema, parsed once, at the read:
 
-```ts
+```tsx
 export const agentManifestAction = z.discriminatedUnion("type", [
   z.object({
     type: z.literal(AGENT_ACTION_TYPES.SLACK_MESSAGE_POST),
@@ -224,7 +224,7 @@ export type AgentManifest = z.infer<typeof agentManifest>;
 export function parseAgentManifest(value: unknown): AgentManifest { … }
 ```
 
-```ts
+```tsx
 const manifest = parseAgentManifest(version.manifest);
 const slack = manifest.actions.find(
   (action) => action.type === "slack.message.post",
@@ -250,54 +250,3 @@ it:
 ## Design
 
 @docs/design.md
-
-## Median Tasks
-
-Median can use a project-local workspace binding. If this repository has
-`.median/config.json`, run `mdn` commands from inside this repository so the
-correct Median workspace profile is selected. The local config stores only a
-profile name; API keys stay in your user config.
-
-To bind this repository to a workspace:
-
-```
-mdn setup --local
-```
-
-Before starting work, check your assigned tasks:
-
-```
-mdn tasks --agent <your-agent-name>
-```
-
-When picking up a task:
-
-```
-mdn status <TASK-CODE> in_progress --agent <your-agent-name>
-```
-
-When completing a task:
-
-```
-mdn status <TASK-CODE> ready --agent <your-agent-name>
-```
-
-To create a new task:
-
-```
-mdn create --title "Description" --status todo --priority medium --agent <your-agent-name>
-```
-
-## Commit Messages & Pull Requests
-
-Always include the Median task ID in commit messages and PR titles so tasks get marked automatically.
-
-```
-git commit -m "MDN-42 fix: resolve auth token expiry"
-```
-
-For pull requests, include the task ID in the title:
-
-```
-MDN-42 fix: resolve auth token expiry
-```
