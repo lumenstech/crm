@@ -6,6 +6,10 @@ import { restMeta } from "../trpc/openapi";
 import {
 	ingestSignalInput,
 	ingestSignalOutput,
+	promoteSignalInput,
+	promoteSignalOutput,
+	qualifySignalInput,
+	qualifySignalOutput,
 	resolveSignalCompanyInput,
 	resolveSignalCompanyOutput,
 	signalCompanyCandidatesOutput,
@@ -14,11 +18,16 @@ import {
 	signalSourceRecordInput,
 } from "./ingest.contracts";
 import { IngestService } from "./ingest.service";
+import { SignalQualificationService } from "./signal-qualification.service";
 
 @Router({ alias: "ingest" })
 @UseMiddlewares(AuthMiddleware)
 export class IngestRouter {
-	constructor(@Inject(IngestService) private readonly ingest: IngestService) {}
+	constructor(
+		@Inject(IngestService) private readonly ingest: IngestService,
+		@Inject(SignalQualificationService)
+		private readonly qualification: SignalQualificationService,
+	) {}
 
 	@Mutation({
 		input: ingestSignalInput,
@@ -58,5 +67,23 @@ export class IngestRouter {
 	})
 	async resolveCompany(@Input() input: z.infer<typeof resolveSignalCompanyInput>) {
 		return this.ingest.resolveCompany(input);
+	}
+
+	@Mutation({
+		input: qualifySignalInput,
+		output: qualifySignalOutput,
+		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/qualify", ["Ingest"]),
+	})
+	async qualify(@Input() input: z.infer<typeof qualifySignalInput>) {
+		return this.qualification.qualify(input);
+	}
+
+	@Mutation({
+		input: promoteSignalInput,
+		output: promoteSignalOutput,
+		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/promote", ["Ingest"]),
+	})
+	async promote(@Input() input: z.infer<typeof promoteSignalInput>) {
+		return this.qualification.promote(input);
 	}
 }
