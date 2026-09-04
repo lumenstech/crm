@@ -4,6 +4,7 @@ import { z } from "zod";
 import { companyIdInput } from "../companies/companies.contracts";
 import { contactIdInput } from "../contacts/contacts.contracts";
 import { dealIdInput } from "../deals/deals.contracts";
+import type { AppRouter } from "../generated/server";
 import {
 	ingestSignalInput,
 	signalInboxInput,
@@ -13,8 +14,12 @@ import { MCP } from "./mcp.config";
 import { mcpRequest, mcpToolCallParams } from "./mcp.contracts";
 
 const searchInput = z.object({ q: z.string().trim().max(320).default("") });
-const confirmedIngestInput = ingestSignalInput.extend({ confirm: z.literal(true) });
-const confirmedResearchInput = companyIdInput.extend({ confirm: z.literal(true) });
+const confirmedIngestInput = ingestSignalInput.extend({
+	confirm: z.literal(true),
+});
+const confirmedResearchInput = companyIdInput.extend({
+	confirm: z.literal(true),
+});
 
 const tools = [
 	{
@@ -73,7 +78,8 @@ const tools = [
 	},
 	{
 		name: "crm_ingest_signal",
-		description: "Stage one external CRM signal. This does not promote or match records.",
+		description:
+			"Stage one external CRM signal. This does not promote or match records.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -105,9 +111,20 @@ const tools = [
 	},
 ] as const;
 
-type Caller = ReturnType<AnyRouter["createCaller"]>;
+type Caller = ReturnType<AppRouter["createCaller"]>;
+type JsonValue =
+	| string
+	| number
+	| boolean
+	| null
+	| JsonValue[]
+	| { [key: string]: JsonValue };
 
-function jsonRpcError(id: string | number | null, code: number, message: string) {
+function jsonRpcError(
+	id: string | number | null,
+	code: number,
+	message: string,
+) {
 	return { jsonrpc: "2.0" as const, id, error: { code, message } };
 }
 
@@ -124,7 +141,7 @@ function result<Value extends object>(id: string | number, value: Value) {
 	};
 }
 
-function toolResult(id: string | number, value: unknown, isError = false) {
+function toolResult(id: string | number, value: JsonValue, isError = false) {
 	return result(id, {
 		content: [{ type: "text", text: JSON.stringify(value) }],
 		structuredContent: value,
@@ -132,7 +149,11 @@ function toolResult(id: string | number, value: unknown, isError = false) {
 	});
 }
 
-async function callTool(caller: Caller, name: string, args: unknown) {
+async function callTool(
+	caller: Caller,
+	name: string,
+	args: JsonValue | undefined,
+) {
 	switch (name) {
 		case "crm_search": {
 			const input = searchInput.parse(args ?? {});
@@ -165,7 +186,11 @@ function headerValue(req: Request, name: string): string | undefined {
 	return value?.trim() || undefined;
 }
 
-function validateHeaders(req: Request, method: string, name?: string): string | null {
+function validateHeaders(
+	req: Request,
+	method: string,
+	name?: string,
+): string | null {
 	if (headerValue(req, "MCP-Protocol-Version") !== MCP.protocolVersion) {
 		return "MCP-Protocol-Version does not match the supported protocol.";
 	}
@@ -190,9 +215,10 @@ export function createMcpGateway(router: AnyRouter) {
 		}
 
 		const request = parsed.data;
-		const toolParams = request.method === "tools/call"
-			? mcpToolCallParams.safeParse(request.params)
-			: null;
+		const toolParams =
+			request.method === "tools/call"
+				? mcpToolCallParams.safeParse(request.params)
+				: null;
 		const name = toolParams?.success ? toolParams.data.name : undefined;
 		const headerError = validateHeaders(req, request.method, name);
 		if (headerError) {
@@ -206,48 +232,66 @@ export function createMcpGateway(router: AnyRouter) {
 			return;
 		}
 
-		const caller = router.createCaller(context);
+		const caller = router.createCaller(context) as Caller;
 		try {
 			if (request.method === "server/discover") {
-				res.json(result(request.id, {
-					supportedVersions: [MCP.protocolVersion],
-					capabilities: { tools: { listChanged: false } },
-					instructions: "Use the CRM tools for authenticated internal CRM reads and staged signal ingestion.",
-					ttlMs: MCP.toolListTtlMs,
-					cacheScope: "private",
-				}));
+				res.json(
+					result(request.id, {
+						supportedVersions: [MCP.protocolVersion],
+						capabilities: { tools: { listChanged: false } },
+						instructions:
+							"Use the CRM tools for authenticated internal CRM reads and staged signal ingestion.",
+						ttlMs: MCP.toolListTtlMs,
+						cacheScope: "private",
+					}),
+				);
 				return;
 			}
 
 			if (request.method === "tools/list") {
-				res.json(result(request.id, {
-					tools,
-					ttlMs: MCP.toolListTtlMs,
-					cacheScope: "private",
-				}));
+				res.json(
+					result(request.id, {
+						tools,
+						ttlMs: MCP.toolListTtlMs,
+						cacheScope: "private",
+					}),
+				);
 				return;
 			}
 
 			if (request.method === "tools/call") {
 				if (!toolParams?.success) {
-					res.status(400).json(jsonRpcError(request.id, -32602, "Invalid tool parameters."));
+					res
+						.status(400)
+						.json(jsonRpcError(request.id, -32602, "Invalid tool parameters."));
 					return;
 				}
 				try {
-					const value = await callTool(caller, toolParams.data.name, toolParams.data.arguments);
+					const value = await callTool(
+						caller,
+						toolParams.data.name,
+						toolParams.data.arguments,
+					);
 					res.json(toolResult(request.id, value));
 				} catch (error) {
 					if (error instanceof z.ZodError) {
-						res.status(400).json(jsonRpcError(request.id, -32602, "Invalid tool arguments."));
+						res
+							.status(400)
+							.json(
+								jsonRpcError(request.id, -32602, "Invalid tool arguments."),
+							);
 						return;
 					}
-					const message = error instanceof Error ? error.message : "CRM tool call failed.";
+					const message =
+						error instanceof Error ? error.message : "CRM tool call failed.";
 					res.json(toolResult(request.id, { message }, true));
 				}
 				return;
 			}
 
-			res.status(404).json(jsonRpcError(request.id, -32601, "Method not found"));
+			res
+				.status(404)
+				.json(jsonRpcError(request.id, -32601, "Method not found"));
 		} catch {
 			res.status(500).json(jsonRpcError(request.id, -32603, "Internal error"));
 		}

@@ -1,14 +1,14 @@
+import { randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import { InjectDatabase } from "../database/database.constants";
 import {
-	signalPayload,
 	type IngestSignalInput,
 	type IngestSignalOutput,
 	type SignalInboxInput,
 	type SignalInboxOutput,
 	type SignalPayload,
+	signalPayload,
 } from "./ingest.contracts";
 
 type BusinessUnitRow = { id: string; enabled: boolean };
@@ -45,7 +45,9 @@ export class IngestService {
 			throw new BadRequestException(`Unknown business unit: ${input.project}.`);
 		}
 		if (!businessUnit.enabled) {
-			throw new BadRequestException(`Business unit is disabled: ${input.project}.`);
+			throw new BadRequestException(
+				`Business unit is disabled: ${input.project}.`,
+			);
 		}
 
 		const [existing] = await this.db.$queryRaw<SourceRecordRow[]>`
@@ -56,7 +58,9 @@ export class IngestService {
 			LIMIT 1
 		`;
 
-		const observedAt = input.observedAt ? new Date(input.observedAt) : new Date();
+		const observedAt = input.observedAt
+			? new Date(input.observedAt)
+			: new Date();
 		const payload = JSON.stringify({
 			...input.payload,
 			project: input.project,
@@ -87,7 +91,8 @@ export class IngestService {
 				payload = EXCLUDED.payload
 			RETURNING id
 		`;
-		if (!saved) throw new Error("Signal ingest did not return a source record.");
+		if (!saved)
+			throw new Error("Signal ingest did not return a source record.");
 		return {
 			status: "accepted",
 			sourceRecordId: saved.id,
