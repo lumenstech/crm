@@ -6,7 +6,7 @@ import {
 	type NestExpressApplication,
 } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import type { NextFunction, Request, Response } from "express";
+import { json, type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { AppRouterHost } from "nestjs-trpc";
 import {
@@ -15,6 +15,8 @@ import {
 } from "trpc-to-openapi";
 import { AppModule } from "./app.module";
 import { ContextLogger } from "./logging/context-logger";
+import { MCP } from "./mcp/mcp.config";
+import { createMcpGateway } from "./mcp/mcp.gateway";
 import { REST_BRIDGE_PATH } from "./trpc/openapi";
 import { createBaseTrpcContext } from "./trpc/trpc.context";
 
@@ -47,17 +49,25 @@ export async function createApp(): Promise<NestExpressApplication> {
 		},
 	);
 
+	let mcpGateway: ((req: Request, res: Response) => Promise<void>) | undefined;
+	app.use(
+		MCP.path,
+		json({ limit: MCP.bodyMaxBytes }),
+		(req: Request, res: Response, next: NextFunction) => {
+			if (!mcpGateway) {
+				next();
+				return;
+			}
+			void mcpGateway(req, res);
+		},
+	);
+
 	const apiKeySecurityScheme = {
 		type: "apiKey",
 		in: "header",
 		name: API_KEY_HEADER,
 	} as const;
 
-	// SwaggerModule.setup() registers its Express routes synchronously, so it must
-	// happen before app.init() the same way the REST bridge does — Nest's own
-	// routing (wired up during init) otherwise shadows anything registered after
-	// it. The factory form defers building the document (which needs the tRPC
-	// router, only available post-init) to first request instead.
 	SwaggerModule.setup(
 		"",
 		app,
@@ -111,6 +121,7 @@ export async function createApp(): Promise<NestExpressApplication> {
 		router: appRouter,
 		createContext: ({ req }) => createBaseTrpcContext(req),
 	});
+	mcpGateway = createMcpGateway(appRouter);
 
 	return app;
 }
