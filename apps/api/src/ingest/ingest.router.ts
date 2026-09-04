@@ -50,9 +50,11 @@ export class IngestRouter {
 	@Query({
 		input: signalSourceRecordInput,
 		output: signalCompanyCandidatesOutput,
-		meta: restMeta("GET", "/ingest/signals/{sourceRecordId}/company-candidates", [
-			"Ingest",
-		]),
+		meta: restMeta(
+			"GET",
+			"/ingest/signals/{sourceRecordId}/company-candidates",
+			["Ingest"],
+		),
 	})
 	async companyCandidates(@Input("sourceRecordId") sourceRecordId: string) {
 		return this.ingest.companyCandidates(sourceRecordId);
@@ -65,14 +67,18 @@ export class IngestRouter {
 			"Ingest",
 		]),
 	})
-	async resolveCompany(@Input() input: z.infer<typeof resolveSignalCompanyInput>) {
+	async resolveCompany(
+		@Input() input: z.infer<typeof resolveSignalCompanyInput>,
+	) {
 		return this.ingest.resolveCompany(input);
 	}
 
 	@Mutation({
 		input: qualifySignalInput,
 		output: qualifySignalOutput,
-		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/qualify", ["Ingest"]),
+		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/qualify", [
+			"Ingest",
+		]),
 	})
 	async qualify(@Input() input: z.infer<typeof qualifySignalInput>) {
 		return this.qualification.qualify(input);
@@ -81,7 +87,9 @@ export class IngestRouter {
 	@Mutation({
 		input: promoteSignalInput,
 		output: promoteSignalOutput,
-		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/promote", ["Ingest"]),
+		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/promote", [
+			"Ingest",
+		]),
 	})
 	async promote(@Input() input: z.infer<typeof promoteSignalInput>) {
 		return this.qualification.promote(input);

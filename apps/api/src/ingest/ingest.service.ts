@@ -1,11 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
 import {
 	BadRequestException,
 	Injectable,
-	Logger,
 	NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import { CompaniesService } from "../companies/companies.service";
 import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
@@ -58,8 +57,6 @@ type InboxRow = {
 
 @Injectable()
 export class IngestService {
-	private readonly logger = new Logger(IngestService.name);
-
 	constructor(
 		@InjectDatabase() private readonly db: Db,
 		private readonly companies: CompaniesService,
@@ -69,8 +66,12 @@ export class IngestService {
 		const [businessUnit] = await this.db.$queryRaw<BusinessUnitRow[]>`
 			SELECT id, enabled FROM business_unit WHERE key = ${input.project} LIMIT 1
 		`;
-		if (!businessUnit) throw new BadRequestException(`Unknown business unit: ${input.project}.`);
-		if (!businessUnit.enabled) throw new BadRequestException(`Business unit is disabled: ${input.project}.`);
+		if (!businessUnit)
+			throw new BadRequestException(`Unknown business unit: ${input.project}.`);
+		if (!businessUnit.enabled)
+			throw new BadRequestException(
+				`Business unit is disabled: ${input.project}.`,
+			);
 
 		const [existing] = await this.db.$queryRaw<SourceRecordRow[]>`
 			SELECT id FROM source_record
@@ -80,7 +81,9 @@ export class IngestService {
 			LIMIT 1
 		`;
 
-		const observedAt = input.observedAt ? new Date(input.observedAt) : new Date();
+		const observedAt = input.observedAt
+			? new Date(input.observedAt)
+			: new Date();
 		const payload = JSON.stringify({
 			...input.payload,
 			project: input.project,
@@ -111,7 +114,8 @@ export class IngestService {
 				payload = EXCLUDED.payload
 			RETURNING id
 		`;
-		if (!saved) throw new Error("Signal ingest did not return a source record.");
+		if (!saved)
+			throw new Error("Signal ingest did not return a source record.");
 		return {
 			status: "accepted",
 			sourceRecordId: saved.id,
@@ -169,24 +173,32 @@ export class IngestService {
 			LIMIT ${input.limit}
 		`;
 		return {
-			rows: rows.map((row) => ({ ...row, observedAt: row.observedAt.toISOString() })),
+			rows: rows.map((row) => ({
+				...row,
+				observedAt: row.observedAt.toISOString(),
+			})),
 			count: rows.length,
 		};
 	}
 
-	async companyCandidates(sourceRecordId: string): Promise<SignalCompanyCandidatesOutput> {
+	async companyCandidates(
+		sourceRecordId: string,
+	): Promise<SignalCompanyCandidatesOutput> {
 		const signal = await this.loadSignal(sourceRecordId);
 		const entity = this.signalEntity(signal.payload);
 		const domain = this.signalDomain(signal.payload);
-		const [mapped] = await this.db.$queryRaw<Array<{ applicationId: string | null }>>`
+		const [mapped] = await this.db.$queryRaw<
+			Array<{ applicationId: string | null }>
+		>`
 			SELECT "applicationId" FROM record_mapping
 			WHERE "sourceSystem" = ${signal.sourceSystem}
 				AND "sourceType" = ${signal.sourceType}
 				AND "sourceId" = ${signal.sourceId}
 				AND "canonicalType" = 'company' AND status = 'active' LIMIT 1
 		`;
-		const rows = entity || domain
-			? await this.db.$queryRaw<CandidateRow[]>`
+		const rows =
+			entity || domain
+				? await this.db.$queryRaw<CandidateRow[]>`
 				SELECT id, name, domain, "businessUnitId" AS "businessUnitId"
 				FROM company
 				WHERE "archivedAt" IS NULL AND (
@@ -195,9 +207,11 @@ export class IngestService {
 				)
 				LIMIT 20
 			`
-			: [];
+				: [];
 		const candidates = rows
-			.map((row) => this.scoreCandidate(row, entity, domain, signal.businessUnitId))
+			.map((row) =>
+				this.scoreCandidate(row, entity, domain, signal.businessUnitId),
+			)
 			.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 		return {
 			sourceRecordId,
@@ -209,10 +223,14 @@ export class IngestService {
 		};
 	}
 
-	async resolveCompany(input: ResolveSignalCompanyInput): Promise<ResolveSignalCompanyOutput> {
+	async resolveCompany(
+		input: ResolveSignalCompanyInput,
+	): Promise<ResolveSignalCompanyOutput> {
 		const signal = await this.loadSignal(input.sourceRecordId);
 		const entity = input.companyName ?? this.signalEntity(signal.payload);
-		const requestedDomain = normalizeDomain(input.domain ?? this.signalDomain(signal.payload));
+		const requestedDomain = normalizeDomain(
+			input.domain ?? this.signalDomain(signal.payload),
+		);
 		let matchMethod = "manual";
 		let created = false;
 		let company: CandidateRow | undefined;
@@ -222,7 +240,8 @@ export class IngestService {
 				SELECT id, name, domain, "businessUnitId" AS "businessUnitId"
 				FROM company WHERE id = ${input.companyId} AND "archivedAt" IS NULL LIMIT 1
 			`;
-			if (!company) throw new NotFoundException(`No company with id ${input.companyId}.`);
+			if (!company)
+				throw new NotFoundException(`No company with id ${input.companyId}.`);
 		}
 		if (!company && requestedDomain) {
 			[company] = await this.db.$queryRaw<CandidateRow[]>`
@@ -244,7 +263,10 @@ export class IngestService {
 			);
 		}
 		if (!company) {
-			if (!entity) throw new BadRequestException("A company name is required to create a company.");
+			if (!entity)
+				throw new BadRequestException(
+					"A company name is required to create a company.",
+				);
 			const made = await this.companies.create({
 				name: entity,
 				domain: requestedDomain ?? undefined,
@@ -302,7 +324,8 @@ export class IngestService {
 		`;
 
 		let researchQueued = false;
-		if (input.queueResearch) researchQueued = (await this.companies.enrich(company.id)).queued;
+		if (input.queueResearch)
+			researchQueued = (await this.companies.enrich(company.id)).queued;
 		return {
 			sourceRecordId: input.sourceRecordId,
 			canonicalCompanyId: canonical.id,
@@ -322,7 +345,10 @@ export class IngestService {
 			FROM source_record sr JOIN business_unit bu ON bu.id = sr."businessUnitId"
 			WHERE sr.id = ${sourceRecordId} LIMIT 1
 		`;
-		if (!row) throw new NotFoundException(`No source signal with id ${sourceRecordId}.`);
+		if (!row)
+			throw new NotFoundException(
+				`No source signal with id ${sourceRecordId}.`,
+			);
 		return row;
 	}
 

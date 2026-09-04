@@ -29,7 +29,10 @@ export function usePrefetchSection(): (section: string) => void {
 					return;
 				case "/intelligence":
 					void queryClient.prefetchQuery(
-						trpc.ingest.inbox.queryOptions({ status: "unresolved", limit: 100 }),
+						trpc.ingest.inbox.queryOptions({
+							status: "unresolved",
+							limit: 100,
+						}),
 					);
 					return;
 				case "/companies":

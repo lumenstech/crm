@@ -1,6 +1,10 @@
-import type { Db } from "@crm/db";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import type { Db } from "@crm/db";
+import {
+	BadRequestException,
+	Injectable,
+	NotFoundException,
+} from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import { DealsService } from "../deals/deals.service";
 import type {
@@ -69,7 +73,8 @@ export class SignalQualificationService {
 			method: scored.method,
 			companyResolved: Boolean(company?.applicationId),
 			canonicalOpportunityEligible: scored.score >= 70 && Boolean(company),
-			visibleDealEligible: scored.score >= 85 && Boolean(company?.applicationId),
+			visibleDealEligible:
+				scored.score >= 85 && Boolean(company?.applicationId),
 		};
 	}
 
@@ -90,7 +95,10 @@ export class SignalQualificationService {
 		}
 
 		const payload = signal.payload;
-		const name = this.text(payload.subject) ?? this.text(payload.message) ?? "Qualified opportunity";
+		const name =
+			this.text(payload.subject) ??
+			this.text(payload.message) ??
+			"Qualified opportunity";
 		const amount = input.amountUsd ?? this.number(payload.estimated_value_usd);
 		const stage = scored.score >= 85 ? "priority" : "qualified";
 
@@ -139,11 +147,15 @@ export class SignalQualificationService {
 				);
 			}
 			if (!company.applicationId) {
-				throw new BadRequestException("The resolved company is not linked to a visible Comp company.");
+				throw new BadRequestException(
+					"The resolved company is not linked to a visible Comp company.",
+				);
 			}
 			if (!dealId) {
 				if (!input.ownerId) {
-					throw new BadRequestException("ownerId is required when creating a visible deal.");
+					throw new BadRequestException(
+						"ownerId is required when creating a visible deal.",
+					);
 				}
 				const deal = await this.deals.create({
 					name,
@@ -191,22 +203,42 @@ export class SignalQualificationService {
 		};
 	}
 
-	private score(payload: Record<string, unknown>, components?: SignalScoreComponents) {
+	private score(
+		payload: Record<string, unknown>,
+		components?: SignalScoreComponents,
+	) {
 		if (components) {
 			const score = Math.round(
-				components.icpMatch + components.commercialTrigger + components.projectRelevance +
-				components.companyValue + components.location + components.decisionMaker + components.recency,
+				components.icpMatch +
+					components.commercialTrigger +
+					components.projectRelevance +
+					components.companyValue +
+					components.location +
+					components.decisionMaker +
+					components.recency,
 			);
-			return { score, classification: this.classification(score), method: "components" as const };
+			return {
+				score,
+				classification: this.classification(score),
+				method: "components" as const,
+			};
 		}
 		const explicit = this.number(payload.signal_score);
 		const metadata = this.object(payload.metadata);
 		const legacy = explicit ?? this.number(metadata?.fit_score);
 		if (legacy != null) {
 			const score = Math.max(0, Math.min(100, Math.round(legacy)));
-			return { score, classification: this.classification(score), method: "legacy-score" as const };
+			return {
+				score,
+				classification: this.classification(score),
+				method: "legacy-score" as const,
+			};
 		}
-		return { score: 0, classification: "signal" as const, method: "unscored" as const };
+		return {
+			score: 0,
+			classification: "signal" as const,
+			method: "unscored" as const,
+		};
 	}
 
 	private classification(score: number): SignalClassification {
@@ -226,7 +258,9 @@ export class SignalQualificationService {
 		return row;
 	}
 
-	private async companyMapping(signal: SignalRow): Promise<CompanyMapping | null> {
+	private async companyMapping(
+		signal: SignalRow,
+	): Promise<CompanyMapping | null> {
 		const [row] = await this.db.$queryRaw<CompanyMapping[]>`
 			SELECT "canonicalId" AS "canonicalId", "applicationId" AS "applicationId"
 			FROM record_mapping
@@ -237,7 +271,9 @@ export class SignalQualificationService {
 		return row ?? null;
 	}
 
-	private async opportunityMapping(signal: SignalRow): Promise<OpportunityMapping | null> {
+	private async opportunityMapping(
+		signal: SignalRow,
+	): Promise<OpportunityMapping | null> {
 		const [row] = await this.db.$queryRaw<OpportunityMapping[]>`
 			SELECT "canonicalId" AS "canonicalId", "applicationId" AS "applicationId"
 			FROM record_mapping

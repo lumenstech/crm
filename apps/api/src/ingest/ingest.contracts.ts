@@ -149,9 +149,15 @@ export type IngestSignalInput = z.infer<typeof ingestSignalInput>;
 export type IngestSignalOutput = z.infer<typeof ingestSignalOutput>;
 export type SignalInboxInput = z.infer<typeof signalInboxInput>;
 export type SignalInboxOutput = z.infer<typeof signalInboxOutput>;
-export type SignalCompanyCandidatesOutput = z.infer<typeof signalCompanyCandidatesOutput>;
-export type ResolveSignalCompanyInput = z.infer<typeof resolveSignalCompanyInput>;
-export type ResolveSignalCompanyOutput = z.infer<typeof resolveSignalCompanyOutput>;
+export type SignalCompanyCandidatesOutput = z.infer<
+	typeof signalCompanyCandidatesOutput
+>;
+export type ResolveSignalCompanyInput = z.infer<
+	typeof resolveSignalCompanyInput
+>;
+export type ResolveSignalCompanyOutput = z.infer<
+	typeof resolveSignalCompanyOutput
+>;
 export type SignalScoreComponents = z.infer<typeof signalScoreComponents>;
 export type SignalClassification = z.infer<typeof signalClassification>;
 export type QualifySignalInput = z.infer<typeof qualifySignalInput>;

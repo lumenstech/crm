@@ -30,7 +30,8 @@ export default function IntelligencePage() {
 				<PageShellHeading>
 					<PageShellTitle>Intelligence</PageShellTitle>
 					<PageShellDescription>
-						Review incoming commercial signals before they become CRM records or opportunities.
+						Review incoming commercial signals before they become CRM records or
+						opportunities.
 					</PageShellDescription>
 				</PageShellHeading>
 			</PageShellHeader>
