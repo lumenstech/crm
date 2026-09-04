@@ -25,6 +25,7 @@ export const ingestSignalOutput = z.object({
 
 export const signalInboxInput = z.object({
 	project: z.string().trim().min(1).max(96).optional(),
+	source: z.string().trim().min(1).max(96).optional(),
 	minScore: z.number().min(0).max(100).optional(),
 	status: z.enum(["all", "unresolved", "mapped"]).default("unresolved"),
 	limit: z.number().int().min(1).max(200).default(50),
@@ -47,6 +48,9 @@ export const signalInboxItem = z.object({
 	demandTrigger: z.string().nullable(),
 	nextAction: z.string().nullable(),
 	mapped: z.boolean(),
+	mappedCompanyId: z.string().nullable(),
+	canonicalOpportunityId: z.string().nullable(),
+	dealId: z.string().nullable(),
 	payload: signalPayload,
 });
 
