@@ -19,7 +19,7 @@ import type {
 	SignalInboxOutput,
 } from "./ingest.contracts";
 
-type BusinessUnitRow = { id: string; key?: string; enabled: boolean };
+type BusinessUnitRow = { id: string; enabled: boolean };
 type SourceRecordRow = { id: string };
 type SignalRow = {
 	id: string;
@@ -69,14 +69,8 @@ export class IngestService {
 		const [businessUnit] = await this.db.$queryRaw<BusinessUnitRow[]>`
 			SELECT id, enabled FROM business_unit WHERE key = ${input.project} LIMIT 1
 		`;
-		if (!businessUnit) {
-			throw new BadRequestException(
-				`Unknown business unit: ${input.project}. Register it before ingesting signals.`,
-			);
-		}
-		if (!businessUnit.enabled) {
-			throw new BadRequestException(`Business unit is disabled: ${input.project}.`);
-		}
+		if (!businessUnit) throw new BadRequestException(`Unknown business unit: ${input.project}.`);
+		if (!businessUnit.enabled) throw new BadRequestException(`Business unit is disabled: ${input.project}.`);
 
 		const [existing] = await this.db.$queryRaw<SourceRecordRow[]>`
 			SELECT id FROM source_record
@@ -110,8 +104,7 @@ export class IngestService {
 				${input.sourceId}, ${input.sourceUrl ?? null}, ${observedAt}, ${payload}::jsonb,
 				CURRENT_TIMESTAMP
 			)
-			ON CONFLICT ("sourceSystem", "sourceType", "sourceId")
-			DO UPDATE SET
+			ON CONFLICT ("sourceSystem", "sourceType", "sourceId") DO UPDATE SET
 				"businessUnitId" = EXCLUDED."businessUnitId",
 				"sourceUrl" = EXCLUDED."sourceUrl",
 				"observedAt" = EXCLUDED."observedAt",
@@ -119,16 +112,6 @@ export class IngestService {
 			RETURNING id
 		`;
 		if (!saved) throw new Error("Signal ingest did not return a source record.");
-
-		this.logger.log({
-			message: "Signal ingested",
-			project: input.project,
-			source: input.source,
-			sourceType: input.sourceType,
-			sourceId: input.sourceId,
-			sourceRecordId: saved.id,
-			deduplicated: Boolean(existing),
-		});
 		return {
 			status: "accepted",
 			sourceRecordId: saved.id,
@@ -159,8 +142,7 @@ export class IngestService {
 					WHERE rm."sourceSystem" = sr."sourceSystem"
 						AND rm."sourceType" = sr."sourceType"
 						AND rm."sourceId" = sr."sourceId"
-						AND rm."canonicalType" = 'company'
-						AND rm.status = 'active'
+						AND rm."canonicalType" = 'company' AND rm.status = 'active'
 				) AS mapped,
 				sr.payload AS payload
 			FROM source_record sr
@@ -173,24 +155,17 @@ export class IngestService {
 				AND (
 					${input.status} = 'all'
 					OR (${input.status} = 'mapped' AND EXISTS (
-						SELECT 1 FROM record_mapping rm
-						WHERE rm."sourceSystem" = sr."sourceSystem"
-							AND rm."sourceType" = sr."sourceType"
-							AND rm."sourceId" = sr."sourceId"
-							AND rm."canonicalType" = 'company' AND rm.status = 'active'
-					))
+						SELECT 1 FROM record_mapping rm WHERE rm."sourceSystem" = sr."sourceSystem"
+							AND rm."sourceType" = sr."sourceType" AND rm."sourceId" = sr."sourceId"
+							AND rm."canonicalType" = 'company' AND rm.status = 'active'))
 					OR (${input.status} = 'unresolved' AND NOT EXISTS (
-						SELECT 1 FROM record_mapping rm
-						WHERE rm."sourceSystem" = sr."sourceSystem"
-							AND rm."sourceType" = sr."sourceType"
-							AND rm."sourceId" = sr."sourceId"
-							AND rm."canonicalType" = 'company' AND rm.status = 'active'
-					))
+						SELECT 1 FROM record_mapping rm WHERE rm."sourceSystem" = sr."sourceSystem"
+							AND rm."sourceType" = sr."sourceType" AND rm."sourceId" = sr."sourceId"
+							AND rm."canonicalType" = 'company' AND rm.status = 'active'))
 				)
-			ORDER BY COALESCE(
-				NULLIF(sr.payload->>'signal_score','')::float,
-				NULLIF(sr.payload->'metadata'->>'fit_score','')::float, 0
-			) DESC, sr."observedAt" DESC
+			ORDER BY COALESCE(NULLIF(sr.payload->>'signal_score','')::float,
+				NULLIF(sr.payload->'metadata'->>'fit_score','')::float, 0) DESC,
+				sr."observedAt" DESC
 			LIMIT ${input.limit}
 		`;
 		return {
@@ -203,39 +178,27 @@ export class IngestService {
 		const signal = await this.loadSignal(sourceRecordId);
 		const entity = this.signalEntity(signal.payload);
 		const domain = this.signalDomain(signal.payload);
-
 		const [mapped] = await this.db.$queryRaw<Array<{ applicationId: string | null }>>`
 			SELECT "applicationId" FROM record_mapping
 			WHERE "sourceSystem" = ${signal.sourceSystem}
 				AND "sourceType" = ${signal.sourceType}
 				AND "sourceId" = ${signal.sourceId}
-				AND "canonicalType" = 'company' AND status = 'active'
-			LIMIT 1
+				AND "canonicalType" = 'company' AND status = 'active' LIMIT 1
 		`;
-
 		const rows = entity || domain
-			? await this.db.company.findMany({
-					where: {
-						archivedAt: null,
-						OR: [
-							...(entity
-								? [
-									{ name: { equals: entity, mode: "insensitive" as const } },
-									{ name: { contains: entity, mode: "insensitive" as const } },
-								]
-								: []),
-							...(domain ? [{ domain }] : []),
-						],
-					},
-					select: { id: true, name: true, domain: true, businessUnitId: true },
-					take: 20,
-			  })
+			? await this.db.$queryRaw<CandidateRow[]>`
+				SELECT id, name, domain, "businessUnitId" AS "businessUnitId"
+				FROM company
+				WHERE "archivedAt" IS NULL AND (
+					(${entity}::text IS NOT NULL AND lower(name) LIKE '%' || lower(${entity}) || '%')
+					OR (${domain}::text IS NOT NULL AND domain = ${domain})
+				)
+				LIMIT 20
+			`
 			: [];
-
-		const candidates = (rows as CandidateRow[])
+		const candidates = rows
 			.map((row) => this.scoreCandidate(row, entity, domain, signal.businessUnitId))
 			.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-
 		return {
 			sourceRecordId,
 			project: signal.project,
@@ -252,32 +215,32 @@ export class IngestService {
 		const requestedDomain = normalizeDomain(input.domain ?? this.signalDomain(signal.payload));
 		let matchMethod = "manual";
 		let created = false;
+		let company: CandidateRow | undefined;
 
-		let company = input.companyId
-			? await this.db.company.findFirst({
-					where: { id: input.companyId, archivedAt: null },
-					select: { id: true, name: true, domain: true, businessUnitId: true },
-			  })
-			: null;
-
+		if (input.companyId) {
+			[company] = await this.db.$queryRaw<CandidateRow[]>`
+				SELECT id, name, domain, "businessUnitId" AS "businessUnitId"
+				FROM company WHERE id = ${input.companyId} AND "archivedAt" IS NULL LIMIT 1
+			`;
+			if (!company) throw new NotFoundException(`No company with id ${input.companyId}.`);
+		}
 		if (!company && requestedDomain) {
-			company = await this.db.company.findFirst({
-				where: { domain: requestedDomain, archivedAt: null },
-				select: { id: true, name: true, domain: true, businessUnitId: true },
-			});
+			[company] = await this.db.$queryRaw<CandidateRow[]>`
+				SELECT id, name, domain, "businessUnitId" AS "businessUnitId"
+				FROM company WHERE domain = ${requestedDomain} AND "archivedAt" IS NULL LIMIT 1
+			`;
 			if (company) matchMethod = "domain";
 		}
 		if (!company && entity) {
-			company = await this.db.company.findFirst({
-				where: { name: { equals: entity, mode: "insensitive" }, archivedAt: null },
-				select: { id: true, name: true, domain: true, businessUnitId: true },
-			});
+			[company] = await this.db.$queryRaw<CandidateRow[]>`
+				SELECT id, name, domain, "businessUnitId" AS "businessUnitId"
+				FROM company WHERE lower(name) = lower(${entity}) AND "archivedAt" IS NULL LIMIT 1
+			`;
 			if (company) matchMethod = "name-exact";
 		}
-
 		if (!company && !input.createIfMissing) {
 			throw new BadRequestException(
-				"No exact company match. Review /ingest/signals/{sourceRecordId}/company-candidates or set createIfMissing=true after verification.",
+				"No exact company match. Review the company-candidates endpoint or set createIfMissing=true after verification.",
 			);
 		}
 		if (!company) {
@@ -286,10 +249,10 @@ export class IngestService {
 				name: entity,
 				domain: requestedDomain ?? undefined,
 			});
-			await this.db.company.update({
-				where: { id: made.id },
-				data: { businessUnitId: signal.businessUnitId },
-			});
+			await this.db.$queryRaw`
+				UPDATE company SET "businessUnitId" = ${signal.businessUnitId}
+				WHERE id = ${made.id} AND "businessUnitId" IS NULL
+			`;
 			company = {
 				id: made.id,
 				name: made.name,
@@ -301,14 +264,13 @@ export class IngestService {
 		}
 
 		const normalizedName = company.name.trim().toLowerCase();
-		const canonicalId = randomUUID();
 		const [canonical] = await this.db.$queryRaw<Array<{ id: string }>>`
 			INSERT INTO canonical_company (
-				id, "businessUnitId", name, "normalizedName", domain, website,
-				fields, "createdAt", "updatedAt"
+				id, "businessUnitId", name, "normalizedName", domain, website, fields,
+				"createdAt", "updatedAt"
 			)
 			VALUES (
-				${canonicalId}, ${signal.businessUnitId}, ${company.name}, ${normalizedName},
+				${randomUUID()}, ${signal.businessUnitId}, ${company.name}, ${normalizedName},
 				${company.domain}, ${company.domain ? `https://${company.domain}` : null},
 				${JSON.stringify({ source_signal_id: signal.id })}::jsonb,
 				CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -323,41 +285,24 @@ export class IngestService {
 
 		await this.db.$queryRaw`
 			INSERT INTO record_mapping (
-				id, "sourceSystem", "sourceType", "sourceId", "canonicalType",
-				"canonicalId", application, "applicationId", "matchMethod", status,
-				"createdAt", "updatedAt"
+				id, "sourceSystem", "sourceType", "sourceId", "canonicalType", "canonicalId",
+				application, "applicationId", "matchMethod", status, "createdAt", "updatedAt"
 			)
 			VALUES (
 				${randomUUID()}, ${signal.sourceSystem}, ${signal.sourceType}, ${signal.sourceId},
-				'company', ${canonical.id}, 'comp-ai-core', ${company.id}, ${matchMethod},
-				'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+				'company', ${canonical.id}, 'comp-ai-core', ${company.id}, ${matchMethod}, 'active',
+				CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 			)
-			ON CONFLICT ("sourceSystem", "sourceType", "sourceId", "canonicalType")
-			DO UPDATE SET
+			ON CONFLICT ("sourceSystem", "sourceType", "sourceId", "canonicalType") DO UPDATE SET
 				"canonicalId" = EXCLUDED."canonicalId",
 				application = EXCLUDED.application,
 				"applicationId" = EXCLUDED."applicationId",
 				"matchMethod" = EXCLUDED."matchMethod",
-				status = 'active',
-				"updatedAt" = CURRENT_TIMESTAMP
+				status = 'active', "updatedAt" = CURRENT_TIMESTAMP
 		`;
 
 		let researchQueued = false;
-		if (input.queueResearch) {
-			const queued = await this.companies.enrich(company.id);
-			researchQueued = queued.queued;
-		}
-
-		this.logger.log({
-			message: "Signal company resolved",
-			sourceRecordId: input.sourceRecordId,
-			companyId: company.id,
-			canonicalCompanyId: canonical.id,
-			matchMethod,
-			created,
-			researchQueued,
-		});
-
+		if (input.queueResearch) researchQueued = (await this.companies.enrich(company.id)).queued;
 		return {
 			sourceRecordId: input.sourceRecordId,
 			canonicalCompanyId: canonical.id,
@@ -374,10 +319,8 @@ export class IngestService {
 			SELECT sr.id, sr."businessUnitId" AS "businessUnitId", bu.key AS project,
 				sr."sourceSystem" AS "sourceSystem", sr."sourceType" AS "sourceType",
 				sr."sourceId" AS "sourceId", sr.payload
-			FROM source_record sr
-			JOIN business_unit bu ON bu.id = sr."businessUnitId"
-			WHERE sr.id = ${sourceRecordId}
-			LIMIT 1
+			FROM source_record sr JOIN business_unit bu ON bu.id = sr."businessUnitId"
+			WHERE sr.id = ${sourceRecordId} LIMIT 1
 		`;
 		if (!row) throw new NotFoundException(`No source signal with id ${sourceRecordId}.`);
 		return row;
