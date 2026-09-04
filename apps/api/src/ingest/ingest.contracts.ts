@@ -1,6 +1,26 @@
 import { z } from "zod";
 
-const signalPayload = z.record(z.string(), z.unknown());
+export type SignalPayloadValue =
+	| string
+	| number
+	| boolean
+	| null
+	| SignalPayloadValue[]
+	| { [key: string]: SignalPayloadValue };
+
+const signalPayloadValue: z.ZodType<SignalPayloadValue> = z.lazy(() =>
+	z.union([
+		z.string(),
+		z.number().finite(),
+		z.boolean(),
+		z.null(),
+		z.array(signalPayloadValue),
+		z.record(z.string(), signalPayloadValue),
+	]),
+);
+
+export const signalPayload = z.record(z.string(), signalPayloadValue);
+export type SignalPayload = z.infer<typeof signalPayload>;
 
 export const ingestSignalInput = z.object({
 	project: z.string().trim().min(1).max(96),

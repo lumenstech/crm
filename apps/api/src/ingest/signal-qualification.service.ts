@@ -5,6 +5,7 @@ import {
 	Injectable,
 	NotFoundException,
 } from "@nestjs/common";
+import { z } from "zod";
 import { InjectDatabase } from "../database/database.constants";
 import { DealsService } from "../deals/deals.service";
 import type {
@@ -15,6 +16,11 @@ import type {
 	SignalClassification,
 	SignalScoreComponents,
 } from "./ingest.contracts";
+import {
+	type SignalPayload,
+	type SignalPayloadValue,
+	signalPayload,
+} from "./ingest.contracts";
 
 type SignalRow = {
 	id: string;
@@ -22,7 +28,7 @@ type SignalRow = {
 	sourceSystem: string;
 	sourceType: string;
 	sourceId: string;
-	payload: Record<string, unknown>;
+	payload: SignalPayload;
 };
 
 type CompanyMapping = {
@@ -203,10 +209,7 @@ export class SignalQualificationService {
 		};
 	}
 
-	private score(
-		payload: Record<string, unknown>,
-		components?: SignalScoreComponents,
-	) {
+	private score(payload: SignalPayload, components?: SignalScoreComponents) {
 		if (components) {
 			const score = Math.round(
 				components.icpMatch +
@@ -255,7 +258,7 @@ export class SignalQualificationService {
 			FROM source_record WHERE id = ${id} LIMIT 1
 		`;
 		if (!row) throw new NotFoundException(`No source signal with id ${id}.`);
-		return row;
+		return { ...row, payload: signalPayload.parse(row.payload) };
 	}
 
 	private async companyMapping(
@@ -284,22 +287,22 @@ export class SignalQualificationService {
 		return row ?? null;
 	}
 
-	private object(value: unknown): Record<string, unknown> | null {
-		return value && typeof value === "object" && !Array.isArray(value)
-			? (value as Record<string, unknown>)
-			: null;
+	private object(value: SignalPayloadValue | undefined): SignalPayload | null {
+		const parsed = signalPayload.safeParse(value);
+		return parsed.success ? parsed.data : null;
 	}
 
-	private text(value: unknown): string | null {
-		return typeof value === "string" && value.trim() ? value.trim() : null;
+	private text(value: SignalPayloadValue | undefined): string | null {
+		const parsed = z.string().trim().min(1).safeParse(value);
+		return parsed.success ? parsed.data : null;
 	}
 
-	private number(value: unknown): number | null {
-		if (typeof value === "number" && Number.isFinite(value)) return value;
-		if (typeof value === "string" && value.trim()) {
-			const parsed = Number(value);
-			return Number.isFinite(parsed) ? parsed : null;
-		}
-		return null;
+	private number(value: SignalPayloadValue | undefined): number | null {
+		const numeric = z.number().finite().safeParse(value);
+		if (numeric.success) return numeric.data;
+		const text = z.string().trim().min(1).safeParse(value);
+		if (!text.success) return null;
+		const parsed = Number(text.data);
+		return Number.isFinite(parsed) ? parsed : null;
 	}
 }

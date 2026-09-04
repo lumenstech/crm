@@ -5,6 +5,7 @@ import {
 	Injectable,
 	NotFoundException,
 } from "@nestjs/common";
+import { z } from "zod";
 import { CompaniesService } from "../companies/companies.service";
 import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
@@ -16,7 +17,9 @@ import type {
 	SignalCompanyCandidatesOutput,
 	SignalInboxInput,
 	SignalInboxOutput,
+	SignalPayload,
 } from "./ingest.contracts";
+import { signalPayload } from "./ingest.contracts";
 
 type BusinessUnitRow = { id: string; enabled: boolean };
 type SourceRecordRow = { id: string };
@@ -27,7 +30,7 @@ type SignalRow = {
 	sourceSystem: string;
 	sourceType: string;
 	sourceId: string;
-	payload: Record<string, unknown>;
+	payload: SignalPayload;
 };
 type CandidateRow = {
 	id: string;
@@ -52,7 +55,7 @@ type InboxRow = {
 	demandTrigger: string | null;
 	nextAction: string | null;
 	mapped: boolean;
-	payload: Record<string, unknown>;
+	payload: SignalPayload;
 };
 
 @Injectable()
@@ -349,24 +352,23 @@ export class IngestService {
 			throw new NotFoundException(
 				`No source signal with id ${sourceRecordId}.`,
 			);
-		return row;
+		return { ...row, payload: signalPayload.parse(row.payload) };
 	}
 
-	private signalEntity(payload: Record<string, unknown>): string | null {
+	private signalEntity(payload: SignalPayload): string | null {
 		for (const key of ["entity", "company"] as const) {
-			const value = payload[key];
-			if (typeof value === "string" && value.trim()) return value.trim();
+			const value = z.string().trim().min(1).safeParse(payload[key]);
+			if (value.success) return value.data;
 		}
 		return null;
 	}
 
-	private signalDomain(payload: Record<string, unknown>): string | null {
+	private signalDomain(payload: SignalPayload): string | null {
 		for (const key of ["domain", "website"] as const) {
-			const value = payload[key];
-			if (typeof value === "string") {
-				const domain = normalizeDomain(value);
-				if (domain) return domain;
-			}
+			const value = z.string().safeParse(payload[key]);
+			if (!value.success) continue;
+			const domain = normalizeDomain(value.data);
+			if (domain) return domain;
 		}
 		return null;
 	}
