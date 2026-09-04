@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const signalPayload = z.record(z.string(), z.unknown());
+export const signalPayload = z.record(z.string(), z.json());
 
 export const ingestSignalInput = z.object({
 	project: z.string().trim().min(1).max(96),
@@ -55,56 +55,8 @@ export const signalInboxOutput = z.object({
 	count: z.number().int().nonnegative(),
 });
 
-export const signalSourceRecordInput = z.object({
-	sourceRecordId: z.string().trim().min(1),
-});
-
-export const companyCandidateOutput = z.object({
-	companyId: z.string(),
-	name: z.string(),
-	domain: z.string().nullable(),
-	businessUnitId: z.string().nullable(),
-	score: z.number().min(0).max(110),
-	reasons: z.array(z.string()),
-});
-
-export const signalCompanyCandidatesOutput = z.object({
-	sourceRecordId: z.string(),
-	project: z.string(),
-	entity: z.string().nullable(),
-	domain: z.string().nullable(),
-	mappedCompanyId: z.string().nullable(),
-	candidates: z.array(companyCandidateOutput),
-});
-
-export const resolveSignalCompanyInput = signalSourceRecordInput.extend({
-	companyId: z.string().trim().min(1).nullable().optional(),
-	companyName: z.string().trim().min(1).max(320).nullable().optional(),
-	domain: z.string().trim().max(320).nullable().optional(),
-	createIfMissing: z.boolean().default(false),
-	queueResearch: z.boolean().default(true),
-});
-
-export const resolveSignalCompanyOutput = z.object({
-	sourceRecordId: z.string(),
-	canonicalCompanyId: z.string(),
-	companyId: z.string(),
-	companyName: z.string(),
-	matchMethod: z.string(),
-	created: z.boolean(),
-	researchQueued: z.boolean(),
-});
-
+export type SignalPayload = z.infer<typeof signalPayload>;
 export type IngestSignalInput = z.infer<typeof ingestSignalInput>;
 export type IngestSignalOutput = z.infer<typeof ingestSignalOutput>;
 export type SignalInboxInput = z.infer<typeof signalInboxInput>;
 export type SignalInboxOutput = z.infer<typeof signalInboxOutput>;
-export type SignalCompanyCandidatesOutput = z.infer<
-	typeof signalCompanyCandidatesOutput
->;
-export type ResolveSignalCompanyInput = z.infer<
-	typeof resolveSignalCompanyInput
->;
-export type ResolveSignalCompanyOutput = z.infer<
-	typeof resolveSignalCompanyOutput
->;
