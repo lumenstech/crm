@@ -95,16 +95,65 @@ export const resolveSignalCompanyOutput = z.object({
 	researchQueued: z.boolean(),
 });
 
+export const signalScoreComponents = z.object({
+	icpMatch: z.number().min(0).max(25),
+	commercialTrigger: z.number().min(0).max(20),
+	projectRelevance: z.number().min(0).max(20),
+	companyValue: z.number().min(0).max(10),
+	location: z.number().min(0).max(10),
+	decisionMaker: z.number().min(0).max(10),
+	recency: z.number().min(0).max(5),
+});
+
+export const signalClassification = z.enum([
+	"signal",
+	"research",
+	"qualified",
+	"priority",
+]);
+
+export const qualifySignalInput = signalSourceRecordInput.extend({
+	components: signalScoreComponents.optional(),
+	evidence: z.record(z.string(), z.string().max(2000)).default({}),
+	notes: z.string().trim().max(4000).nullable().optional(),
+});
+
+export const qualifySignalOutput = z.object({
+	sourceRecordId: z.string(),
+	score: z.number().min(0).max(100),
+	classification: signalClassification,
+	method: z.enum(["components", "legacy-score", "unscored"]),
+	companyResolved: z.boolean(),
+	canonicalOpportunityEligible: z.boolean(),
+	visibleDealEligible: z.boolean(),
+});
+
+export const promoteSignalInput = signalSourceRecordInput.extend({
+	createDeal: z.boolean().default(false),
+	ownerId: z.string().trim().min(1).nullable().optional(),
+	amountUsd: z.number().nonnegative().nullable().optional(),
+});
+
+export const promoteSignalOutput = z.object({
+	sourceRecordId: z.string(),
+	score: z.number().min(0).max(100),
+	classification: signalClassification,
+	canonicalOpportunityId: z.string(),
+	dealId: z.string().nullable(),
+	createdCanonicalOpportunity: z.boolean(),
+	createdDeal: z.boolean(),
+});
+
 export type IngestSignalInput = z.infer<typeof ingestSignalInput>;
 export type IngestSignalOutput = z.infer<typeof ingestSignalOutput>;
 export type SignalInboxInput = z.infer<typeof signalInboxInput>;
 export type SignalInboxOutput = z.infer<typeof signalInboxOutput>;
-export type SignalCompanyCandidatesOutput = z.infer<
-	typeof signalCompanyCandidatesOutput
->;
-export type ResolveSignalCompanyInput = z.infer<
-	typeof resolveSignalCompanyInput
->;
-export type ResolveSignalCompanyOutput = z.infer<
-	typeof resolveSignalCompanyOutput
->;
+export type SignalCompanyCandidatesOutput = z.infer<typeof signalCompanyCandidatesOutput>;
+export type ResolveSignalCompanyInput = z.infer<typeof resolveSignalCompanyInput>;
+export type ResolveSignalCompanyOutput = z.infer<typeof resolveSignalCompanyOutput>;
+export type SignalScoreComponents = z.infer<typeof signalScoreComponents>;
+export type SignalClassification = z.infer<typeof signalClassification>;
+export type QualifySignalInput = z.infer<typeof qualifySignalInput>;
+export type QualifySignalOutput = z.infer<typeof qualifySignalOutput>;
+export type PromoteSignalInput = z.infer<typeof promoteSignalInput>;
+export type PromoteSignalOutput = z.infer<typeof promoteSignalOutput>;
