@@ -12,7 +12,7 @@ import {
 } from "./ingest.contracts";
 
 type BusinessUnitRow = { id: string; enabled: boolean };
-type SourceRecordRow = { id: string };
+type SourceRecordRow = { id: string; deduplicated: boolean };
 type InboxRow = {
 	sourceRecordId: string;
 	project: string;
@@ -50,14 +50,6 @@ export class IngestService {
 			);
 		}
 
-		const [existing] = await this.db.$queryRaw<SourceRecordRow[]>`
-			SELECT id FROM source_record
-			WHERE "sourceSystem" = ${input.source}
-				AND "sourceType" = ${input.sourceType}
-				AND "sourceId" = ${input.sourceId}
-			LIMIT 1
-		`;
-
 		const observedAt = input.observedAt
 			? new Date(input.observedAt)
 			: new Date();
@@ -72,32 +64,38 @@ export class IngestService {
 			tags: input.tags,
 			ingested_at: new Date().toISOString(),
 		});
-		const sourceRecordId = existing?.id ?? randomUUID();
-
-		const [saved] = await this.db.$queryRaw<SourceRecordRow[]>`
-			INSERT INTO source_record (
-				id, "businessUnitId", "sourceSystem", "sourceType", "sourceId",
-				"sourceUrl", "observedAt", payload, "createdAt"
-			)
-			VALUES (
-				${sourceRecordId}, ${businessUnit.id}, ${input.source}, ${input.sourceType},
-				${input.sourceId}, ${input.sourceUrl ?? null}, ${observedAt}, ${payload}::jsonb,
-				CURRENT_TIMESTAMP
-			)
-			ON CONFLICT ("sourceSystem", "sourceType", "sourceId") DO UPDATE SET
-				"businessUnitId" = EXCLUDED."businessUnitId",
-				"sourceUrl" = EXCLUDED."sourceUrl",
-				"observedAt" = EXCLUDED."observedAt",
-				payload = EXCLUDED.payload
-			RETURNING id
-		`;
+		const candidateId = randomUUID();
+		const [saved] = await this.db.$transaction(
+			async (tx) =>
+				tx.$queryRaw<SourceRecordRow[]>`
+				INSERT INTO source_record (
+					id, "businessUnitId", "sourceSystem", "sourceType", "sourceId",
+					"sourceUrl", "observedAt", payload, "ingestedAt", status,
+					"createdAt", "updatedAt"
+				)
+				VALUES (
+					${candidateId}, ${businessUnit.id}, ${input.source}, ${input.sourceType},
+					${input.sourceId}, ${input.sourceUrl ?? null}, ${observedAt}, ${payload}::jsonb,
+					CURRENT_TIMESTAMP, 'accepted', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+				)
+				ON CONFLICT ("businessUnitId", "sourceSystem", "sourceType", "sourceId") DO UPDATE SET
+					"sourceUrl" = EXCLUDED."sourceUrl",
+					"observedAt" = EXCLUDED."observedAt",
+					payload = EXCLUDED.payload,
+					"ingestedAt" = EXCLUDED."ingestedAt",
+					status = 'accepted',
+					error = NULL,
+					"updatedAt" = CURRENT_TIMESTAMP
+				RETURNING id, (id <> ${candidateId}) AS deduplicated
+			`,
+		);
 		if (!saved)
 			throw new Error("Signal ingest did not return a source record.");
 		return {
 			status: "accepted",
 			sourceRecordId: saved.id,
 			project: input.project,
-			deduplicated: Boolean(existing),
+			deduplicated: saved.deduplicated,
 			promoted: false,
 		};
 	}
