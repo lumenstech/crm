@@ -22,6 +22,7 @@ import { EnrichmentModule } from "./enrichment/enrichment.module";
 import { FieldsModule } from "./fields/fields.module";
 import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
+import { IngestModule } from "./ingest/ingest.module";
 import { LoggingModule } from "./logging/logging.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
 import { MailboxModule } from "./mailbox/mailbox.module";
@@ -77,6 +78,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		BackfillModule,
 		TelemetryModule,
 		TrackingModule,
+		IngestModule,
 		ArchiveModule,
 		SavedViewsModule,
 	],
