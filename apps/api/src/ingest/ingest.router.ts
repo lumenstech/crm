@@ -6,8 +6,12 @@ import { restMeta } from "../trpc/openapi";
 import {
 	ingestSignalInput,
 	ingestSignalOutput,
+	resolveSignalCompanyInput,
+	resolveSignalCompanyOutput,
+	signalCompanyCandidatesOutput,
 	signalInboxInput,
 	signalInboxOutput,
+	signalSourceRecordInput,
 } from "./ingest.contracts";
 import { IngestService } from "./ingest.service";
 
@@ -32,5 +36,27 @@ export class IngestRouter {
 	})
 	async inbox(@Input() input: z.infer<typeof signalInboxInput>) {
 		return this.ingest.inbox(input);
+	}
+
+	@Query({
+		input: signalSourceRecordInput,
+		output: signalCompanyCandidatesOutput,
+		meta: restMeta("GET", "/ingest/signals/{sourceRecordId}/company-candidates", [
+			"Ingest",
+		]),
+	})
+	async companyCandidates(@Input("sourceRecordId") sourceRecordId: string) {
+		return this.ingest.companyCandidates(sourceRecordId);
+	}
+
+	@Mutation({
+		input: resolveSignalCompanyInput,
+		output: resolveSignalCompanyOutput,
+		meta: restMeta("POST", "/ingest/signals/{sourceRecordId}/resolve-company", [
+			"Ingest",
+		]),
+	})
+	async resolveCompany(@Input() input: z.infer<typeof resolveSignalCompanyInput>) {
+		return this.ingest.resolveCompany(input);
 	}
 }
