@@ -8,7 +8,13 @@ import { ResolutionService } from "./resolution.service";
 
 @Module({
 	imports: [CompaniesModule],
-	providers: [IngestService, IngestRouter, PromotionService, ResolutionService, ResolutionRouter],
+	providers: [
+		IngestService,
+		IngestRouter,
+		PromotionService,
+		ResolutionService,
+		ResolutionRouter,
+	],
 	exports: [IngestService],
 })
 export class IngestModule {}
