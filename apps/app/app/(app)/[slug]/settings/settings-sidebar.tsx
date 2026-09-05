@@ -21,6 +21,7 @@ const ITEMS: SettingsNavItem[] = [
 	{ title: "Currencies", href: `${ROOT}/currencies` },
 	{ title: "Members", href: `${ROOT}/members` },
 	{ title: "API Keys", href: `${ROOT}/api-keys` },
+	{ title: "Signal Review", href: `${ROOT}/signal-review` },
 	{ title: "SSO", href: `${ROOT}/sso` },
 ];
 
