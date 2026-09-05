@@ -4,11 +4,12 @@ import { Button } from "@crm/ui/components/button";
 import { Input } from "@crm/ui/components/input";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { trpc } from "@/lib/trpc/client";
+import { useTRPC } from "@/lib/trpc/client";
 
 export function SignalReview() {
 	const [status, setStatus] = useState("pending");
 	const [reason, setReason] = useState("");
+	const trpc = useTRPC();
 	const reviews = useQuery(
 		trpc.resolution.listReviews.queryOptions({ limit: 50, status }),
 	);
