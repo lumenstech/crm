@@ -32,6 +32,9 @@ model User {
   conversations  AgentConversation[] @relation("ConversationOwner")
   fieldValues    FieldValue[]        @relation("FieldValueUser")
   savedViews     SavedView[]         @relation("SavedViewOwner")
+  canonicalOpportunityOwnership CanonicalOpportunity[] @relation("CanonicalOpportunityOwner")
+  resolutionReviews ResolutionReview[] @relation("ResolutionReviewer")
+  promotionAudits PromotionAudit[] @relation("PromotionActor")
 
   createdAgentDefinitions AgentDefinition[]             @relation("AgentDefinitionCreator")
   createdAgentVersions    AgentVersion[]                @relation("AgentVersionCreator")
@@ -287,6 +290,10 @@ model BusinessUnit {
   updatedAt   DateTime @updatedAt
 
   sourceRecords SourceRecord[]
+  canonicalCompanies CanonicalCompanyBusinessUnit[]
+  canonicalPeople CanonicalPersonBusinessUnit[]
+  opportunities CanonicalOpportunity[]
+  promotionAudits PromotionAudit[]
 
   @@index([enabled, key])
   @@map("business_unit")
@@ -309,6 +316,8 @@ model SourceRecord {
   updatedAt      DateTime    @updatedAt
 
   mappings RecordMapping[]
+  reviews ResolutionReview[]
+  promotionAudits PromotionAudit[]
 
   @@unique([businessUnitId, sourceSystem, sourceType, sourceId])
   @@index([businessUnitId, sourceType])
@@ -331,6 +340,191 @@ model RecordMapping {
   @@unique([sourceRecordId, canonicalType, canonicalId])
   @@index([canonicalType, canonicalId])
   @@map("record_mapping")
+}
+
+model CanonicalCompany {
+  id                 String   @id @default(cuid())
+  displayName        String
+  normalizedName     String
+  legalName          String?
+  domain             String?
+  website            String?
+  companyId          String?  @unique
+  company            Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  verificationStatus String   @default("unverified")
+  mergedIntoId       String?
+  mergedInto         CanonicalCompany? @relation("CompanyMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedCompanies    CanonicalCompany[] @relation("CompanyMerge")
+  metadata           Json     @default("{}")
+  identifiers        CanonicalCompanyIdentifier[]
+  businessUnits      CanonicalCompanyBusinessUnit[]
+  people             CanonicalPerson[]
+  opportunities      CanonicalOpportunity[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@index([normalizedName])
+  @@index([domain])
+  @@map("canonical_company")
+}
+
+model CanonicalCompanyIdentifier {
+  id                String @id @default(cuid())
+  canonicalCompanyId String
+  canonicalCompany   CanonicalCompany @relation(fields: [canonicalCompanyId], references: [id], onDelete: Cascade)
+  sourceSystem      String
+  identifierType    String
+  normalizedValue   String
+  verified          Boolean @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@unique([sourceSystem, identifierType, normalizedValue])
+  @@index([canonicalCompanyId])
+  @@map("canonical_company_identifier")
+}
+
+model CanonicalPerson {
+  id                 String   @id @default(cuid())
+  firstName          String
+  lastName           String?
+  normalizedName     String
+  email              String?
+  phone              String?
+  canonicalCompanyId String?
+  canonicalCompany   CanonicalCompany? @relation(fields: [canonicalCompanyId], references: [id], onDelete: SetNull)
+  contactId          String? @unique
+  contact            Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  verificationStatus String   @default("unverified")
+  mergedIntoId       String?
+  mergedInto         CanonicalPerson? @relation("PersonMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedPeople       CanonicalPerson[] @relation("PersonMerge")
+  metadata           Json     @default("{}")
+  identifiers        CanonicalPersonIdentifier[]
+  businessUnits      CanonicalPersonBusinessUnit[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@index([normalizedName])
+  @@index([email])
+  @@map("canonical_person")
+}
+
+model CanonicalPersonIdentifier {
+  id               String @id @default(cuid())
+  canonicalPersonId String
+  canonicalPerson   CanonicalPerson @relation(fields: [canonicalPersonId], references: [id], onDelete: Cascade)
+  sourceSystem     String
+  identifierType   String
+  normalizedValue  String
+  verified         Boolean @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@unique([sourceSystem, identifierType, normalizedValue])
+  @@index([canonicalPersonId])
+  @@map("canonical_person_identifier")
+}
+
+model CanonicalCompanyBusinessUnit {
+  canonicalCompanyId String
+  businessUnitId     String
+  canonicalCompany   CanonicalCompany @relation(fields: [canonicalCompanyId], references: [id], onDelete: Cascade)
+  businessUnit       BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+  @@id([canonicalCompanyId, businessUnitId])
+  @@index([businessUnitId])
+  @@map("canonical_company_business_unit")
+}
+
+model CanonicalPersonBusinessUnit {
+  canonicalPersonId String
+  businessUnitId    String
+  canonicalPerson   CanonicalPerson @relation(fields: [canonicalPersonId], references: [id], onDelete: Cascade)
+  businessUnit      BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  @@id([canonicalPersonId, businessUnitId])
+  @@index([businessUnitId])
+  @@map("canonical_person_business_unit")
+}
+
+model CanonicalOpportunity {
+  id                 String @id @default(cuid())
+  canonicalCompanyId String
+  canonicalCompany   CanonicalCompany @relation(fields: [canonicalCompanyId], references: [id], onDelete: Cascade)
+  businessUnitId     String
+  businessUnit       BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  title              String
+  normalizedTitle    String
+  description        String?
+  stage              String @default("new")
+  amount             Decimal? @db.Decimal(14, 2)
+  currency           String?
+  dealId             String? @unique
+  deal               Deal? @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  ownerId            String?
+  owner              User? @relation("CanonicalOpportunityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  verificationStatus String @default("unverified")
+  metadata           Json @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@index([canonicalCompanyId, businessUnitId])
+  @@index([normalizedTitle])
+  @@map("canonical_opportunity")
+}
+
+model ResolutionReview {
+  id                 String @id @default(cuid())
+  sourceRecordId     String
+  sourceRecord       SourceRecord @relation(fields: [sourceRecordId], references: [id], onDelete: Restrict)
+  entityType         String
+  reasonCode         String
+  status             String @default("pending")
+  proposedOperation  String
+  reviewerId         String?
+  reviewer           User? @relation("ResolutionReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  decision           String?
+  decisionReason     String?
+  decisionAt        DateTime?
+  failure            String?
+  resultCanonicalId  String?
+  resultVisibleId    String?
+  candidates         ResolutionCandidate[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@unique([sourceRecordId, entityType, reasonCode, status])
+  @@index([status, createdAt])
+  @@map("resolution_review")
+}
+
+model ResolutionCandidate {
+  id               String @id @default(cuid())
+  reviewId         String
+  review           ResolutionReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  canonicalType    String
+  canonicalId      String
+  score            Float
+  matchReasons     Json @default("[]")
+  conflictingFields Json @default("[]")
+  position         Int
+  createdAt        DateTime @default(now())
+  @@unique([reviewId, canonicalType, canonicalId])
+  @@map("resolution_candidate")
+}
+
+model PromotionAudit {
+  id             String @id @default(cuid())
+  sourceRecordId String
+  sourceRecord   SourceRecord @relation(fields: [sourceRecordId], references: [id], onDelete: Restrict)
+  businessUnitId String
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  action         String
+  outcome        String
+  canonicalType  String?
+  canonicalId    String?
+  visibleId      String?
+  error          String?
+  actorId        String?
+  actor          User? @relation("PromotionActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  @@index([sourceRecordId, createdAt])
+  @@map("promotion_audit")
 }
 
 model Company {
@@ -384,6 +578,7 @@ model Company {
   emailThreads   EmailThread[]
   calendarEvents CalendarEvent[]
   fieldValues    FieldValue[]
+  canonical      CanonicalCompany?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -446,6 +641,7 @@ model Contact {
   calendarEvents  CalendarEvent[]
   eventAttendance CalendarAttendee[]
   fieldValues     FieldValue[]
+  canonical CanonicalPerson?
   visitors        TrackedVisitor[]   @relation("VisitorContact")
   submissions     FormSubmission[]   @relation("SubmissionContact")
   createdAt       DateTime           @default(now())
@@ -998,6 +1194,7 @@ model Deal {
   contacts    DealContact[]
   activities  Activity[]
   fieldValues FieldValue[]
+  canonicalOpportunity CanonicalOpportunity?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
