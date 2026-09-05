@@ -20,7 +20,11 @@ export const ingestSignalOutput = z.object({
 	sourceRecordId: z.string(),
 	project: z.string(),
 	deduplicated: z.boolean(),
-	promoted: z.literal(false),
+	promoted: z.boolean(),
+	resolution: z.enum(["promoted", "review"]).optional(),
+	canonicalId: z.string().optional(),
+	visibleId: z.string().optional(),
+	reviewId: z.string().optional(),
 });
 
 export const signalInboxInput = z.object({

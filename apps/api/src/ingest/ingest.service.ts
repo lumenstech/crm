@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Optional } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	type IngestSignalInput,
@@ -10,6 +10,7 @@ import {
 	type SignalPayload,
 	signalPayload,
 } from "./ingest.contracts";
+import { PromotionService } from "./promotion.service";
 
 type BusinessUnitRow = { id: string; enabled: boolean };
 type SourceRecordRow = { id: string; deduplicated: boolean };
@@ -35,7 +36,10 @@ type InboxRow = {
 
 @Injectable()
 export class IngestService {
-	constructor(@InjectDatabase() private readonly db: Db) {}
+	constructor(
+		@InjectDatabase() private readonly db: Db,
+		@Optional() private readonly promotion?: PromotionService,
+	) {}
 
 	async signal(input: IngestSignalInput): Promise<IngestSignalOutput> {
 		const [businessUnit] = await this.db.$queryRaw<BusinessUnitRow[]>`
@@ -65,9 +69,8 @@ export class IngestService {
 			ingested_at: new Date().toISOString(),
 		});
 		const candidateId = randomUUID();
-		const [saved] = await this.db.$transaction(
-			async (tx) =>
-				tx.$queryRaw<SourceRecordRow[]>`
+		const { saved, promotion } = await this.db.$transaction(async (tx) => {
+			const [saved] = await tx.$queryRaw<SourceRecordRow[]>`
 				INSERT INTO source_record (
 					id, "businessUnitId", "sourceSystem", "sourceType", "sourceId",
 					"sourceUrl", "observedAt", payload, "ingestedAt", status,
@@ -87,16 +90,24 @@ export class IngestService {
 					error = NULL,
 					"updatedAt" = CURRENT_TIMESTAMP
 				RETURNING id, (id <> ${candidateId}) AS deduplicated
-			`,
-		);
-		if (!saved)
-			throw new Error("Signal ingest did not return a source record.");
+			`;
+			if (!saved)
+				throw new Error("Signal ingest did not return a source record.");
+			const promotion = this.promotion
+				? await this.promotion.processInTransaction(tx, saved.id)
+				: { status: "review" as const, entityType: "company" };
+			return { saved, promotion };
+		});
 		return {
 			status: "accepted",
 			sourceRecordId: saved.id,
 			project: input.project,
 			deduplicated: saved.deduplicated,
-			promoted: false,
+			promoted: promotion.status === "promoted",
+			resolution: promotion.status,
+			canonicalId: promotion.canonicalId,
+			visibleId: promotion.visibleId,
+			reviewId: promotion.reviewId,
 		};
 	}
 
@@ -118,9 +129,7 @@ export class IngestService {
 				sr.payload->>'next_action' AS "nextAction",
 				EXISTS (
 					SELECT 1 FROM record_mapping rm
-					WHERE rm."sourceSystem" = sr."sourceSystem"
-						AND rm."sourceType" = sr."sourceType"
-						AND rm."sourceId" = sr."sourceId"
+					WHERE rm."sourceRecordId" = sr.id
 						AND rm."canonicalType" = 'company' AND rm.status = 'active'
 				) AS mapped,
 				sr.payload AS payload
@@ -134,12 +143,10 @@ export class IngestService {
 				AND (
 					${input.status} = 'all'
 					OR (${input.status} = 'mapped' AND EXISTS (
-						SELECT 1 FROM record_mapping rm WHERE rm."sourceSystem" = sr."sourceSystem"
-							AND rm."sourceType" = sr."sourceType" AND rm."sourceId" = sr."sourceId"
+						SELECT 1 FROM record_mapping rm WHERE rm."sourceRecordId" = sr.id
 							AND rm."canonicalType" = 'company' AND rm.status = 'active'))
 					OR (${input.status} = 'unresolved' AND NOT EXISTS (
-						SELECT 1 FROM record_mapping rm WHERE rm."sourceSystem" = sr."sourceSystem"
-							AND rm."sourceType" = sr."sourceType" AND rm."sourceId" = sr."sourceId"
+						SELECT 1 FROM record_mapping rm WHERE rm."sourceRecordId" = sr.id
 							AND rm."canonicalType" = 'company' AND rm.status = 'active'))
 				)
 			ORDER BY COALESCE(NULLIF(sr.payload->>'signal_score','')::float,

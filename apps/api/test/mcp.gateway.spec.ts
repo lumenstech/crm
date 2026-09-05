@@ -157,6 +157,10 @@ describe("MCP gateway", () => {
 			"crm_list_signals",
 			"crm_ingest_signal",
 			"crm_queue_company_research",
+			"crm_process_signal",
+			"crm_process_signal_batch",
+			"crm_list_resolution_reviews",
+			"crm_decide_resolution_review",
 		]);
 	});
 
