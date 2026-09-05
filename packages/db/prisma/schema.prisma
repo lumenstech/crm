@@ -462,11 +462,27 @@ model CanonicalOpportunity {
   owner              User? @relation("CanonicalOpportunityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   verificationStatus String @default("unverified")
   metadata           Json @default("{}")
+  identifiers       CanonicalOpportunityIdentifier[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   @@index([canonicalCompanyId, businessUnitId])
   @@index([normalizedTitle])
   @@map("canonical_opportunity")
+}
+
+model CanonicalOpportunityIdentifier {
+  id                    String   @id @default(cuid())
+  canonicalOpportunityId String
+  canonicalOpportunity  CanonicalOpportunity @relation(fields: [canonicalOpportunityId], references: [id], onDelete: Cascade)
+  sourceSystem          String
+  identifierType        String
+  normalizedValue       String
+  verified              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  @@unique([sourceSystem, identifierType, normalizedValue])
+  @@index([canonicalOpportunityId])
+  @@map("canonical_opportunity_identifier")
 }
 
 model ResolutionReview {

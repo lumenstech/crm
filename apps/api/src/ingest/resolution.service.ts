@@ -86,6 +86,8 @@ export class ResolutionService {
 				include: { sourceRecord: true },
 			});
 			if (!review) throw new Error("Review case was not found.");
+			if (review.status !== "pending")
+				throw new Error("Review case is no longer actionable.");
 			if (input.decision === "approved_match" && !input.canonicalId)
 				throw new Error("A canonical target is required.");
 			if (
@@ -102,6 +104,16 @@ export class ResolutionService {
 					: input.decision === "ignored"
 						? "ignored"
 						: "resolved";
+			const promotion =
+				status === "resolved"
+					? await this.promotion.approveInTransaction(
+							tx,
+							review.sourceRecordId,
+							review.entityType,
+							input.canonicalId,
+							input.ownerId,
+						)
+					: undefined;
 			const updated = await tx.resolutionReview.update({
 				where: { id: review.id },
 				data: {
@@ -110,7 +122,8 @@ export class ResolutionService {
 					decisionReason: input.reason,
 					reviewerId: actorId,
 					decisionAt: new Date(),
-					resultCanonicalId: input.canonicalId,
+					resultCanonicalId: promotion?.canonicalId ?? input.canonicalId,
+					resultVisibleId: promotion?.visibleId,
 				},
 			});
 			await tx.sourceRecord.update({
@@ -127,7 +140,8 @@ export class ResolutionService {
 					action: "review_decision",
 					outcome: status,
 					canonicalType: review.entityType,
-					canonicalId: input.canonicalId,
+					canonicalId: promotion?.canonicalId ?? input.canonicalId,
+					visibleId: promotion?.visibleId,
 					actorId,
 					error: input.reason,
 				},

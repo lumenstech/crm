@@ -96,9 +96,227 @@ export class PromotionService {
 		})();
 	}
 
+	async approveInTransaction(
+		tx: Prisma.TransactionClient,
+		sourceRecordId: string,
+		entityType: string,
+		canonicalId: string | undefined,
+		ownerId: string | undefined,
+	): Promise<{ canonicalId: string; visibleId?: string }> {
+		let targetId = canonicalId;
+		const source = await tx.sourceRecord.findUnique({
+			where: { id: sourceRecordId },
+		});
+		if (!source) throw new Error("Source record was not found.");
+		if (
+			!targetId &&
+			(entityType === "company" ||
+				entityType === "person" ||
+				entityType === "contact")
+		) {
+			const payload = jsonRecord.parse(source.payload) as JsonRecord;
+			if (entityType === "company") {
+				const input = objectAt(payload, "company");
+				const name =
+					text(input, "name", "companyName") ??
+					text(payload, "name", "companyName");
+				if (!name) throw new Error("A company name is required.");
+				const visible = await tx.company.create({
+					data: {
+						name,
+						domain: normalizeDomain(text(input, "domain", "website")),
+						source: RecordSource.IMPORT,
+					},
+					select: { id: true },
+				});
+				const created = await tx.canonicalCompany.create({
+					data: {
+						displayName: name,
+						normalizedName: normalizedName(name),
+						companyId: visible.id,
+					},
+					select: { id: true },
+				});
+				targetId = created.id;
+			} else {
+				const input = objectAt(payload, "person");
+				const firstName =
+					text(input, "firstName", "name") ??
+					text(payload, "firstName", "name");
+				if (!firstName) throw new Error("A person name is required.");
+				const lastName = text(input, "lastName");
+				const email = normalizeEmail(
+					text(input, "email") ?? text(payload, "email") ?? "",
+				);
+				const visible = await tx.contact.create({
+					data: { firstName, lastName, email, source: RecordSource.IMPORT },
+					select: { id: true },
+				});
+				const created = await tx.canonicalPerson.create({
+					data: {
+						firstName,
+						lastName,
+						email,
+						normalizedName: normalizedName(
+							[firstName, lastName].filter(Boolean).join(" "),
+						),
+						contactId: visible.id,
+					},
+					select: { id: true },
+				});
+				targetId = created.id;
+			}
+		}
+		if (!targetId) throw new Error("A canonical target is required.");
+		if (entityType === "company") {
+			const canonical = await tx.canonicalCompany.findUnique({
+				where: { id: targetId },
+			});
+			if (!canonical) throw new Error("Canonical company was not found.");
+			let visibleId = canonical.companyId;
+			if (!visibleId) {
+				const payload = jsonRecord.parse(source.payload) as JsonRecord;
+				const input = objectAt(payload, "company");
+				const name =
+					text(input, "name", "companyName") ??
+					text(payload, "name", "companyName") ??
+					canonical.displayName;
+				const visible = await tx.company.create({
+					data: {
+						name,
+						domain: canonical.domain,
+						website: canonical.website,
+						source: RecordSource.IMPORT,
+					},
+					select: { id: true },
+				});
+				visibleId = visible.id;
+				await tx.canonicalCompany.update({
+					where: { id: canonical.id },
+					data: { companyId: visibleId },
+				});
+			}
+			await tx.canonicalCompanyBusinessUnit.upsert({
+				where: {
+					canonicalCompanyId_businessUnitId: {
+						canonicalCompanyId: canonical.id,
+						businessUnitId: source.businessUnitId,
+					},
+				},
+				create: {
+					canonicalCompanyId: canonical.id,
+					businessUnitId: source.businessUnitId,
+				},
+				update: {},
+			});
+			await this.mapping(
+				tx,
+				source.id,
+				"company",
+				canonical.id,
+				"review_approved",
+				1,
+			);
+			return { canonicalId: canonical.id, visibleId };
+		}
+		if (entityType === "person" || entityType === "contact") {
+			const canonical = await tx.canonicalPerson.findUnique({
+				where: { id: targetId },
+			});
+			if (!canonical) throw new Error("Canonical person was not found.");
+			let visibleId = canonical.contactId;
+			if (!visibleId) {
+				const visible = await tx.contact.create({
+					data: {
+						firstName: canonical.firstName,
+						lastName: canonical.lastName,
+						email: canonical.email,
+						phone: canonical.phone,
+						source: RecordSource.IMPORT,
+					},
+					select: { id: true },
+				});
+				visibleId = visible.id;
+				await tx.canonicalPerson.update({
+					where: { id: canonical.id },
+					data: { contactId: visibleId },
+				});
+			}
+			await tx.canonicalPersonBusinessUnit.upsert({
+				where: {
+					canonicalPersonId_businessUnitId: {
+						canonicalPersonId: canonical.id,
+						businessUnitId: source.businessUnitId,
+					},
+				},
+				create: {
+					canonicalPersonId: canonical.id,
+					businessUnitId: source.businessUnitId,
+				},
+				update: {},
+			});
+			await this.mapping(
+				tx,
+				source.id,
+				"person",
+				canonical.id,
+				"review_approved",
+				1,
+			);
+			return { canonicalId: canonical.id, visibleId };
+		}
+		const opportunity = await tx.canonicalOpportunity.findUnique({
+			where: { id: targetId },
+		});
+		if (!opportunity) throw new Error("Canonical opportunity was not found.");
+		if (
+			!ownerId ||
+			!(await tx.user.findUnique({
+				where: { id: ownerId },
+				select: { id: true },
+			}))
+		)
+			throw new Error("A valid Deal owner is required.");
+		const company = await tx.canonicalCompany.findUnique({
+			where: { id: opportunity.canonicalCompanyId },
+			select: { companyId: true },
+		});
+		if (!company?.companyId)
+			throw new Error("The opportunity company is not promoted.");
+		const deal = opportunity.dealId
+			? { id: opportunity.dealId }
+			: await tx.deal.create({
+					data: {
+						name: opportunity.title,
+						companyId: company.companyId,
+						ownerId,
+					},
+					select: { id: true },
+				});
+		await tx.canonicalOpportunity.update({
+			where: { id: opportunity.id },
+			data: { dealId: deal.id, ownerId },
+		});
+		await this.mapping(
+			tx,
+			source.id,
+			"opportunity",
+			opportunity.id,
+			"review_approved",
+			1,
+		);
+		return { canonicalId: opportunity.id, visibleId: deal.id };
+	}
+
 	private async company(
 		tx: Prisma.TransactionClient,
-		source: { id: string; businessUnitId: string },
+		source: {
+			id: string;
+			businessUnitId: string;
+			sourceSystem: string;
+			sourceType?: string;
+			sourceId?: string;
+		},
 		payload: JsonRecord,
 	): Promise<PromotionResult> {
 		const input = objectAt(payload, "company");
@@ -110,8 +328,42 @@ export class PromotionService {
 		);
 		if (!name && !domain) return { status: "review", entityType: "company" };
 		const normalized = normalizedName(name ?? domain ?? "");
+		const mapped = await tx.recordMapping.findFirst({
+			where: {
+				sourceRecordId: source.id,
+				canonicalType: "company",
+				status: "active",
+			},
+			select: { canonicalId: true },
+		});
+		const externalId =
+			text(input, "externalId", "companyId", "sourceCompanyId") ??
+			text(payload, "externalId", "companyId");
+		const identifier = externalId
+			? await tx.canonicalCompanyIdentifier.findUnique({
+					where: {
+						sourceSystem_identifierType_normalizedValue: {
+							sourceSystem: source.sourceSystem,
+							identifierType: "external_id",
+							normalizedValue: externalId.toLocaleLowerCase(),
+						},
+					},
+					select: { canonicalCompanyId: true },
+				})
+			: null;
+		const mappedCanonical = mapped
+			? await tx.canonicalCompany.findUnique({
+					where: { id: mapped.canonicalId },
+					select: { id: true, companyId: true, displayName: true },
+				})
+			: null;
 		const candidates = await tx.canonicalCompany.findMany({
-			where: domain ? { domain } : { normalizedName: normalized },
+			where:
+				externalId || mappedCanonical || identifier
+					? { id: mappedCanonical?.id ?? identifier?.canonicalCompanyId ?? "" }
+					: domain
+						? { domain }
+						: { normalizedName: normalized },
 			take: 10,
 			select: { id: true, companyId: true, displayName: true },
 		});
@@ -132,6 +384,7 @@ export class PromotionService {
 				status: "review",
 				entityType: "company",
 				reason: "ambiguous_match",
+				canonicalId: soleCandidate.id,
 				candidates: [
 					{ id: soleCandidate.id, score: 0.5, reasons: ["name_only"] },
 				],
@@ -178,6 +431,42 @@ export class PromotionService {
 			},
 			update: {},
 		});
+		if (externalId)
+			await tx.canonicalCompanyIdentifier.upsert({
+				where: {
+					sourceSystem_identifierType_normalizedValue: {
+						sourceSystem: source.sourceSystem,
+						identifierType: "external_id",
+						normalizedValue: externalId.toLocaleLowerCase(),
+					},
+				},
+				create: {
+					canonicalCompanyId: canonical.id,
+					sourceSystem: source.sourceSystem,
+					identifierType: "external_id",
+					normalizedValue: externalId.toLocaleLowerCase(),
+					verified: true,
+				},
+				update: { canonicalCompanyId: canonical.id, verified: true },
+			});
+		if (domain)
+			await tx.canonicalCompanyIdentifier.upsert({
+				where: {
+					sourceSystem_identifierType_normalizedValue: {
+						sourceSystem: "normalized",
+						identifierType: "domain",
+						normalizedValue: domain,
+					},
+				},
+				create: {
+					canonicalCompanyId: canonical.id,
+					sourceSystem: "normalized",
+					identifierType: "domain",
+					normalizedValue: domain,
+					verified: true,
+				},
+				update: { canonicalCompanyId: canonical.id, verified: true },
+			});
 		await this.mapping(
 			tx,
 			source.id,
@@ -214,8 +503,28 @@ export class PromotionService {
 		const normalized = normalizedName(
 			[firstName, text(input, "lastName")].filter(Boolean).join(" "),
 		);
+		const externalId =
+			text(input, "externalId", "profileId", "personId") ??
+			text(payload, "externalId", "profileId", "personId");
+		const identifier = externalId
+			? await tx.canonicalPersonIdentifier.findUnique({
+					where: {
+						sourceSystem_identifierType_normalizedValue: {
+							sourceSystem: source.sourceSystem,
+							identifierType: "external_id",
+							normalizedValue: externalId.toLocaleLowerCase(),
+						},
+					},
+					select: { canonicalPersonId: true },
+				})
+			: null;
 		const candidates = await tx.canonicalPerson.findMany({
-			where: email ? { email } : { normalizedName: normalized },
+			where:
+				externalId || identifier
+					? { id: identifier?.canonicalPersonId ?? "" }
+					: email
+						? { email }
+						: { normalizedName: normalized },
 			take: 2,
 			select: { id: true, contactId: true },
 		});
@@ -256,6 +565,42 @@ export class PromotionService {
 			},
 			update: {},
 		});
+		if (externalId)
+			await tx.canonicalPersonIdentifier.upsert({
+				where: {
+					sourceSystem_identifierType_normalizedValue: {
+						sourceSystem: source.sourceSystem,
+						identifierType: "external_id",
+						normalizedValue: externalId.toLocaleLowerCase(),
+					},
+				},
+				create: {
+					canonicalPersonId: canonical.id,
+					sourceSystem: source.sourceSystem,
+					identifierType: "external_id",
+					normalizedValue: externalId.toLocaleLowerCase(),
+					verified: true,
+				},
+				update: { canonicalPersonId: canonical.id, verified: true },
+			});
+		if (email)
+			await tx.canonicalPersonIdentifier.upsert({
+				where: {
+					sourceSystem_identifierType_normalizedValue: {
+						sourceSystem: "normalized",
+						identifierType: "email",
+						normalizedValue: email,
+					},
+				},
+				create: {
+					canonicalPersonId: canonical.id,
+					sourceSystem: "normalized",
+					identifierType: "email",
+					normalizedValue: email,
+					verified: true,
+				},
+				update: { canonicalPersonId: canonical.id, verified: true },
+			});
 		await this.mapping(
 			tx,
 			source.id,
@@ -274,7 +619,7 @@ export class PromotionService {
 
 	private async opportunity(
 		tx: Prisma.TransactionClient,
-		source: { id: string; businessUnitId: string },
+		source: { id: string; businessUnitId: string; sourceSystem: string },
 		payload: JsonRecord,
 	): Promise<PromotionResult> {
 		const input = objectAt(payload, "opportunity");
@@ -284,15 +629,16 @@ export class PromotionService {
 		const title =
 			text(input, "title", "name") ?? text(payload, "title", "name");
 		if (!title) return { status: "review", entityType: "opportunity" };
+		const externalId =
+			text(input, "externalId", "opportunityId", "dealId") ??
+			text(payload, "externalId", "opportunityId", "dealId");
 		const ownerId = text(input, "ownerId") ?? text(payload, "ownerId");
-		if (
-			!ownerId ||
-			!(await tx.user.findUnique({
-				where: { id: ownerId },
-				select: { id: true },
-			}))
-		)
-			return { status: "review", entityType: "opportunity" };
+		const validOwner = ownerId
+			? await tx.user.findUnique({
+					where: { id: ownerId },
+					select: { id: true },
+				})
+			: null;
 		const visibleCompanyId = companyResult.visibleId;
 		if (!visibleCompanyId)
 			return {
@@ -300,19 +646,71 @@ export class PromotionService {
 				entityType: "opportunity",
 				reason: "insufficient_data",
 			};
-		const canonical = await tx.canonicalOpportunity.create({
-			data: {
-				canonicalCompanyId: companyResult.canonicalId,
-				businessUnitId: source.businessUnitId,
-				title,
-				normalizedTitle: normalizedName(title),
-				ownerId,
-				currency: text(input, "currency") ?? "USD",
-			},
-			select: { id: true },
-		});
+		const existingIdentifier = externalId
+			? await tx.canonicalOpportunityIdentifier.findUnique({
+					where: {
+						sourceSystem_identifierType_normalizedValue: {
+							sourceSystem: source.sourceSystem,
+							identifierType: "external_id",
+							normalizedValue: externalId.toLocaleLowerCase(),
+						},
+					},
+					select: { canonicalOpportunityId: true },
+				})
+			: null;
+		const opportunityData = {
+			canonicalCompanyId: companyResult.canonicalId,
+			businessUnitId: source.businessUnitId,
+			title,
+			normalizedTitle: normalizedName(title),
+			ownerId: validOwner?.id,
+			currency: text(input, "currency") ?? "USD",
+		};
+		const canonical = existingIdentifier
+			? await tx.canonicalOpportunity.findUnique({
+					where: { id: existingIdentifier.canonicalOpportunityId },
+					select: { id: true, dealId: true },
+				})
+			: await tx.canonicalOpportunity.create({
+					data: opportunityData,
+					select: { id: true, dealId: true },
+				});
+		if (!canonical)
+			return {
+				status: "review",
+				entityType: "opportunity",
+				reason: "insufficient_data",
+			};
+		if (!existingIdentifier && externalId)
+			await tx.canonicalOpportunityIdentifier.create({
+				data: {
+					canonicalOpportunityId: canonical.id,
+					sourceSystem: source.sourceSystem,
+					identifierType: "external_id",
+					normalizedValue: externalId.toLocaleLowerCase(),
+					verified: true,
+				},
+			});
+		if (!validOwner)
+			return {
+				status: "review",
+				entityType: "opportunity",
+				reason: "owner_required",
+				canonicalId: canonical.id,
+			};
+		if (canonical.dealId)
+			return {
+				status: "promoted",
+				entityType: "opportunity",
+				canonicalId: canonical.id,
+				visibleId: canonical.dealId,
+			};
 		const deal = await tx.deal.create({
-			data: { name: title, companyId: visibleCompanyId, ownerId },
+			data: {
+				name: title,
+				companyId: visibleCompanyId,
+				ownerId: validOwner.id,
+			},
 			select: { id: true },
 		});
 		await tx.canonicalOpportunity.update({
@@ -381,6 +779,7 @@ export class PromotionService {
 				entityType: result.entityType,
 				reasonCode,
 				proposedOperation: "promote",
+				resultCanonicalId: result.canonicalId,
 			},
 			update: {},
 		});
@@ -429,6 +828,7 @@ export class PromotionService {
 		return {
 			status: "review",
 			entityType: result.entityType,
+			canonicalId: result.canonicalId,
 			reviewId: review.id,
 		};
 	}
