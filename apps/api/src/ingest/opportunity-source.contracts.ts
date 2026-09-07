@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { opportunityRecommendation } from "./opportunity-ops.contracts";
+import {
+	opportunityRecommendation,
+	opportunityReviewState,
+} from "./opportunity-ops.contracts";
 
 export const opportunitySourceProvider = z.enum([
 	"nyc-current-solicitations",
@@ -44,7 +47,7 @@ export const opportunitySourceScanRow = z.object({
 	matchedStrategicKeywords: z.array(z.string()),
 	score: z.number().int().min(0).max(100),
 	recommendation: opportunityRecommendation,
-	reviewState: z.literal("pending"),
+	reviewState: opportunityReviewState,
 	hardBlocked: z.boolean(),
 	deduplicated: z.boolean(),
 });
