@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { Db } from "@crm/db";
-import { BadGatewayException, Injectable } from "@nestjs/common";
+import {
+	BadGatewayException,
+	BadRequestException,
+	Injectable,
+} from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import { IngestService } from "./ingest.service";
 import type {
@@ -8,31 +12,25 @@ import type {
 	ScanOpportunitySourceInput,
 	ScanOpportunitySourceOutput,
 } from "./opportunity-source.contracts";
+import {
+	fetchNassauFormalSolicitations,
+	fetchNjstartOpenBids,
+	type PublicSourceCandidate,
+} from "./opportunity-source.public-providers";
 import { OpportunityOpsService } from "./opportunity-ops.service";
 
 const NYC_SOLICITATIONS_ENDPOINT =
 	"https://data.cityofnewyork.us/resource/3khw-qi8f.json";
 const SAM_OPPORTUNITIES_ENDPOINT = "https://api.sam.gov/opportunities/v2/search";
 
-type SourceCandidate = {
-	sourceId: string;
-	title: string;
-	buyer: string | null;
-	description: string | null;
-	sourceUrl: string | null;
-	postedDate: string | null;
-	dueDate: string | null;
-	categories: string[];
-	contactAvailable: boolean;
-	estimatedValue: number | null;
-	currency: string | null;
-	raw: Record<string, unknown>;
-};
+type SourceCandidate = PublicSourceCandidate;
+type ReviewState = ScanOpportunitySourceOutput["rows"][number]["reviewState"];
 
 type ExistingEvaluation = {
 	score: number;
 	recommendation: "pursue" | "qualify" | "watch" | "pass";
 	hardBlocked: boolean;
+	reviewState: ReviewState;
 };
 
 @Injectable()
@@ -43,7 +41,9 @@ export class OpportunitySourceService {
 		private readonly opportunityOps: OpportunityOpsService,
 	) {}
 
-	async scan(input: ScanOpportunitySourceInput): Promise<ScanOpportunitySourceOutput> {
+	async scan(
+		input: ScanOpportunitySourceInput,
+	): Promise<ScanOpportunitySourceOutput> {
 		if (input.provider === "sam-opportunities" && !process.env.SAM_GOV_API_KEY) {
 			return {
 				provider: input.provider,
@@ -53,7 +53,8 @@ export class OpportunitySourceService {
 				ingested: 0,
 				deduplicated: 0,
 				skipped: 0,
-				message: "SAM_GOV_API_KEY is not configured; NYC scanning remains available without credentials.",
+				message:
+					"SAM_GOV_API_KEY is not configured; public no-key providers remain available.",
 				rows: [],
 			};
 		}
@@ -65,8 +66,19 @@ export class OpportunitySourceService {
 		let skipped = 0;
 
 		for (const candidate of candidates) {
-			const capabilityMatches = this.matches(candidate, input.capabilityKeywords);
-			const strategicMatches = this.matches(candidate, input.strategicKeywords);
+			if (!this.withinDueWindow(candidate, input.dueWithinDays ?? null)) {
+				skipped += 1;
+				continue;
+			}
+
+			const capabilityMatches = this.matches(
+				candidate,
+				input.capabilityKeywords,
+			);
+			const strategicMatches = this.matches(
+				candidate,
+				input.strategicKeywords,
+			);
 			if (capabilityMatches.length === 0) {
 				skipped += 1;
 				continue;
@@ -74,7 +86,11 @@ export class OpportunitySourceService {
 			matched += 1;
 
 			const fingerprint = this.fingerprint(candidate);
-			const components = this.components(candidate, capabilityMatches, strategicMatches);
+			const components = this.components(
+				candidate,
+				capabilityMatches,
+				strategicMatches,
+			);
 			const hardBlockers = this.hardBlockers(candidate);
 			const accepted = await this.ingest.signal({
 				project: input.project,
@@ -145,7 +161,7 @@ export class OpportunitySourceService {
 				matchedStrategicKeywords: strategicMatches,
 				score: evaluation.score,
 				recommendation: evaluation.recommendation,
-				reviewState: "pending",
+				reviewState: existing?.reviewState ?? "pending",
 				hardBlocked: evaluation.hardBlocked,
 				deduplicated: accepted.deduplicated,
 			});
@@ -164,35 +180,64 @@ export class OpportunitySourceService {
 		};
 	}
 
-	private async fetchProvider(input: ScanOpportunitySourceInput) {
-		if (input.provider === "nyc-current-solicitations") {
-			return this.fetchNyc(input);
+	private async fetchProvider(
+		input: ScanOpportunitySourceInput,
+	): Promise<SourceCandidate[]> {
+		switch (input.provider) {
+			case "nyc-current-solicitations":
+				return this.fetchNyc(input);
+			case "nassau-formal-solicitations":
+				return fetchNassauFormalSolicitations(input.limit);
+			case "njstart-open-bids":
+				return fetchNjstartOpenBids(input.limit);
+			case "sam-opportunities":
+				return this.fetchSam(input);
+			default:
+				return this.assertNeverProvider(input.provider);
 		}
-		return this.fetchSam(input);
 	}
 
-	private async fetchNyc(input: ScanOpportunitySourceInput): Promise<SourceCandidate[]> {
+	private async fetchNyc(
+		input: ScanOpportunitySourceInput,
+	): Promise<SourceCandidate[]> {
 		const url = new URL(NYC_SOLICITATIONS_ENDPOINT);
 		url.searchParams.set("$limit", String(input.limit));
 		url.searchParams.set("$order", "due_date ASC");
 		const today = new Date();
-		url.searchParams.set(
-			"$where",
+		const where = [
 			`due_date >= '${today.toISOString().slice(0, 10)}T00:00:00.000'`,
-		);
-		const data = await this.fetchJson(url) as Array<Record<string, unknown>>;
+		];
+		if (input.dueWithinDays) {
+			const cutoff = new Date(today.getTime() + input.dueWithinDays * 86_400_000);
+			where.push(
+				`due_date <= '${cutoff.toISOString().slice(0, 10)}T23:59:59.999'`,
+			);
+		}
+		url.searchParams.set("$where", where.join(" AND "));
+		const data = (await this.fetchJson(url)) as Array<Record<string, unknown>>;
 		return data.map((row) => this.normalizeNyc(row)).filter(this.present);
 	}
 
 	private normalizeNyc(row: Record<string, unknown>): SourceCandidate | null {
 		const sourceId = this.text(row, ["request_id", "pin", "id"]);
-		const title = this.text(row, ["short_title", "title", "procurement_description"]);
+		const title = this.text(row, [
+			"short_title",
+			"title",
+			"procurement_description",
+		]);
 		if (!sourceId || !title) return null;
-		const buyer = this.text(row, ["agency_name", "agency", "agency_full_name"]);
+		const buyer = this.text(row, [
+			"agency_name",
+			"agency",
+			"agency_full_name",
+		]);
 		const dueDate = this.isoDate(this.text(row, ["due_date", "end_date"]));
-		const postedDate = this.isoDate(this.text(row, ["start_date", "publication_date"]));
-		const sourceUrl = this.text(row, ["document_links", "url", "link"])
-			?? `https://a856-cityrecord.nyc.gov/RequestDetail/${encodeURIComponent(sourceId)}`;
+		const postedDate = this.isoDate(
+			this.text(row, ["start_date", "publication_date"]),
+		);
+		const sourceUrl =
+			this.text(row, ["document_links", "url", "link"]) ??
+			`https://a856-cityrecord.nyc.gov/RequestDetail/${encodeURIComponent(sourceId)}`;
 		const description = this.text(row, [
 			"procurement_description",
 			"additional_description_1",
@@ -210,15 +255,22 @@ export class OpportunitySourceService {
 			categories: [
 				this.text(row, ["category_description"]),
 				this.text(row, ["selection_method_description"]),
-			].filter((v): v is string => Boolean(v)),
-			contactAvailable: Boolean(this.text(row, ["contact_name", "contact_email", "contact_phone"])),
-			estimatedValue: this.number(row, ["contract_amount", "estimated_contract_amount"]),
+			].filter((value): value is string => Boolean(value)),
+			contactAvailable: Boolean(
+				this.text(row, ["contact_name", "contact_email", "contact_phone"]),
+			),
+			estimatedValue: this.number(row, [
+				"contract_amount",
+				"estimated_contract_amount",
+			]),
 			currency: "USD",
 			raw: row,
 		};
 	}
 
-	private async fetchSam(input: ScanOpportunitySourceInput): Promise<SourceCandidate[]> {
+	private async fetchSam(
+		input: ScanOpportunitySourceInput,
+	): Promise<SourceCandidate[]> {
 		const url = new URL(SAM_OPPORTUNITIES_ENDPOINT);
 		const now = new Date();
 		const from = new Date(now.getTime() - input.lookbackDays * 86_400_000);
@@ -232,9 +284,9 @@ export class OpportunitySourceService {
 		for (const procurementType of input.procurementTypes) {
 			url.searchParams.append("ptype", procurementType);
 		}
-		const data = await this.fetchJson(url) as Record<string, unknown>;
+		const data = (await this.fetchJson(url)) as Record<string, unknown>;
 		const records = Array.isArray(data.opportunitiesData)
-			? data.opportunitiesData as Array<Record<string, unknown>>
+			? (data.opportunitiesData as Array<Record<string, unknown>>)
 			: [];
 		return records.map((row) => this.normalizeSam(row)).filter(this.present);
 	}
@@ -246,10 +298,12 @@ export class OpportunitySourceService {
 		const department = this.text(row, ["department"]);
 		const subTier = this.text(row, ["subTier"]);
 		const office = this.text(row, ["office"]);
-		const buyer = [department, subTier, office].filter(Boolean).join(" / ") || null;
+		const buyer =
+			[department, subTier, office].filter(Boolean).join(" / ") || null;
 		const points = Array.isArray(row.pointOfContact) ? row.pointOfContact : [];
-		const sourceUrl = this.text(row, ["uiLink"])
-			?? `https://sam.gov/opp/${encodeURIComponent(sourceId)}/view`;
+		const sourceUrl =
+			this.text(row, ["uiLink"]) ??
+			`https://sam.gov/opp/${encodeURIComponent(sourceId)}/view`;
 		return {
 			sourceId,
 			title,
@@ -257,12 +311,14 @@ export class OpportunitySourceService {
 			description: this.text(row, ["description"]),
 			sourceUrl,
 			postedDate: this.isoDate(this.text(row, ["postedDate"])),
-			dueDate: this.isoDate(this.text(row, ["responseDeadLine", "responseDeadline"])),
+			dueDate: this.isoDate(
+				this.text(row, ["responseDeadLine", "responseDeadline"]),
+			),
 			categories: [
 				this.text(row, ["type"]),
 				this.text(row, ["typeOfSetAsideDescription"]),
 				this.text(row, ["naicsCode"]),
-			].filter((v): v is string => Boolean(v)),
+			].filter((value): value is string => Boolean(value)),
 			contactAvailable: points.length > 0,
 			estimatedValue: null,
 			currency: "USD",
@@ -276,23 +332,45 @@ export class OpportunitySourceService {
 		strategicMatches: string[],
 	) {
 		const days = candidate.dueDate
-			? Math.ceil((new Date(candidate.dueDate).getTime() - Date.now()) / 86_400_000)
+			? Math.ceil(
+					(new Date(candidate.dueDate).getTime() - Date.now()) / 86_400_000,
+				)
 			: null;
 		return {
 			capabilityFit: Math.min(30, 14 + capabilityMatches.length * 5),
 			activeNeed: 20,
-			commercialValue: candidate.estimatedValue && candidate.estimatedValue >= 100_000 ? 15 : 8,
-			timingUrgency: days === null ? 7 : days <= 7 ? 15 : days <= 30 ? 12 : days <= 90 ? 9 : 6,
+			commercialValue:
+				candidate.estimatedValue && candidate.estimatedValue >= 100_000 ? 15 : 8,
+			timingUrgency:
+				days === null
+					? 7
+					: days <= 7
+						? 15
+						: days <= 30
+							? 12
+							: days <= 90
+								? 9
+								: 6,
 			buyerAccess: candidate.contactAvailable ? 10 : 5,
 			strategicValue: Math.min(10, 4 + strategicMatches.length * 2),
 		};
 	}
 
 	private hardBlockers(candidate: SourceCandidate) {
-		if (candidate.dueDate && new Date(candidate.dueDate).getTime() < Date.now()) {
+		if (
+			candidate.dueDate &&
+			new Date(candidate.dueDate).getTime() < Date.now()
+		) {
 			return ["expired_deadline" as const];
 		}
 		return [];
+	}
+
+	private withinDueWindow(candidate: SourceCandidate, dueWithinDays: number | null) {
+		if (!dueWithinDays || !candidate.dueDate) return true;
+		const due = new Date(candidate.dueDate).getTime();
+		if (Number.isNaN(due)) return true;
+		return due <= Date.now() + dueWithinDays * 86_400_000;
 	}
 
 	private matches(candidate: SourceCandidate, keywords: string[]) {
@@ -302,67 +380,105 @@ export class OpportunitySourceService {
 			candidate.buyer,
 			candidate.description,
 			...candidate.categories,
-		].filter(Boolean).join(" ").toLowerCase();
-		return keywords.filter((keyword) => haystack.includes(keyword.toLowerCase()));
+		]
+			.filter(Boolean)
+			.join(" ")
+			.toLowerCase();
+		return keywords.filter((keyword) =>
+			haystack.includes(keyword.toLowerCase()),
+		);
 	}
 
 	private fingerprint(candidate: SourceCandidate) {
-		return createHash("sha256").update(JSON.stringify({
-			sourceId: candidate.sourceId,
-			title: candidate.title,
-			buyer: candidate.buyer,
-			description: candidate.description,
-			dueDate: candidate.dueDate,
-			categories: candidate.categories,
-			estimatedValue: candidate.estimatedValue,
-		})).digest("hex");
+		return createHash("sha256")
+			.update(
+				JSON.stringify({
+					sourceId: candidate.sourceId,
+					title: candidate.title,
+					buyer: candidate.buyer,
+					description: candidate.description,
+					dueDate: candidate.dueDate,
+					categories: candidate.categories,
+					estimatedValue: candidate.estimatedValue,
+				}),
+			)
+			.digest("hex");
 	}
 
 	private async sameFingerprintEvaluation(
 		sourceRecordId: string,
 		fingerprint: string,
 	): Promise<ExistingEvaluation | null> {
-		const [row] = await this.db.$queryRaw<Array<{
-			score: number | null;
-			recommendation: ExistingEvaluation["recommendation"] | null;
-			scoreBreakdown: Record<string, unknown> | null;
-		}>>`
+		const [evaluation] = await this.db.$queryRaw<
+			Array<{
+				score: number | null;
+				recommendation: ExistingEvaluation["recommendation"] | null;
+				scoreBreakdown: Record<string, unknown> | null;
+			}>
+		>`
 			SELECT score, recommendation, "scoreBreakdown" AS "scoreBreakdown"
 			FROM opportunity_review_event
 			WHERE "sourceRecordId" = ${sourceRecordId} AND "eventType" = 'evaluation'
 			ORDER BY "createdAt" DESC, id DESC
 			LIMIT 1
 		`;
-		const evidence = row?.scoreBreakdown instanceof Object
-			? (row.scoreBreakdown.evidence as Record<string, unknown> | undefined)
-			: undefined;
-		if (!row || evidence?.source_fingerprint !== fingerprint || row.score === null || !row.recommendation) {
+		const evidence =
+			evaluation?.scoreBreakdown instanceof Object
+				? (evaluation.scoreBreakdown.evidence as
+						| Record<string, unknown>
+						| undefined)
+				: undefined;
+		if (
+			!evaluation ||
+			evidence?.source_fingerprint !== fingerprint ||
+			evaluation.score === null ||
+			!evaluation.recommendation
+		) {
 			return null;
 		}
-		const blockers = Array.isArray(row.scoreBreakdown?.hardBlockers)
-			? row.scoreBreakdown.hardBlockers
+		const [latest] = await this.db.$queryRaw<Array<{ state: ReviewState }>>`
+			SELECT state
+			FROM opportunity_review_event
+			WHERE "sourceRecordId" = ${sourceRecordId}
+			ORDER BY "createdAt" DESC, id DESC
+			LIMIT 1
+		`;
+		const blockers = Array.isArray(evaluation.scoreBreakdown?.hardBlockers)
+			? evaluation.scoreBreakdown.hardBlockers
 			: [];
 		return {
-			score: row.score,
-			recommendation: row.recommendation,
+			score: evaluation.score,
+			recommendation: evaluation.recommendation,
 			hardBlocked: blockers.length > 0,
+			reviewState: latest?.state ?? "pending",
 		};
 	}
 
-	private score(components: ReturnType<OpportunitySourceService["components"]>) {
+	private score(
+		components: ReturnType<OpportunitySourceService["components"]>,
+	) {
 		return Math.round(
-			components.capabilityFit + components.activeNeed + components.commercialValue
-			+ components.timingUrgency + components.buyerAccess + components.strategicValue,
+			components.capabilityFit +
+				components.activeNeed +
+				components.commercialValue +
+				components.timingUrgency +
+				components.buyerAccess +
+				components.strategicValue,
 		);
 	}
 
 	private async fetchJson(url: URL) {
 		const response = await fetch(url, {
-			headers: { accept: "application/json", "user-agent": "Lumens-Opportunity-Ops/1.0" },
+			headers: {
+				accept: "application/json",
+				"user-agent": "Lumens-Opportunity-Ops/1.0",
+			},
 			signal: AbortSignal.timeout(20_000),
 		});
 		if (!response.ok) {
-			throw new BadGatewayException(`Opportunity provider returned HTTP ${response.status}.`);
+			throw new BadGatewayException(
+				`Opportunity provider returned HTTP ${response.status}.`,
+			);
 		}
 		return response.json();
 	}
@@ -389,10 +505,16 @@ export class OpportunitySourceService {
 	}
 
 	private samDate(date: Date) {
-		return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}/${date.getFullYear()}`;
+		return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(
+			date.getDate(),
+		).padStart(2, "0")}/${date.getFullYear()}`;
 	}
 
 	private present<T>(value: T | null): value is T {
 		return value !== null;
+	}
+
+	private assertNeverProvider(provider: never): never {
+		throw new BadRequestException(`Unsupported opportunity provider: ${provider}.`);
 	}
 }
