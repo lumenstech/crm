@@ -4,6 +4,11 @@ import type { z } from "zod";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
 import {
+	ingestGuyanaOpportunityInput,
+	ingestGuyanaOpportunityOutput,
+} from "./guyana-opportunity.contracts";
+import { GuyanaOpportunityService } from "./guyana-opportunity.service";
+import {
 	ingestSignalInput,
 	ingestSignalOutput,
 	promoteSignalInput,
@@ -18,6 +23,15 @@ import {
 	signalSourceRecordInput,
 } from "./ingest.contracts";
 import { IngestService } from "./ingest.service";
+import {
+	decideOpportunityInput,
+	decideOpportunityOutput,
+	evaluateOpportunityInput,
+	evaluateOpportunityOutput,
+	opportunityReviewQueueInput,
+	opportunityReviewQueueOutput,
+} from "./opportunity-ops.contracts";
+import { OpportunityOpsService } from "./opportunity-ops.service";
 import { SignalQualificationService } from "./signal-qualification.service";
 
 @Router({ alias: "ingest" })
@@ -27,6 +41,10 @@ export class IngestRouter {
 		@Inject(IngestService) private readonly ingest: IngestService,
 		@Inject(SignalQualificationService)
 		private readonly qualification: SignalQualificationService,
+		@Inject(OpportunityOpsService)
+		private readonly opportunityOps: OpportunityOpsService,
+		@Inject(GuyanaOpportunityService)
+		private readonly guyanaOpportunity: GuyanaOpportunityService,
 	) {}
 
 	@Mutation({
@@ -36,6 +54,20 @@ export class IngestRouter {
 	})
 	async signal(@Input() input: z.infer<typeof ingestSignalInput>) {
 		return this.ingest.signal(input);
+	}
+
+	@Mutation({
+		input: ingestGuyanaOpportunityInput,
+		output: ingestGuyanaOpportunityOutput,
+		meta: restMeta("POST", "/ingest/guyana/opportunities", [
+			"Opportunity Ops",
+			"Guyana",
+		]),
+	})
+	async ingestGuyanaOpportunity(
+		@Input() input: z.infer<typeof ingestGuyanaOpportunityInput>,
+	) {
+		return this.guyanaOpportunity.ingestOpportunity(input);
 	}
 
 	@Query({
@@ -82,6 +114,45 @@ export class IngestRouter {
 	})
 	async qualify(@Input() input: z.infer<typeof qualifySignalInput>) {
 		return this.qualification.qualify(input);
+	}
+
+	@Mutation({
+		input: evaluateOpportunityInput,
+		output: evaluateOpportunityOutput,
+		meta: restMeta("POST", "/ingest/opportunities/{sourceRecordId}/evaluate", [
+			"Opportunity Ops",
+		]),
+	})
+	async evaluateOpportunity(
+		@Input() input: z.infer<typeof evaluateOpportunityInput>,
+	) {
+		return this.opportunityOps.evaluate(input);
+	}
+
+	@Mutation({
+		input: decideOpportunityInput,
+		output: decideOpportunityOutput,
+		meta: restMeta("POST", "/ingest/opportunities/{sourceRecordId}/decision", [
+			"Opportunity Ops",
+		]),
+	})
+	async decideOpportunity(
+		@Input() input: z.infer<typeof decideOpportunityInput>,
+	) {
+		return this.opportunityOps.decide(input);
+	}
+
+	@Query({
+		input: opportunityReviewQueueInput,
+		output: opportunityReviewQueueOutput,
+		meta: restMeta("GET", "/ingest/opportunities/review-queue", [
+			"Opportunity Ops",
+		]),
+	})
+	async opportunityReviewQueue(
+		@Input() input: z.infer<typeof opportunityReviewQueueInput>,
+	) {
+		return this.opportunityOps.queue(input);
 	}
 
 	@Mutation({
