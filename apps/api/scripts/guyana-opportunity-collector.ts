@@ -1,14 +1,20 @@
 import { z } from "zod";
 import {
+	guyanaOpportunitySource,
+	ingestGuyanaOpportunityInput,
+} from "../src/ingest/guyana-opportunity.contracts";
+import {
 	guyanaOpportunitySources,
 	isApprovedGuyanaOpportunitySourceUrl,
 	type GuyanaOpportunitySourceKey,
 } from "../src/ingest/guyana-opportunity.sources";
-import { ingestGuyanaOpportunityInput } from "../src/ingest/guyana-opportunity.contracts";
 
-const collectorCandidate = ingestGuyanaOpportunityInput.omit({ project: true });
 const scoutOutput = z.object({
-	candidates: z.array(collectorCandidate).max(100),
+	candidates: z.array(z.unknown()).max(100),
+});
+const scoutCandidateIdentity = z.object({
+	source: guyanaOpportunitySource,
+	sourceUrl: z.string().url(),
 });
 
 const sourceKeys = Object.keys(guyanaOpportunitySources) as GuyanaOpportunitySourceKey[];
@@ -125,19 +131,23 @@ async function runScout(input: string) {
 		signal: AbortSignal.timeout(120_000),
 	});
 	const body = await response.text();
-	if (!response.ok) throw new Error(`Langflow scout failed ${response.status}: ${body.slice(0, 1000)}`);
+	if (!response.ok) {
+		throw new Error(`Langflow scout failed ${response.status}: ${body.slice(0, 1000)}`);
+	}
 	const parsed = JSON.parse(body) as unknown;
 	const jsonText = findJsonText(parsed);
 	if (!jsonText) throw new Error("Langflow scout did not return a JSON candidate envelope.");
-	const candidateEnvelope = JSON.parse(jsonText) as unknown;
-	return scoutOutput.parse(candidateEnvelope).candidates;
+	return scoutOutput.parse(JSON.parse(jsonText) as unknown).candidates;
 }
 
-async function submitCandidate(candidate: z.infer<typeof collectorCandidate>) {
+async function submitCandidate(candidate: unknown) {
 	const crmUrl = requiredEnv("GUYANA_COLLECTOR_CRM_URL").replace(/\/$/, "");
 	const token = requiredEnv("GUYANA_COLLECTOR_CRM_TOKEN");
 	const project = requiredEnv("GUYANA_COLLECTOR_PROJECT");
-	const payload = ingestGuyanaOpportunityInput.parse({ project, ...candidate });
+	const payload = ingestGuyanaOpportunityInput.parse({
+		project,
+		...(candidate as Record<string, unknown>),
+	});
 	const response = await fetch(`${crmUrl}/ingest/guyana/opportunities`, {
 		method: "POST",
 		headers: {
@@ -148,7 +158,9 @@ async function submitCandidate(candidate: z.infer<typeof collectorCandidate>) {
 		signal: AbortSignal.timeout(30_000),
 	});
 	const body = await response.text();
-	if (!response.ok) throw new Error(`CRM ingest failed ${response.status}: ${body.slice(0, 1000)}`);
+	if (!response.ok) {
+		throw new Error(`CRM ingest failed ${response.status}: ${body.slice(0, 1000)}`);
+	}
 	return JSON.parse(body) as unknown;
 }
 
@@ -168,11 +180,12 @@ async function collectSource(source: GuyanaOpportunitySourceKey, url: string) {
 	const candidates = await runScout(prompt);
 	const results: unknown[] = [];
 	for (const candidate of candidates) {
-		if (candidate.source !== source) {
-			throw new Error(`Scout returned source ${candidate.source} for requested source ${source}.`);
+		const identity = scoutCandidateIdentity.parse(candidate);
+		if (identity.source !== source) {
+			throw new Error(`Scout returned source ${identity.source} for requested source ${source}.`);
 		}
-		if (!isApprovedGuyanaOpportunitySourceUrl(source, candidate.sourceUrl)) {
-			throw new Error(`Scout returned an unapproved source URL: ${candidate.sourceUrl}`);
+		if (!isApprovedGuyanaOpportunitySourceUrl(source, identity.sourceUrl)) {
+			throw new Error(`Scout returned an unapproved source URL: ${identity.sourceUrl}`);
 		}
 		results.push(await submitCandidate(candidate));
 	}
