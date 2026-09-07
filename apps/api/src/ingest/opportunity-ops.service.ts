@@ -20,6 +20,7 @@ type SourceRow = {
 };
 
 type LatestReviewRow = {
+	eventType: "evaluation" | "decision" | "promotion";
 	score: number | null;
 	recommendation: OpportunityRecommendation | null;
 	state: string;
@@ -27,6 +28,7 @@ type LatestReviewRow = {
 };
 
 type ApprovedReviewRow = LatestReviewRow & {
+	eventType: "decision";
 	state: "approved";
 };
 
@@ -192,18 +194,19 @@ export class OpportunityOpsService {
 
 	async assertApproved(sourceRecordId: string): Promise<ApprovedReviewRow> {
 		const [row] = await this.db.$queryRaw<LatestReviewRow[]>`
-			SELECT score, recommendation, state, "reviewerUserId" AS "reviewerUserId"
+			SELECT "eventType" AS "eventType", score, recommendation, state,
+				"reviewerUserId" AS "reviewerUserId"
 			FROM opportunity_review_event
-			WHERE "sourceRecordId" = ${sourceRecordId} AND "eventType" = 'decision'
+			WHERE "sourceRecordId" = ${sourceRecordId}
 			ORDER BY "createdAt" DESC, id DESC
 			LIMIT 1
 		`;
-		if (!row || row.state !== "approved") {
+		if (!row || row.eventType !== "decision" || row.state !== "approved") {
 			throw new BadRequestException(
-				"Opportunity promotion requires the latest human review decision to be approved.",
+				"Opportunity promotion requires the latest review event to be an approved human decision. Re-evaluated or changed opportunities require fresh approval.",
 			);
 		}
-		return { ...row, state: "approved" };
+		return { ...row, eventType: "decision", state: "approved" };
 	}
 
 	async recordPromotion(input: {
@@ -266,7 +269,8 @@ export class OpportunityOpsService {
 
 	private async latestReview(sourceRecordId: string) {
 		const [row] = await this.db.$queryRaw<LatestReviewRow[]>`
-			SELECT score, recommendation, state, "reviewerUserId" AS "reviewerUserId"
+			SELECT "eventType" AS "eventType", score, recommendation, state,
+				"reviewerUserId" AS "reviewerUserId"
 			FROM opportunity_review_event
 			WHERE "sourceRecordId" = ${sourceRecordId}
 			ORDER BY "createdAt" DESC, id DESC
