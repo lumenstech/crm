@@ -37,6 +37,7 @@ import {
 	scanOpportunitySourceOutput,
 } from "./opportunity-source.contracts";
 import { OpportunitySourceService } from "./opportunity-source.service";
+import { RegionalOpportunitySourceService } from "./regional-opportunity-source.service";
 import { SignalQualificationService } from "./signal-qualification.service";
 
 @Router({ alias: "ingest" })
@@ -50,6 +51,8 @@ export class IngestRouter {
 		private readonly opportunityOps: OpportunityOpsService,
 		@Inject(OpportunitySourceService)
 		private readonly opportunitySources: OpportunitySourceService,
+		@Inject(RegionalOpportunitySourceService)
+		private readonly regionalOpportunitySources: RegionalOpportunitySourceService,
 		@Inject(GuyanaOpportunityService)
 		private readonly guyanaOpportunity: GuyanaOpportunityService,
 	) {}
@@ -88,6 +91,9 @@ export class IngestRouter {
 	async scanOpportunitySource(
 		@Input() input: z.infer<typeof scanOpportunitySourceInput>,
 	) {
+		if (this.regionalOpportunitySources.canHandle(input.provider)) {
+			return this.regionalOpportunitySources.scan(input);
+		}
 		return this.opportunitySources.scan(input);
 	}
 
