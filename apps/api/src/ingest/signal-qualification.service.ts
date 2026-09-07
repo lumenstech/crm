@@ -21,6 +21,7 @@ import {
 	type SignalPayloadValue,
 	signalPayload,
 } from "./ingest.contracts";
+import { OpportunityOpsService } from "./opportunity-ops.service";
 
 type SignalRow = {
 	id: string;
@@ -46,6 +47,7 @@ export class SignalQualificationService {
 	constructor(
 		@InjectDatabase() private readonly db: Db,
 		private readonly deals: DealsService,
+		private readonly opportunityOps: OpportunityOpsService,
 	) {}
 
 	async qualify(input: QualifySignalInput): Promise<QualifySignalOutput> {
@@ -86,10 +88,28 @@ export class SignalQualificationService {
 
 	async promote(input: PromoteSignalInput): Promise<PromoteSignalOutput> {
 		const signal = await this.loadSignal(input.sourceRecordId);
-		const scored = this.score(signal.payload);
-		if (scored.score < 70) {
+		const isOpportunityOps =
+			this.text(signal.payload.workflow) === "opportunity-ops" ||
+			this.text(signal.payload.pipeline) === "opportunity-ops";
+		const approvedReview = isOpportunityOps
+			? await this.opportunityOps.assertApproved(signal.id)
+			: null;
+		const legacyScore = this.score(signal.payload);
+		const score = approvedReview?.score ?? legacyScore.score;
+		const classification = this.classification(score);
+
+		if (isOpportunityOps) {
+			if (
+				approvedReview?.recommendation !== "pursue" &&
+				approvedReview?.recommendation !== "qualify"
+			) {
+				throw new BadRequestException(
+					"Only approved Opportunity Ops reviews recommended as pursue or qualify may be promoted.",
+				);
+			}
+		} else if (score < 70) {
 			throw new BadRequestException(
-				`Signal score ${scored.score} is below the canonical opportunity threshold of 70.`,
+				`Signal score ${score} is below the canonical opportunity threshold of 70.`,
 			);
 		}
 
@@ -106,7 +126,13 @@ export class SignalQualificationService {
 			this.text(payload.message) ??
 			"Qualified opportunity";
 		const amount = input.amountUsd ?? this.number(payload.estimated_value_usd);
-		const stage = scored.score >= 85 ? "priority" : "qualified";
+		const stage = isOpportunityOps
+			? approvedReview?.recommendation === "pursue"
+				? "priority"
+				: "qualified"
+			: score >= 85
+				? "priority"
+				: "qualified";
 
 		let createdCanonicalOpportunity = false;
 		let canonicalOpportunityId: string;
@@ -119,8 +145,10 @@ export class SignalQualificationService {
 					name = ${name}, stage = ${stage}, amount = ${amount},
 					fields = COALESCE(fields, '{}'::jsonb) || ${JSON.stringify({
 						source_signal_id: signal.id,
-						signal_score: scored.score,
-						classification: scored.classification,
+						signal_score: score,
+						classification,
+						workflow: isOpportunityOps ? "opportunity-ops" : undefined,
+						recommendation: approvedReview?.recommendation ?? undefined,
 					})}::jsonb,
 					"updatedAt" = CURRENT_TIMESTAMP
 				WHERE id = ${canonicalOpportunityId}
@@ -136,8 +164,10 @@ export class SignalQualificationService {
 					${canonicalOpportunityId}, ${signal.businessUnitId}, ${company.canonicalId},
 					NULL, ${name}, ${stage}, ${amount}, ${JSON.stringify({
 						source_signal_id: signal.id,
-						signal_score: scored.score,
-						classification: scored.classification,
+						signal_score: score,
+						classification,
+						workflow: isOpportunityOps ? "opportunity-ops" : undefined,
+						recommendation: approvedReview?.recommendation ?? undefined,
 					})}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 				)
 			`;
@@ -147,9 +177,15 @@ export class SignalQualificationService {
 		let dealId = existing?.applicationId ?? null;
 		let createdDeal = false;
 		if (input.createDeal) {
-			if (scored.score < 85) {
+			if (
+				isOpportunityOps
+					? approvedReview?.recommendation !== "pursue"
+					: score < 85
+			) {
 				throw new BadRequestException(
-					`Signal score ${scored.score} is below the visible deal threshold of 85.`,
+					isOpportunityOps
+						? "A visible deal requires an approved Opportunity Ops pursue recommendation."
+						: `Signal score ${score} is below the visible deal threshold of 85.`,
 				);
 			}
 			if (!company.applicationId) {
@@ -188,7 +224,8 @@ export class SignalQualificationService {
 			VALUES (
 				${randomUUID()}, ${signal.sourceSystem}, ${signal.sourceType}, ${signal.sourceId},
 				'opportunity', ${canonicalOpportunityId}, 'comp-ai-crm', ${dealId},
-				'signal-score', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+				${isOpportunityOps ? "human-approved-opportunity-review" : "signal-score"},
+				'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 			)
 			ON CONFLICT ("sourceSystem", "sourceType", "sourceId", "canonicalType") DO UPDATE SET
 				"canonicalId" = EXCLUDED."canonicalId",
@@ -198,10 +235,18 @@ export class SignalQualificationService {
 				"updatedAt" = CURRENT_TIMESTAMP
 		`;
 
+		if (isOpportunityOps && approvedReview) {
+			await this.opportunityOps.recordPromotion({
+				sourceRecordId: signal.id,
+				canonicalOpportunityId,
+				approvedReview,
+			});
+		}
+
 		return {
 			sourceRecordId: signal.id,
-			score: scored.score,
-			classification: scored.classification,
+			score,
+			classification,
 			canonicalOpportunityId,
 			dealId,
 			createdCanonicalOpportunity,
