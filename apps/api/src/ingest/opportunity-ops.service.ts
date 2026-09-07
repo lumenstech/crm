@@ -23,6 +23,11 @@ type LatestReviewRow = {
 	score: number | null;
 	recommendation: OpportunityRecommendation | null;
 	state: string;
+	reviewerUserId: string | null;
+};
+
+type ApprovedReviewRow = LatestReviewRow & {
+	state: "approved";
 };
 
 type QueueRow = {
@@ -53,12 +58,9 @@ export class OpportunityOpsService {
 		input: EvaluateOpportunityInput,
 	): Promise<EvaluateOpportunityOutput> {
 		const source = await this.loadSource(input.sourceRecordId);
-		const rawScore = this.score(input.components);
+		const score = this.score(input.components);
 		const hardBlocked = input.hardBlockers.length > 0;
-		const recommendation = hardBlocked
-			? "pass"
-			: this.recommendation(rawScore);
-		const score = hardBlocked ? Math.min(rawScore, 49) : rawScore;
+		const recommendation = hardBlocked ? "pass" : this.recommendation(score);
 		const reviewEventId = randomUUID();
 		const scoreBreakdown = {
 			...input.components,
@@ -188,9 +190,9 @@ export class OpportunityOpsService {
 		};
 	}
 
-	async assertApproved(sourceRecordId: string) {
-		const [row] = await this.db.$queryRaw<Array<{ state: string }>>`
-			SELECT state
+	async assertApproved(sourceRecordId: string): Promise<ApprovedReviewRow> {
+		const [row] = await this.db.$queryRaw<LatestReviewRow[]>`
+			SELECT score, recommendation, state, "reviewerUserId" AS "reviewerUserId"
 			FROM opportunity_review_event
 			WHERE "sourceRecordId" = ${sourceRecordId} AND "eventType" = 'decision'
 			ORDER BY "createdAt" DESC, id DESC
@@ -201,23 +203,24 @@ export class OpportunityOpsService {
 				"Opportunity promotion requires the latest human review decision to be approved.",
 			);
 		}
+		return { ...row, state: "approved" };
 	}
 
 	async recordPromotion(input: {
 		sourceRecordId: string;
 		canonicalOpportunityId: string;
-		reviewerUserId?: string | null;
+		approvedReview: ApprovedReviewRow;
 	}) {
 		const source = await this.loadSource(input.sourceRecordId);
-		const latest = await this.latestReview(source.id);
 		const reviewEventId = randomUUID();
 		const decidedAt = new Date();
 		const immutableHash = this.hash({
 			reviewEventId,
 			sourceRecordId: source.id,
 			canonicalOpportunityId: input.canonicalOpportunityId,
-			score: latest?.score ?? null,
-			recommendation: latest?.recommendation ?? null,
+			score: input.approvedReview.score,
+			recommendation: input.approvedReview.recommendation,
+			reviewerUserId: input.approvedReview.reviewerUserId,
 			decidedAt: decidedAt.toISOString(),
 		});
 		await this.db.$queryRaw`
@@ -227,9 +230,9 @@ export class OpportunityOpsService {
 				"reviewerUserId", "decidedAt", "immutableHash", "createdAt"
 			) VALUES (
 				${reviewEventId}, ${input.canonicalOpportunityId}, ${source.id}, ${source.businessUnitId},
-				'promotion', 'promoted', ${latest?.recommendation ?? null}, ${latest?.score ?? null},
+				'promotion', 'promoted', ${input.approvedReview.recommendation}, ${input.approvedReview.score},
 				NULL, 'Approved opportunity promoted into canonical CRM opportunity.',
-				${input.reviewerUserId ?? null}, ${decidedAt}, ${immutableHash}, CURRENT_TIMESTAMP
+				${input.approvedReview.reviewerUserId}, ${decidedAt}, ${immutableHash}, CURRENT_TIMESTAMP
 			)
 		`;
 	}
@@ -263,7 +266,7 @@ export class OpportunityOpsService {
 
 	private async latestReview(sourceRecordId: string) {
 		const [row] = await this.db.$queryRaw<LatestReviewRow[]>`
-			SELECT score, recommendation, state
+			SELECT score, recommendation, state, "reviewerUserId" AS "reviewerUserId"
 			FROM opportunity_review_event
 			WHERE "sourceRecordId" = ${sourceRecordId}
 			ORDER BY "createdAt" DESC, id DESC
