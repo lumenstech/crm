@@ -8,14 +8,14 @@ export const guyanaOpportunitySources = {
 	},
 	npta: {
 		name: "National Procurement and Tender Administration",
-		url: "https://www.npta.gov.gy/",
+		url: "https://www.npta.gov.gy/procurement-opportunities/",
 		collectorUrls: ["https://www.npta.gov.gy/procurement-opportunities/"],
 		allowedHosts: ["npta.gov.gy", "www.npta.gov.gy"],
 		trust: "official-government",
 	},
 	"local-content-register": {
 		name: "Guyana Local Content Register",
-		url: "https://lcregister.petroleum.gov.gy/",
+		url: "https://lcregister.petroleum.gov.gy/opportunities/",
 		collectorUrls: ["https://lcregister.petroleum.gov.gy/opportunities/"],
 		allowedHosts: ["lcregister.petroleum.gov.gy"],
 		trust: "official-government",
@@ -29,7 +29,7 @@ export const guyanaOpportunitySources = {
 	},
 	cdb: {
 		name: "Caribbean Development Bank",
-		url: "https://www.caribank.org/work-with-us/procurement",
+		url: "https://www.caribank.org/work-with-us/procurement/procurement-notices",
 		collectorUrls: ["https://www.caribank.org/work-with-us/procurement/procurement-notices"],
 		allowedHosts: ["caribank.org", "www.caribank.org"],
 		trust: "multilateral-development-bank",
