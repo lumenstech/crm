@@ -32,6 +32,11 @@ import {
 	opportunityReviewQueueOutput,
 } from "./opportunity-ops.contracts";
 import { OpportunityOpsService } from "./opportunity-ops.service";
+import {
+	scanOpportunitySourceInput,
+	scanOpportunitySourceOutput,
+} from "./opportunity-source.contracts";
+import { OpportunitySourceService } from "./opportunity-source.service";
 import { SignalQualificationService } from "./signal-qualification.service";
 
 @Router({ alias: "ingest" })
@@ -43,6 +48,8 @@ export class IngestRouter {
 		private readonly qualification: SignalQualificationService,
 		@Inject(OpportunityOpsService)
 		private readonly opportunityOps: OpportunityOpsService,
+		@Inject(OpportunitySourceService)
+		private readonly opportunitySources: OpportunitySourceService,
 		@Inject(GuyanaOpportunityService)
 		private readonly guyanaOpportunity: GuyanaOpportunityService,
 	) {}
@@ -68,6 +75,20 @@ export class IngestRouter {
 		@Input() input: z.infer<typeof ingestGuyanaOpportunityInput>,
 	) {
 		return this.guyanaOpportunity.ingestOpportunity(input);
+	}
+
+	@Mutation({
+		input: scanOpportunitySourceInput,
+		output: scanOpportunitySourceOutput,
+		meta: restMeta("POST", "/ingest/opportunities/scan-source", [
+			"Opportunity Ops",
+			"Sources",
+		]),
+	})
+	async scanOpportunitySource(
+		@Input() input: z.infer<typeof scanOpportunitySourceInput>,
+	) {
+		return this.opportunitySources.scan(input);
 	}
 
 	@Query({

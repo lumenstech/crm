@@ -5,6 +5,7 @@ import { GuyanaOpportunityService } from "./guyana-opportunity.service";
 import { IngestRouter } from "./ingest.router";
 import { IngestService } from "./ingest.service";
 import { OpportunityOpsService } from "./opportunity-ops.service";
+import { OpportunitySourceService } from "./opportunity-source.service";
 import { SignalQualificationService } from "./signal-qualification.service";
 
 @Module({
@@ -13,6 +14,7 @@ import { SignalQualificationService } from "./signal-qualification.service";
 		IngestService,
 		SignalQualificationService,
 		OpportunityOpsService,
+		OpportunitySourceService,
 		GuyanaOpportunityService,
 		IngestRouter,
 	],
@@ -20,6 +22,7 @@ import { SignalQualificationService } from "./signal-qualification.service";
 		IngestService,
 		SignalQualificationService,
 		OpportunityOpsService,
+		OpportunitySourceService,
 		GuyanaOpportunityService,
 	],
 })
