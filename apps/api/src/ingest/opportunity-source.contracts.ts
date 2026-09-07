@@ -3,6 +3,8 @@ import { opportunityRecommendation } from "./opportunity-ops.contracts";
 
 export const opportunitySourceProvider = z.enum([
 	"nyc-current-solicitations",
+	"nassau-formal-solicitations",
+	"njstart-open-bids",
 	"sam-opportunities",
 ]);
 
@@ -23,7 +25,10 @@ export const scanOpportunitySourceInput = z.object({
 	dueWithinDays: z.number().int().min(1).max(365).nullable().optional(),
 	state: z.string().trim().length(2).toUpperCase().nullable().optional(),
 	naics: z.string().trim().regex(/^\d{2,6}$/).nullable().optional(),
-	procurementTypes: z.array(samProcurementType).max(5).default(["p", "r", "s", "o", "k"]),
+	procurementTypes: z
+		.array(samProcurementType)
+		.max(5)
+		.default(["p", "r", "s", "o", "k"]),
 	limit: z.number().int().min(1).max(200).default(50),
 });
 
@@ -56,6 +61,12 @@ export const scanOpportunitySourceOutput = z.object({
 	rows: z.array(opportunitySourceScanRow),
 });
 
-export type OpportunitySourceProvider = z.infer<typeof opportunitySourceProvider>;
-export type ScanOpportunitySourceInput = z.infer<typeof scanOpportunitySourceInput>;
-export type ScanOpportunitySourceOutput = z.infer<typeof scanOpportunitySourceOutput>;
+export type OpportunitySourceProvider = z.infer<
+	typeof opportunitySourceProvider
+>;
+export type ScanOpportunitySourceInput = z.infer<
+	typeof scanOpportunitySourceInput
+>;
+export type ScanOpportunitySourceOutput = z.infer<
+	typeof scanOpportunitySourceOutput
+>;
