@@ -4,6 +4,11 @@ import type { z } from "zod";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
 import {
+	ingestGuyanaOpportunityInput,
+	ingestGuyanaOpportunityOutput,
+} from "./guyana-opportunity.contracts";
+import { GuyanaOpportunityService } from "./guyana-opportunity.service";
+import {
 	ingestSignalInput,
 	ingestSignalOutput,
 	promoteSignalInput,
@@ -38,6 +43,8 @@ export class IngestRouter {
 		private readonly qualification: SignalQualificationService,
 		@Inject(OpportunityOpsService)
 		private readonly opportunityOps: OpportunityOpsService,
+		@Inject(GuyanaOpportunityService)
+		private readonly guyanaOpportunity: GuyanaOpportunityService,
 	) {}
 
 	@Mutation({
@@ -47,6 +54,20 @@ export class IngestRouter {
 	})
 	async signal(@Input() input: z.infer<typeof ingestSignalInput>) {
 		return this.ingest.signal(input);
+	}
+
+	@Mutation({
+		input: ingestGuyanaOpportunityInput,
+		output: ingestGuyanaOpportunityOutput,
+		meta: restMeta("POST", "/ingest/guyana/opportunities", [
+			"Opportunity Ops",
+			"Guyana",
+		]),
+	})
+	async ingestGuyanaOpportunity(
+		@Input() input: z.infer<typeof ingestGuyanaOpportunityInput>,
+	) {
+		return this.guyanaOpportunity.ingestOpportunity(input);
 	}
 
 	@Query({
