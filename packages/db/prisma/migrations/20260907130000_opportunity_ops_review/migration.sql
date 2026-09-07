@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS opportunity_review_event (
   "immutableHash" text NOT NULL,
   "createdAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT opportunity_review_event_opportunity_fkey FOREIGN KEY ("opportunityId") REFERENCES canonical_opportunity(id) ON UPDATE CASCADE ON DELETE CASCADE,
-  CONSTRAINT opportunity_review_event_source_record_fkey FOREIGN KEY ("sourceRecordId") REFERENCES source_record(id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT opportunity_review_event_source_record_fkey FOREIGN KEY ("sourceRecordId") REFERENCES source_record(id) ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT opportunity_review_event_business_unit_fkey FOREIGN KEY ("businessUnitId") REFERENCES business_unit(id) ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT opportunity_review_event_reviewer_fkey FOREIGN KEY ("reviewerUserId") REFERENCES "user"(id) ON UPDATE CASCADE ON DELETE SET NULL,
   CONSTRAINT opportunity_review_event_type_check CHECK ("eventType" IN ('evaluation','decision','promotion')),
@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS opportunity_review_event (
 ALTER TABLE opportunity_review_event ALTER COLUMN "opportunityId" DROP NOT NULL;
 ALTER TABLE opportunity_review_event ALTER COLUMN "sourceRecordId" SET NOT NULL;
 
+ALTER TABLE opportunity_review_event DROP CONSTRAINT IF EXISTS opportunity_review_event_source_record_fkey;
+ALTER TABLE opportunity_review_event ADD CONSTRAINT opportunity_review_event_source_record_fkey FOREIGN KEY ("sourceRecordId") REFERENCES source_record(id) ON UPDATE CASCADE ON DELETE RESTRICT;
 ALTER TABLE opportunity_review_event DROP CONSTRAINT IF EXISTS opportunity_review_event_recommendation_check;
 ALTER TABLE opportunity_review_event ADD CONSTRAINT opportunity_review_event_recommendation_check CHECK (recommendation IS NULL OR recommendation IN ('pursue','qualify','watch','pass'));
 ALTER TABLE opportunity_review_event DROP CONSTRAINT IF EXISTS opportunity_review_event_promotion_link_check;
