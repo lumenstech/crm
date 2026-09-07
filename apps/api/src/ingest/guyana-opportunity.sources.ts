@@ -46,9 +46,8 @@ export function isApprovedGuyanaOpportunitySourceUrl(
 	try {
 		const parsed = new URL(sourceUrl);
 		if (parsed.protocol !== "https:") return false;
-		return guyanaOpportunitySources[source].allowedHosts.includes(
-			parsed.hostname.toLowerCase() as never,
-		);
+		const allowedHosts: readonly string[] = guyanaOpportunitySources[source].allowedHosts;
+		return allowedHosts.includes(parsed.hostname.toLowerCase());
 	} catch {
 		return false;
 	}
