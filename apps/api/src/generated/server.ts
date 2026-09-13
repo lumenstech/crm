@@ -27,6 +27,9 @@ import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
 import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
 import { ingestSignalInput, ingestSignalOutput, signalInboxInput, signalInboxOutput, signalSourceRecordInput, signalCompanyCandidatesOutput, resolveSignalCompanyInput, resolveSignalCompanyOutput, qualifySignalInput, qualifySignalOutput, promoteSignalInput, promoteSignalOutput } from "../ingest/ingest.contracts";
+import { ingestGuyanaOpportunityInput, ingestGuyanaOpportunityOutput } from "../ingest/guyana-opportunity.contracts";
+import { evaluateOpportunityInput, evaluateOpportunityOutput, decideOpportunityInput, decideOpportunityOutput, opportunityReviewQueueInput, opportunityReviewQueueOutput } from "../ingest/opportunity-ops.contracts";
+import { projectExperienceListInput, projectExperienceListOutput, projectExperienceSummaryOutput, opportunityProjectMatchInput, opportunityProjectMatchOutput, refreshOpportunityProjectMatchOutput } from "../project-experience/project-experience.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
 import { slackStatusOutput, slackMatchesOutput, slackChannelsInput, slackChannelsOutput, slackJoinChannelInput, slackJoinChannelOutput, slackRefreshPeopleOutput, slackCreateChannelInput, slackCreateChannelOutput, slackDisconnectOutput } from "../slack/slack.contracts";
@@ -564,6 +567,10 @@ const appRouter = t.router({
       .input(ingestSignalInput)
       .output(ingestSignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    ingestGuyanaOpportunity: publicProcedure
+      .input(ingestGuyanaOpportunityInput)
+      .output(ingestGuyanaOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     inbox: publicProcedure
       .input(signalInboxInput)
       .output(signalInboxOutput)
@@ -580,6 +587,18 @@ const appRouter = t.router({
       .input(qualifySignalInput)
       .output(qualifySignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    evaluateOpportunity: publicProcedure
+      .input(evaluateOpportunityInput)
+      .output(evaluateOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    decideOpportunity: publicProcedure
+      .input(decideOpportunityInput)
+      .output(decideOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    opportunityReviewQueue: publicProcedure
+      .input(opportunityReviewQueueInput)
+      .output(opportunityReviewQueueOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     promote: publicProcedure
       .input(promoteSignalInput)
       .output(promoteSignalOutput)
@@ -601,6 +620,23 @@ const appRouter = t.router({
     setAutoCreate: publicProcedure
       .input(setOutlookAutoCreateInput)
       .output(microsoftConnectionStatusOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
+  projectExperience: t.router({
+    list: publicProcedure
+      .input(projectExperienceListInput)
+      .output(projectExperienceListOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    summary: publicProcedure
+      .output(projectExperienceSummaryOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    matches: publicProcedure
+      .input(opportunityProjectMatchInput)
+      .output(opportunityProjectMatchOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    refreshMatches: publicProcedure
+      .input(opportunityProjectMatchInput)
+      .output(refreshOpportunityProjectMatchOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
   savedViews: t.router({

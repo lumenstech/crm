@@ -23,14 +23,18 @@ export const guyanaOpportunitySources = {
 	idb: {
 		name: "Inter-American Development Bank",
 		url: "https://www.iadb.org/en/how-we-can-work-together/procurement",
-		collectorUrls: ["https://www.iadb.org/en/how-we-can-work-together/procurement"],
+		collectorUrls: [
+			"https://www.iadb.org/en/how-we-can-work-together/procurement",
+		],
 		allowedHosts: ["iadb.org", "www.iadb.org"],
 		trust: "multilateral-development-bank",
 	},
 	cdb: {
 		name: "Caribbean Development Bank",
 		url: "https://www.caribank.org/work-with-us/procurement/procurement-notices",
-		collectorUrls: ["https://www.caribank.org/work-with-us/procurement/procurement-notices"],
+		collectorUrls: [
+			"https://www.caribank.org/work-with-us/procurement/procurement-notices",
+		],
 		allowedHosts: ["caribank.org", "www.caribank.org"],
 		trust: "multilateral-development-bank",
 	},
@@ -52,7 +56,8 @@ export function isApprovedGuyanaOpportunitySourceUrl(
 	try {
 		const parsed = new URL(sourceUrl);
 		if (parsed.protocol !== "https:") return false;
-		const allowedHosts: readonly string[] = guyanaOpportunitySources[source].allowedHosts;
+		const allowedHosts: readonly string[] =
+			guyanaOpportunitySources[source].allowedHosts;
 		return allowedHosts.includes(parsed.hostname.toLowerCase());
 	} catch {
 		return false;

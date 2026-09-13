@@ -24,25 +24,28 @@ export const opportunityScoreComponents = z.object({
 	strategicValue: z.number().min(0).max(10),
 });
 
+export const opportunityHardBlocker = z.enum([
+	"expired_deadline",
+	"eligibility_mismatch",
+	"geography_ineligible",
+	"mandatory_requirement_gap",
+	"deadline_not_feasible",
+	"registration_not_feasible",
+	"unacceptable_mandatory_terms",
+	"low_source_trust",
+]);
+
+export const opportunityScoreBreakdown = opportunityScoreComponents.extend({
+	evidence: z.record(z.string(), z.string().max(4000)),
+	hardBlockers: z.array(opportunityHardBlocker),
+});
+
 export const evaluateOpportunityInput = z.object({
 	sourceRecordId: z.string().trim().min(1),
 	components: opportunityScoreComponents,
 	evidence: z.record(z.string(), z.string().max(4000)).default({}),
 	rationale: z.string().trim().max(8000).nullable().optional(),
-	hardBlockers: z
-		.array(
-			z.enum([
-				"expired_deadline",
-				"eligibility_mismatch",
-				"geography_ineligible",
-				"mandatory_requirement_gap",
-				"deadline_not_feasible",
-				"registration_not_feasible",
-				"unacceptable_mandatory_terms",
-				"low_source_trust",
-			]),
-		)
-		.default([]),
+	hardBlockers: z.array(opportunityHardBlocker).default([]),
 });
 
 export const evaluateOpportunityOutput = z.object({
@@ -110,8 +113,11 @@ export type OpportunityRecommendation = z.infer<
 export type OpportunityScoreComponents = z.infer<
 	typeof opportunityScoreComponents
 >;
+export type OpportunityHardBlocker = z.infer<typeof opportunityHardBlocker>;
 export type EvaluateOpportunityInput = z.infer<typeof evaluateOpportunityInput>;
-export type EvaluateOpportunityOutput = z.infer<typeof evaluateOpportunityOutput>;
+export type EvaluateOpportunityOutput = z.infer<
+	typeof evaluateOpportunityOutput
+>;
 export type DecideOpportunityInput = z.infer<typeof decideOpportunityInput>;
 export type DecideOpportunityOutput = z.infer<typeof decideOpportunityOutput>;
 export type OpportunityReviewQueueInput = z.infer<

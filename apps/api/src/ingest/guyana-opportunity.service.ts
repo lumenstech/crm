@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { Db } from "@crm/db";
+import type { Db, Prisma } from "@crm/db";
+import { parse } from "@crm/validation";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import type {
@@ -12,6 +13,10 @@ import {
 } from "./guyana-opportunity.sources";
 import { IngestService } from "./ingest.service";
 import type { OpportunityRecommendation } from "./opportunity-ops.contracts";
+import {
+	type OpportunityHardBlocker,
+	opportunityScoreBreakdown,
+} from "./opportunity-ops.contracts";
 import { OpportunityOpsService } from "./opportunity-ops.service";
 
 type ExistingOpportunityRow = {
@@ -22,20 +27,8 @@ type ExistingOpportunityRow = {
 type EvaluationRow = {
 	score: number;
 	recommendation: OpportunityRecommendation;
-	scoreBreakdown: { hardBlockers?: unknown } | null;
+	scoreBreakdown: Prisma.JsonValue | null;
 };
-
-function stableJson(value: unknown): string {
-	if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-	if (value && typeof value === "object") {
-		const record = value as Record<string, unknown>;
-		return `{${Object.keys(record)
-			.sort()
-			.map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
-			.join(",")}}`;
-	}
-	return JSON.stringify(value);
-}
 
 @Injectable()
 export class GuyanaOpportunityService {
@@ -80,14 +73,20 @@ export class GuyanaOpportunityService {
 				LIMIT 1
 			`;
 			if (evaluation) {
-				const blockers = evaluation.scoreBreakdown?.hardBlockers;
+				const breakdown = evaluation.scoreBreakdown
+					? parse(
+							opportunityScoreBreakdown,
+							evaluation.scoreBreakdown,
+							"opportunity score breakdown",
+						)
+					: null;
 				return {
 					sourceRecordId: existing.id,
 					deduplicated: true,
 					score: evaluation.score,
 					recommendation: evaluation.recommendation,
 					reviewState: "pending",
-					hardBlocked: Array.isArray(blockers) && blockers.length > 0,
+					hardBlocked: (breakdown?.hardBlockers.length ?? 0) > 0,
 					electricalLicenseApplied,
 					capabilityFit,
 				};
@@ -147,6 +146,21 @@ export class GuyanaOpportunityService {
 			},
 		});
 
+		const baseEvidence = {
+			...input.evidence,
+			source: input.sourceUrl,
+			buyer: input.buyer,
+			electrical_requirement: input.electrical.requirement,
+			electrical_scope_match: input.electrical.scopeMatch,
+			electrical_license_status: input.electrical.licenseStatus,
+		};
+		const evidence = input.electrical.licenseEvidenceRef
+			? {
+					...baseEvidence,
+					electrical_license_evidence: input.electrical.licenseEvidenceRef,
+				}
+			: baseEvidence;
+
 		const evaluation = await this.opportunityOps.evaluate({
 			sourceRecordId: accepted.sourceRecordId,
 			components: {
@@ -157,17 +171,7 @@ export class GuyanaOpportunityService {
 				buyerAccess: input.components.buyerAccess,
 				strategicValue: input.components.strategicValue,
 			},
-			evidence: {
-				...input.evidence,
-				source: input.sourceUrl,
-				buyer: input.buyer,
-				electrical_requirement: input.electrical.requirement,
-				electrical_scope_match: input.electrical.scopeMatch,
-				electrical_license_status: input.electrical.licenseStatus,
-				...(input.electrical.licenseEvidenceRef
-					? { electrical_license_evidence: input.electrical.licenseEvidenceRef }
-					: {}),
-			},
+			evidence,
 			rationale: input.rationale ?? null,
 			hardBlockers,
 		});
@@ -185,27 +189,26 @@ export class GuyanaOpportunityService {
 	}
 
 	private contentHash(input: IngestGuyanaOpportunityInput) {
-		return createHash("sha256")
-			.update(
-				stableJson({
-					source: input.source,
-					sourceId: input.sourceId,
-					sourceUrl: input.sourceUrl,
-					buyer: input.buyer,
-					title: input.title,
-					description: input.description ?? null,
-					deadline: input.deadline ?? null,
-					estimatedValue: input.estimatedValue ?? null,
-					currency: input.currency ?? null,
-					opportunityType: input.opportunityType ?? null,
-					categories: input.categories,
-					electrical: input.electrical,
-					components: input.components,
-					evidence: input.evidence,
-					rationale: input.rationale ?? null,
-				}),
-			)
-			.digest("hex");
+		const canonical = {
+			source: input.source,
+			sourceId: input.sourceId,
+			sourceUrl: input.sourceUrl,
+			buyer: input.buyer,
+			title: input.title,
+			description: input.description ?? null,
+			deadline: input.deadline ?? null,
+			estimatedValue: input.estimatedValue ?? null,
+			currency: input.currency ?? null,
+			opportunityType: input.opportunityType ?? null,
+			categories: [...input.categories].sort(),
+			electrical: input.electrical,
+			components: input.components,
+			evidence: Object.entries(input.evidence).sort(([left], [right]) =>
+				left.localeCompare(right),
+			),
+			rationale: input.rationale ?? null,
+		};
+		return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 	}
 
 	private capabilityFit(input: IngestGuyanaOpportunityInput) {
@@ -231,16 +234,7 @@ export class GuyanaOpportunityService {
 	}
 
 	private hardBlockers(input: IngestGuyanaOpportunityInput) {
-		const blockers: Array<
-			| "expired_deadline"
-			| "eligibility_mismatch"
-			| "geography_ineligible"
-			| "mandatory_requirement_gap"
-			| "deadline_not_feasible"
-			| "registration_not_feasible"
-			| "unacceptable_mandatory_terms"
-			| "low_source_trust"
-		> = [];
+		const blockers: OpportunityHardBlocker[] = [];
 
 		if (input.deadline && new Date(input.deadline).getTime() < Date.now()) {
 			blockers.push("expired_deadline");

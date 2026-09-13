@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Db } from "@crm/db";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Db, Prisma } from "@crm/db";
+import {
+	BadRequestException,
+	Injectable,
+	NotFoundException,
+} from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import type {
 	DecideOpportunityInput,
@@ -16,7 +20,6 @@ import type {
 type SourceRow = {
 	id: string;
 	businessUnitId: string;
-	payload: Record<string, unknown> | null;
 };
 
 type LatestReviewRow = {
@@ -121,7 +124,9 @@ export class OpportunityOpsService {
 			SELECT id FROM "user" WHERE id = ${input.reviewerUserId} LIMIT 1
 		`;
 		if (!userExists[0]) {
-			throw new BadRequestException("reviewerUserId does not identify a CRM user.");
+			throw new BadRequestException(
+				"reviewerUserId does not identify a CRM user.",
+			);
 		}
 		const latest = await this.latestReview(source.id);
 		if (!latest) {
@@ -198,7 +203,7 @@ export class OpportunityOpsService {
 			ORDER BY "createdAt" DESC, id DESC
 			LIMIT 1
 		`;
-		if (!row || row.state !== "approved") {
+		if (row?.state !== "approved") {
 			throw new BadRequestException(
 				"Opportunity promotion requires the latest human review decision to be approved.",
 			);
@@ -257,7 +262,7 @@ export class OpportunityOpsService {
 
 	private async loadSource(id: string): Promise<SourceRow> {
 		const [row] = await this.db.$queryRaw<SourceRow[]>`
-			SELECT id, "businessUnitId" AS "businessUnitId", payload
+			SELECT id, "businessUnitId" AS "businessUnitId"
 			FROM source_record WHERE id = ${id} LIMIT 1
 		`;
 		if (!row) throw new NotFoundException(`No source signal with id ${id}.`);
@@ -275,7 +280,7 @@ export class OpportunityOpsService {
 		return row ?? null;
 	}
 
-	private hash(value: unknown) {
+	private hash(value: Prisma.InputJsonObject) {
 		return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 	}
 }
