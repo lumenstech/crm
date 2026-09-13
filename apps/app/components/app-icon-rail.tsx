@@ -3,6 +3,7 @@
 import Building from "@carbon/icons-react/es/Building";
 import Close from "@carbon/icons-react/es/Close";
 import Dashboard from "@carbon/icons-react/es/Dashboard";
+import Document from "@carbon/icons-react/es/Document";
 import Partnership from "@carbon/icons-react/es/Partnership";
 import Search from "@carbon/icons-react/es/Search";
 import Settings from "@carbon/icons-react/es/Settings";
@@ -54,6 +55,12 @@ const ITEMS: RailItem[] = [
 		title: "Intelligence",
 		href: "/intelligence",
 		icon: Search,
+		match: "prefix",
+	},
+	{
+		title: "Experience",
+		href: "/experience",
+		icon: Document,
 		match: "prefix",
 	},
 	{ title: "Companies", href: "/companies", icon: Building, match: "prefix" },
