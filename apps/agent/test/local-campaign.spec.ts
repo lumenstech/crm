@@ -115,6 +115,45 @@ describe("local campaign runner", () => {
 		expect(result.cached).toBe(1);
 	});
 
+	it("continues after an invalid extraction and reports the failure", async () => {
+		const secondUrl = "https://example.org/two";
+		let calls = 0;
+		const result = await runLocalCampaign(
+			campaign,
+			["https://example.com/one", secondUrl],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: url,
+						text: "A public exhibitor page.",
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async () => ({
+						text:
+							calls++ === 0
+								? '{"invalid":true}'
+								: leadJson.replace("https://example.com/one", secondUrl),
+						latencyMs: 4,
+					}),
+				},
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.processed).toBe(2);
+		expect(result.extracted).toBe(1);
+		expect(result.extraction_failures).toBe(1);
+		expect(result.staged).toBe(1);
+		expect(result.failures[0]?.stage).toBe("extraction");
+	});
+
 	it("caches fetched page content by URL", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "local-campaign-cache-"));
 		try {
