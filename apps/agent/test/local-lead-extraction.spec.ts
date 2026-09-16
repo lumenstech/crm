@@ -114,12 +114,39 @@ describe("local lead extraction", () => {
 		expect(source.text).toBe("public page");
 	});
 
+	it("times out stalled source fetches", async () => {
+		await expect(
+			fetchLocalLeadSource(
+				"https://public.example",
+				async (_input, init) =>
+					new Promise<Response>((_resolve, reject) => {
+						init?.signal?.addEventListener("abort", () => {
+							reject(new Error("aborted"));
+						});
+					}),
+				{
+					lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+					timeoutMs: 1,
+				},
+			),
+		).rejects.toThrow("timed out");
+	});
+
 	it("rejects DNS lookup failure", async () => {
 		await expect(
 			fetchLocalLeadSource("https://public.example", fetch, {
 				lookup: async () => {
 					throw new Error("not found");
 				},
+			}),
+		).rejects.toThrow("DNS lookup failed");
+	});
+
+	it("rejects stalled DNS lookup", async () => {
+		await expect(
+			fetchLocalLeadSource("https://public.example", fetch, {
+				dnsTimeoutMs: 1,
+				lookup: async () => new Promise(() => {}),
 			}),
 		).rejects.toThrow("DNS lookup failed");
 	});

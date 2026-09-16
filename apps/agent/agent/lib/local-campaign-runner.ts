@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { type CachedPage, fetchCachedPage } from "./local-campaign-cache";
 import type { LocalCampaignLeadRecord } from "./local-campaign-extraction";
 import { extractLocalCampaignLead } from "./local-campaign-extraction";
@@ -10,6 +11,13 @@ import {
 } from "./local-campaign-schema";
 import { scoreLocalCampaignLead } from "./local-campaign-scoring";
 import {
+	DEFAULT_LOCAL_CAMPAIGN_SOURCE_UNIT_CAPS,
+	extractLocalCampaignSourceUnits,
+	hasUsefulPageEvidence,
+	type LocalCampaignSourceUnit,
+} from "./local-campaign-source-units";
+import {
+	assertLocalCampaignPath,
 	type LocalStagedLead,
 	normalizeDomain,
 	stageCampaignLead,
@@ -41,6 +49,44 @@ export type LocalCampaignRunDependencies = {
 	}>;
 	stager?: typeof stageCampaignLead;
 	stagingPath?: string;
+	seedStatusPath?: string;
+	perSeedTimeoutMs?: number;
+	onProgress?: (event: LocalCampaignProgressEvent) => void;
+};
+
+export type LocalCampaignProgressEvent = {
+	event:
+		| "seed_started"
+		| "fetch_started"
+		| "fetch_completed"
+		| "fetch_failed"
+		| "cache_hit"
+		| "cache_miss"
+		| "source_units_found"
+		| "source_units_skipped"
+		| "ollama_call_started"
+		| "ollama_call_completed"
+		| "ollama_call_failed"
+		| "ollama_call_timed_out"
+		| "staged_lead_written"
+		| "seed_completed"
+		| "seed_failed";
+	url: string;
+	elapsed_ms: number;
+	reason?: string;
+	source_unit_count?: number;
+	ollama_call_count?: number;
+};
+
+export type LocalCampaignSeedStatus = {
+	url: string;
+	status: "completed" | "failed" | "skipped";
+	failure_reason: string | null;
+	elapsed_ms: number;
+	source_unit_count: number;
+	ollama_call_count: number;
+	staged_count: number;
+	created_at: string;
 };
 
 export type LocalCampaignRunResult = {
@@ -48,6 +94,8 @@ export type LocalCampaignRunResult = {
 	processed: number;
 	fetched: number;
 	cached: number;
+	source_units: number;
+	ollama_calls: number;
 	rejected_by_url_safety: number;
 	failed_fetch: number;
 	extracted: number;
@@ -60,6 +108,7 @@ export type LocalCampaignRunResult = {
 		stage: "url_safety" | "fetch" | "extraction" | "staging";
 		reason: string;
 	}>;
+	seed_statuses: LocalCampaignSeedStatus[];
 };
 
 function errorReason(error: unknown): string {
@@ -74,6 +123,61 @@ function isUrlSafetyError(error: unknown): boolean {
 		"DNS lookup failed",
 		"Source URL must use HTTP or HTTPS",
 	].some((marker) => reason.includes(marker));
+}
+
+function elapsedSince(startedAt: number): number {
+	return Math.round(performance.now() - startedAt);
+}
+
+function isTimeoutReason(reason: string): boolean {
+	return reason.toLocaleLowerCase().includes("timed out");
+}
+
+async function writeSeedStatus(
+	status: LocalCampaignSeedStatus,
+	path?: string,
+): Promise<void> {
+	if (!path) return;
+	const safePath = assertLocalCampaignPath(path);
+	await mkdir(dirname(safePath), { recursive: true });
+	await appendFile(safePath, `${JSON.stringify(status)}\n`, "utf8");
+}
+
+async function flushSeedStatus(
+	seedStatuses: LocalCampaignSeedStatus[],
+	status: LocalCampaignSeedStatus,
+	path?: string,
+): Promise<void> {
+	seedStatuses.push(status);
+	await writeSeedStatus(status, path);
+}
+
+function extractionCandidates(
+	units: LocalCampaignSourceUnit[],
+	text: string,
+	url: string,
+	maxOllamaCallsPerSeed: number,
+	maxSourceUnitChars: number,
+): Array<{
+	text: string;
+	sourceUrl: string;
+	sourceUnit: LocalCampaignSourceUnit | null;
+}> {
+	if (units.length > 0) {
+		return units.slice(0, maxOllamaCallsPerSeed).map((unit) => ({
+			text: unit.candidate_text,
+			sourceUrl: unit.parent_source_url,
+			sourceUnit: unit,
+		}));
+	}
+	if (!hasUsefulPageEvidence(text)) return [];
+	return [
+		{
+			text: text.slice(0, maxSourceUnitChars),
+			sourceUrl: url,
+			sourceUnit: null,
+		},
+	];
 }
 
 export async function loadCampaignFile(path: string): Promise<LocalCampaign> {
@@ -122,8 +226,11 @@ export async function runLocalCampaign(
 	const domains = new Map<string, number>();
 	const leads: LocalStagedLead[] = [];
 	const failures: LocalCampaignRunResult["failures"] = [];
+	const seedStatuses: LocalCampaignSeedStatus[] = [];
 	let fetched = 0;
 	let cached = 0;
+	let sourceUnits = 0;
+	let ollamaCalls = 0;
 	let rejectedByUrlSafety = 0;
 	let failedFetch = 0;
 	let extracted = 0;
@@ -131,7 +238,52 @@ export async function runLocalCampaign(
 	let staged = 0;
 	let duplicates = 0;
 	let processed = 0;
+	const maxSourceUnitsPerPage =
+		campaign.max_source_units_per_page ??
+		DEFAULT_LOCAL_CAMPAIGN_SOURCE_UNIT_CAPS.max_source_units_per_page;
+	const maxSourceUnitChars =
+		campaign.max_source_unit_chars ??
+		DEFAULT_LOCAL_CAMPAIGN_SOURCE_UNIT_CAPS.max_source_unit_chars;
+	const maxOllamaCallsPerSeed = campaign.max_ollama_calls_per_seed ?? 5;
+	const maxTotalOllamaCalls = campaign.max_total_ollama_calls ?? 50;
+	const perOllamaCallTimeoutMs = campaign.per_ollama_call_timeout_ms ?? 45_000;
+	const perSeedTimeoutMs = dependencies.perSeedTimeoutMs ?? 90_000;
+	const progress = dependencies.onProgress;
 	for (const url of uniqueSeeds) {
+		const seedStartedAt = performance.now();
+		let seedSourceUnitCount = 0;
+		let seedOllamaCalls = 0;
+		let seedStagedCount = 0;
+		const emit = (
+			event: LocalCampaignProgressEvent["event"],
+			details: Omit<
+				LocalCampaignProgressEvent,
+				"event" | "url" | "elapsed_ms"
+			> = {},
+		) => {
+			progress?.({
+				event,
+				url,
+				elapsed_ms: elapsedSince(seedStartedAt),
+				source_unit_count: seedSourceUnitCount,
+				ollama_call_count: seedOllamaCalls,
+				...details,
+			});
+		};
+		const status = (
+			value: LocalCampaignSeedStatus["status"],
+			failureReason: string | null,
+		): LocalCampaignSeedStatus => ({
+			url,
+			status: value,
+			failure_reason: failureReason,
+			elapsed_ms: elapsedSince(seedStartedAt),
+			source_unit_count: seedSourceUnitCount,
+			ollama_call_count: seedOllamaCalls,
+			staged_count: seedStagedCount,
+			created_at: new Date().toISOString(),
+		});
+		emit("seed_started");
 		if (
 			leads.filter((lead) => lead.status !== "duplicate").length >=
 			campaign.max_companies
@@ -139,66 +291,189 @@ export async function runLocalCampaign(
 			break;
 		const domain = normalizeDomain(new URL(url).hostname);
 		const pageCount = domains.get(domain) ?? 0;
-		if (pageCount >= campaign.max_pages_per_domain) continue;
+		if (pageCount >= campaign.max_pages_per_domain) {
+			const reason = "Domain page cap reached.";
+			emit("seed_failed", { reason });
+			await flushSeedStatus(
+				seedStatuses,
+				status("skipped", reason),
+				dependencies.seedStatusPath,
+			);
+			continue;
+		}
 		domains.set(domain, pageCount + 1);
 		processed += 1;
 		let loaded: Awaited<
 			ReturnType<NonNullable<LocalCampaignRunDependencies["pageLoader"]>>
 		>;
 		try {
+			emit("fetch_started");
 			loaded = await (dependencies.pageLoader ?? fetchCachedPage)(
 				url,
 				dependencies.fetchImpl,
 			);
+			emit("fetch_completed");
 		} catch (error) {
 			const stage = isUrlSafetyError(error) ? "url_safety" : "fetch";
+			const reason = errorReason(error);
 			if (stage === "url_safety") rejectedByUrlSafety += 1;
 			else failedFetch += 1;
-			failures.push({ url, stage, reason: errorReason(error) });
-			continue;
-		}
-		if (loaded.cached) cached += 1;
-		else fetched += 1;
-		let lead: LocalCampaignLeadRecord;
-		try {
-			lead = await extractLocalCampaignLead(
-				loaded.page.text,
-				url,
-				dependencies.client,
+			failures.push({ url, stage, reason });
+			emit("fetch_failed", { reason });
+			emit("seed_failed", { reason });
+			await flushSeedStatus(
+				seedStatuses,
+				status("failed", reason),
+				dependencies.seedStatusPath,
 			);
-			extracted += 1;
-		} catch (error) {
-			extractionFailures += 1;
-			failures.push({ url, stage: "extraction", reason: errorReason(error) });
 			continue;
 		}
-		const scores = scoreLocalCampaignLead(lead, campaign);
-		const missingRequired = campaign.required_fields.filter(
-			(field) => lead[field as keyof typeof lead] === null,
+		if (loaded.cached) {
+			cached += 1;
+			emit("cache_hit");
+		} else {
+			fetched += 1;
+			emit("cache_miss");
+		}
+		const units = extractLocalCampaignSourceUnits(loaded.page.text, url, {
+			max_source_units_per_page: maxSourceUnitsPerPage,
+			max_source_unit_chars: maxSourceUnitChars,
+		});
+		seedSourceUnitCount = units.length;
+		sourceUnits += units.length;
+		emit("source_units_found", { source_unit_count: units.length });
+		const candidates = extractionCandidates(
+			units,
+			loaded.page.text,
+			url,
+			maxOllamaCallsPerSeed,
+			maxSourceUnitChars,
 		);
-		const record: LocalStagedLead = {
-			...lead,
-			...scores,
-			campaign_id: campaign.campaign_id,
-			lead_id: createHash("sha256")
-				.update(`${campaign.campaign_id}:${lead.content_hash}`, "utf8")
-				.digest("hex"),
-			source_domain: domain,
-			status: missingRequired.length > 0 ? "needs_review" : "new",
-		};
-		let result: Awaited<ReturnType<typeof stageCampaignLead>>;
-		try {
-			result = await (dependencies.stager ?? stageCampaignLead)(
-				record,
-				dependencies.stagingPath,
+		if (units.length === 0 && candidates.length === 0) {
+			const reason = "No company-level source unit or useful page evidence.";
+			emit("source_units_skipped", { reason });
+			emit("seed_completed", { reason });
+			await flushSeedStatus(
+				seedStatuses,
+				status("completed", reason),
+				dependencies.seedStatusPath,
 			);
-		} catch (error) {
-			failures.push({ url, stage: "staging", reason: errorReason(error) });
 			continue;
 		}
-		leads.push(result.staged);
-		if (result.duplicate) duplicates += 1;
-		else staged += 1;
+		if (units.length > candidates.length) {
+			emit("source_units_skipped", {
+				reason: "Source unit cap limited model calls.",
+			});
+		}
+		let seedTimedOut = false;
+		for (const candidate of candidates) {
+			if (ollamaCalls >= maxTotalOllamaCalls) break;
+			if (elapsedSince(seedStartedAt) >= perSeedTimeoutMs) {
+				const reason = "Seed timed out.";
+				emit("seed_failed", { reason });
+				await flushSeedStatus(
+					seedStatuses,
+					status("failed", reason),
+					dependencies.seedStatusPath,
+				);
+				seedTimedOut = true;
+				break;
+			}
+			let lead: LocalCampaignLeadRecord;
+			try {
+				ollamaCalls += 1;
+				seedOllamaCalls += 1;
+				emit("ollama_call_started");
+				lead = await extractLocalCampaignLead(
+					candidate.text,
+					candidate.sourceUrl,
+					dependencies.client,
+					{ timeoutMs: perOllamaCallTimeoutMs },
+				);
+				emit("ollama_call_completed");
+				extracted += 1;
+			} catch (error) {
+				const reason = errorReason(error);
+				extractionFailures += 1;
+				emit(
+					isTimeoutReason(reason)
+						? "ollama_call_timed_out"
+						: "ollama_call_failed",
+					{
+						reason,
+					},
+				);
+				failures.push({
+					url: candidate.sourceUrl,
+					stage: "extraction",
+					reason,
+				});
+				continue;
+			}
+			const scores = scoreLocalCampaignLead(lead, campaign, {
+				sourceUnit: candidate.sourceUnit !== null,
+				extractionMethod: candidate.sourceUnit?.extraction_method ?? null,
+			});
+			const missingRequired = campaign.required_fields.filter(
+				(field) => lead[field as keyof typeof lead] === null,
+			);
+			const record: LocalStagedLead = {
+				...lead,
+				...scores,
+				campaign_id: campaign.campaign_id,
+				lead_id: createHash("sha256")
+					.update(`${campaign.campaign_id}:${lead.content_hash}`, "utf8")
+					.digest("hex"),
+				source_domain: domain,
+				source_unit_id: candidate.sourceUnit?.unit_id,
+				parent_source_url: candidate.sourceUnit?.parent_source_url,
+				extraction_method: candidate.sourceUnit?.extraction_method,
+				status: missingRequired.length > 0 ? "needs_review" : "new",
+			};
+			let result: Awaited<ReturnType<typeof stageCampaignLead>>;
+			try {
+				result = await (dependencies.stager ?? stageCampaignLead)(
+					record,
+					dependencies.stagingPath,
+				);
+			} catch (error) {
+				const reason = errorReason(error);
+				failures.push({
+					url: candidate.sourceUrl,
+					stage: "staging",
+					reason,
+				});
+				continue;
+			}
+			seedStagedCount += 1;
+			emit("staged_lead_written");
+			leads.push(result.staged);
+			if (result.duplicate) duplicates += 1;
+			else staged += 1;
+			if (
+				leads.filter((lead) => lead.status !== "duplicate").length >=
+				campaign.max_companies
+			) {
+				break;
+			}
+		}
+		if (!seedTimedOut && !seedStatuses.some((entry) => entry.url === url)) {
+			const reason =
+				seedStagedCount > 0
+					? null
+					: candidates.length > 0
+						? "No source unit produced an accepted staged lead."
+						: "No extraction candidates.";
+			emit(reason ? "seed_failed" : "seed_completed", {
+				reason: reason ?? undefined,
+			});
+			await flushSeedStatus(
+				seedStatuses,
+				status(reason ? "failed" : "completed", reason),
+				dependencies.seedStatusPath,
+			);
+		}
+		if (ollamaCalls >= maxTotalOllamaCalls) break;
 	}
 	return {
 		stagingPath:
@@ -206,6 +481,8 @@ export async function runLocalCampaign(
 		processed,
 		fetched,
 		cached,
+		source_units: sourceUnits,
+		ollama_calls: ollamaCalls,
 		rejected_by_url_safety: rejectedByUrlSafety,
 		failed_fetch: failedFetch,
 		extracted,
@@ -214,5 +491,6 @@ export async function runLocalCampaign(
 		duplicates,
 		leads,
 		failures,
+		seed_statuses: seedStatuses,
 	};
 }

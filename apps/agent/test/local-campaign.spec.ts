@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchCachedPage } from "../agent/lib/local-campaign-cache";
@@ -16,10 +16,15 @@ import {
 import { localCampaignSchema } from "../agent/lib/local-campaign-schema";
 import { scoreLocalCampaignLead } from "../agent/lib/local-campaign-scoring";
 import {
+	extractLocalCampaignSourceUnits,
+	hasUsefulPageEvidence,
+} from "../agent/lib/local-campaign-source-units";
+import {
 	assertLocalCampaignPath,
 	dedupeAgainst,
 	normalizeDomain,
 } from "../agent/lib/local-campaign-staging";
+import { createLocalOllamaClient } from "../agent/lib/local-ollama";
 
 const campaign = localCampaignSchema.parse({
 	campaign_id: "test-campaign",
@@ -66,7 +71,7 @@ describe("local campaign runner", () => {
 			const csv = join(directory, "seeds.csv");
 			const jsonl = join(directory, "seeds.jsonl");
 			await Bun.write(csv, "url\nhttps://example.com/a\n");
-			await Bun.write(jsonl, '{"url":"https://example.com/b"}\n');
+			await Bun.write(jsonl, '{"source_url":"https://example.com/b"}\n');
 			expect(await loadCampaignSeeds(csv)).toEqual(["https://example.com/a"]);
 			expect(await loadCampaignSeeds(jsonl)).toEqual(["https://example.com/b"]);
 		} finally {
@@ -127,7 +132,7 @@ describe("local campaign runner", () => {
 					page: {
 						url,
 						content_hash: url,
-						text: "A public exhibitor page.",
+						text: "Acme Displays LLC is an exhibitor display company in Chicago.",
 						fetched_at: new Date().toISOString(),
 					},
 				}),
@@ -209,6 +214,228 @@ describe("local campaign runner", () => {
 		expect(scores.review_required_reason).toContain("Email is missing.");
 	});
 
+	it("extracts company source units from table rows", () => {
+		const units = extractLocalCampaignSourceUnits(
+			"<table><tr><td>Acme Displays LLC</td><td>https://acme.example</td><td>Chicago, IL</td></tr></table>",
+			"https://example.com/exhibitors",
+		);
+		expect(units).toHaveLength(1);
+		expect(units[0]?.extraction_method).toBe("table_row");
+		expect(units[0]?.candidate_company_name).toContain("Acme Displays LLC");
+		expect(units[0]?.candidate_website).toBe("https://acme.example");
+	});
+
+	it("extracts company source units from cards and list items", () => {
+		const units = extractLocalCampaignSourceUnits(
+			[
+				"<div class='exhibitor-card'><h3>Fixture Systems Inc</h3><a href='https://fixture.example'>Website</a><p>Display fixtures in Dallas, TX</p></div>",
+				"<ul><li>Panel Technology Ltd https://panel.example exhibit walls</li></ul>",
+			].join(""),
+			"https://example.com/exhibitors",
+		);
+		expect(units.map((unit) => unit.extraction_method)).toContain("card");
+		expect(units.map((unit) => unit.extraction_method)).toContain("list_item");
+	});
+
+	it("extracts company source units from links with surrounding text", () => {
+		const units = extractLocalCampaignSourceUnits(
+			"<a href='https://booth.example'>Booth Systems Corp</a>",
+			"https://example.com/exhibitors",
+		);
+		expect(units).toHaveLength(1);
+		expect(units[0]?.extraction_method).toBe("link_context");
+	});
+
+	it("rejects title or venue only evidence and boilerplate", () => {
+		expect(
+			hasUsefulPageEvidence("Automate 2027 exhibitor directory at JI Expo"),
+		).toBe(false);
+		expect(
+			extractLocalCampaignSourceUnits(
+				"<li>Cookie settings privacy navigation menu</li>",
+				"https://example.com/exhibitors",
+			),
+		).toHaveLength(0);
+	});
+
+	it("caps and trims source units", () => {
+		const html = [
+			"<tr><td>Acme Displays LLC</td><td>https://acme.example</td><td>Long text ".concat(
+				"x".repeat(200),
+				"</td></tr>",
+			),
+			"<tr><td>Beta Fixtures Inc</td><td>https://beta.example</td></tr>",
+		].join("");
+		const units = extractLocalCampaignSourceUnits(
+			html,
+			"https://example.com/exhibitors",
+			{ max_source_units_per_page: 1, max_source_unit_chars: 80 },
+		);
+		expect(units).toHaveLength(1);
+		expect(units[0]?.candidate_text.length).toBeLessThanOrEqual(80);
+	});
+
+	it("dedupes source units before Ollama", () => {
+		const result = extractLocalCampaignSourceUnits(
+			[
+				"<tr><td>Acme Displays LLC</td><td>https://acme.example</td></tr>",
+				"<li>Acme Displays LLC https://acme.example</li>",
+			].join(""),
+			"https://example.com/exhibitors",
+		);
+		expect(result).toHaveLength(1);
+	});
+
+	it("avoids whole-page model calls when source units exist", async () => {
+		const calls: string[] = [];
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 2, max_companies: 5 },
+			["https://example.com/exhibitors"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: [
+							"<tr><td>Acme Displays LLC</td><td>https://acme.example</td><td>Chicago, IL</td></tr>",
+							"<tr><td>Beta Fixtures Inc</td><td>https://beta.example</td><td>Austin, TX</td></tr>",
+						].join(""),
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async ({ prompt }) => {
+						calls.push(prompt);
+						const sourceUrl = "https://example.com/exhibitors";
+						return {
+							text: leadJson.replace("https://example.com/one", sourceUrl),
+							latencyMs: 4,
+						};
+					},
+				},
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.source_units).toBe(2);
+		expect(result.ollama_calls).toBe(2);
+		expect(calls.every((prompt) => !prompt.includes("<tr>"))).toBe(true);
+	});
+
+	it("falls back to page-level extraction when no source units are found", async () => {
+		let calls = 0;
+		const result = await runLocalCampaign(
+			campaign,
+			["https://example.com/one"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: "Acme Displays LLC is an exhibitor display company in Chicago.",
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async () => {
+						calls += 1;
+						return { text: leadJson, latencyMs: 4 };
+					},
+				},
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(calls).toBe(1);
+		expect(result.source_units).toBe(0);
+		expect(result.ollama_calls).toBe(1);
+	});
+
+	it("flushes per-seed failure status", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "local-campaign-status-"));
+		const seedStatusPath = `var/local-leads/${directory.split("/").pop()}-status.jsonl`;
+		try {
+			const result = await runLocalCampaign(
+				campaign,
+				["https://example.com/one"],
+				{
+					pageLoader: async () => {
+						throw new Error("Source fetch timed out.");
+					},
+					seedStatusPath,
+				},
+			);
+			expect(result.seed_statuses).toHaveLength(1);
+			expect(result.seed_statuses[0]?.failure_reason).toBe(
+				"Source fetch timed out.",
+			);
+			expect(
+				await readFile(
+					new URL(`../${seedStatusPath}`, import.meta.url),
+					"utf8",
+				),
+			).toContain("Source fetch timed out.");
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+			await rm(new URL(`../${seedStatusPath}`, import.meta.url), {
+				force: true,
+			});
+		}
+	});
+
+	it("stops a seed when the per-seed timeout is reached", async () => {
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 2 },
+			["https://example.com/one"],
+			{
+				perSeedTimeoutMs: -1,
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: "Acme Displays LLC is an exhibitor display company in Chicago.",
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async () => {
+						await new Promise((resolve) => setTimeout(resolve, 2));
+						return { text: leadJson, latencyMs: 2 };
+					},
+				},
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.seed_statuses[0]?.failure_reason).toBe("Seed timed out.");
+		expect(result.ollama_calls).toBe(0);
+	});
+
+	it("scores company-level source unit evidence above page-level evidence", () => {
+		const lead = parseLocalCampaignResponse(
+			leadJson,
+			"https://example.com/one",
+		);
+		const pageScore = scoreLocalCampaignLead(lead, campaign);
+		const unitScore = scoreLocalCampaignLead(lead, campaign, {
+			sourceUnit: true,
+			extractionMethod: "table_row",
+		});
+		expect(unitScore.evidence_score).toBeGreaterThan(pageScore.evidence_score);
+	});
+
 	it("deduplicates normalized domain and exports JSONL and CSV", async () => {
 		expect(normalizeDomain("WWW.Example.com.")).toBe("example.com");
 		const lead = {
@@ -240,5 +467,43 @@ describe("local campaign runner", () => {
 		expect(() => assertLocalCampaignPath("../../outside.csv")).toThrow(
 			"var/local-leads",
 		);
+	});
+
+	it("keeps local campaign modules free of CRM writer imports", async () => {
+		const files = [
+			"agent/lib/local-campaign-cache.ts",
+			"agent/lib/local-campaign-export.ts",
+			"agent/lib/local-campaign-extraction.ts",
+			"agent/lib/local-campaign-lead-schema.ts",
+			"agent/lib/local-campaign-runner.ts",
+			"agent/lib/local-campaign-schema.ts",
+			"agent/lib/local-campaign-scoring.ts",
+			"agent/lib/local-campaign-source-units.ts",
+			"agent/lib/local-campaign-staging.ts",
+			"agent/cli/local-campaign-worker.ts",
+		];
+		const forbidden =
+			/from\s+["'](?:@crm\/db|.*prisma.*|.*neon.*|.*database.*|.*outreach.*|.*email.*)["']/i;
+		for (const file of files) {
+			const text = await readFile(
+				new URL(`../${file}`, import.meta.url),
+				"utf8",
+			);
+			expect(text).not.toMatch(forbidden);
+		}
+	});
+
+	it("times out stalled Ollama requests", async () => {
+		const client = createLocalOllamaClient(
+			async (_input, init) =>
+				new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener("abort", () => {
+						reject(new Error("aborted"));
+					});
+				}),
+		);
+		await expect(
+			client.generate({ model: "qwen2.5:14b", prompt: "{}", timeoutMs: 1 }),
+		).rejects.toThrow("timed out");
 	});
 });

@@ -6,6 +6,7 @@ import { createLocalOllamaClient, type OllamaClient } from "./local-ollama";
 export const LOCAL_LEAD_MODEL = "qwen2.5:14b";
 const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_SOURCE_BYTES = 512_000;
+const DEFAULT_DNS_TIMEOUT_MS = 5_000;
 
 export type DnsLookup = (
 	hostname: string,
@@ -121,6 +122,7 @@ export async function fetchLocalLeadSource(
 	options: {
 		timeoutMs?: number;
 		maxBytes?: number;
+		dnsTimeoutMs?: number;
 		lookup?: DnsLookup;
 	} = {},
 ): Promise<{ sourceUrl: string; text: string }> {
@@ -134,12 +136,33 @@ export async function fetchLocalLeadSource(
 	await assertPublicHostname(
 		parsed.hostname,
 		options.lookup ?? resolveHostname,
+		options.dnsTimeoutMs ?? DEFAULT_DNS_TIMEOUT_MS,
 	);
 
-	const response = await fetchImpl(url, {
-		signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
-		headers: { accept: "text/html,text/plain;q=0.9" },
+	const controller = new AbortController();
+	const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	const timeoutPromise = new Promise<never>((_resolve, reject) => {
+		timeout = setTimeout(() => {
+			controller.abort();
+			reject(new Error("Source fetch timed out."));
+		}, timeoutMs);
 	});
+	let response: Response;
+	try {
+		response = await Promise.race([
+			fetchImpl(url, {
+				signal: controller.signal,
+				headers: { accept: "text/html,text/plain;q=0.9" },
+			}),
+			timeoutPromise,
+		]);
+	} catch (error) {
+		if (controller.signal.aborted) throw new Error("Source fetch timed out.");
+		throw error;
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
 	if (!response.ok) throw new Error(`Source returned HTTP ${response.status}.`);
 	const maxBytes = options.maxBytes ?? DEFAULT_MAX_SOURCE_BYTES;
 	const contentLength = Number(response.headers.get("content-length"));
@@ -178,9 +201,22 @@ export async function fetchLocalLeadSource(
 async function assertPublicHostname(
 	hostname: string,
 	lookup: DnsLookup,
+	timeoutMs: number,
 ): Promise<void> {
 	try {
-		const addresses = await lookup(hostname, { all: true, verbatim: true });
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		const timeoutPromise = new Promise<never>((_resolve, reject) => {
+			timeout = setTimeout(
+				() => reject(new Error("DNS lookup timed out.")),
+				timeoutMs,
+			);
+		});
+		const addresses = await Promise.race([
+			lookup(hostname, { all: true, verbatim: true }),
+			timeoutPromise,
+		]).finally(() => {
+			if (timeout) clearTimeout(timeout);
+		});
 		if (
 			addresses.length === 0 ||
 			addresses.some((entry) => isBlockedHostname(entry.address))

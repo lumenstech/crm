@@ -67,6 +67,7 @@ export async function extractLocalCampaignLead(
 	text: string,
 	sourceUrl: string,
 	client: OllamaClient = createLocalOllamaClient(),
+	options: { timeoutMs?: number } = {},
 ): Promise<LocalCampaignLeadRecord> {
 	if (!text.trim()) throw new Error("Source text is empty.");
 	const prompt = [
@@ -80,7 +81,11 @@ export async function extractLocalCampaignLead(
 		"Page text:",
 		text,
 	].join("\n");
-	const result = await client.generate({ model: LOCAL_CAMPAIGN_MODEL, prompt });
+	const result = await client.generate({
+		model: LOCAL_CAMPAIGN_MODEL,
+		prompt,
+		timeoutMs: options.timeoutMs,
+	});
 	const lead = parseLocalCampaignResponse(result.text, sourceUrl);
 	return {
 		...lead,

@@ -15,6 +15,9 @@ export type LocalStagedLead = LocalCampaignLeadRecord &
 		campaign_id: string;
 		lead_id: string;
 		source_domain: string;
+		source_unit_id?: string;
+		parent_source_url?: string;
+		extraction_method?: string;
 		status: LocalCampaignStatus;
 	};
 

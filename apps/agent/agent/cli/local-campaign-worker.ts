@@ -24,6 +24,16 @@ function argument(args: string[], flag: string): string | undefined {
 	);
 }
 
+function numericArgument(args: string[], flag: string): number | undefined {
+	const value = argument(args, flag);
+	if (value === undefined) return undefined;
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		throw new Error(`${flag} must be a positive number.`);
+	}
+	return Math.round(parsed);
+}
+
 async function main(): Promise<void> {
 	const args = process.argv.slice(2);
 	assertLocalCampaignOnly(args);
@@ -40,13 +50,39 @@ async function main(): Promise<void> {
 		return;
 	}
 	if (command === "run") {
-		const campaign = await loadCampaignFile(argument(args, "--campaign") ?? "");
+		const baseCampaign = await loadCampaignFile(
+			argument(args, "--campaign") ?? "",
+		);
+		const campaign = {
+			...baseCampaign,
+			max_source_units_per_page:
+				numericArgument(args, "--max-source-units-per-page") ??
+				baseCampaign.max_source_units_per_page,
+			max_source_unit_chars:
+				numericArgument(args, "--max-source-unit-chars") ??
+				baseCampaign.max_source_unit_chars,
+			max_ollama_calls_per_seed:
+				numericArgument(args, "--max-ollama-calls-per-seed") ??
+				baseCampaign.max_ollama_calls_per_seed,
+			max_total_ollama_calls:
+				numericArgument(args, "--max-total-ollama-calls") ??
+				baseCampaign.max_total_ollama_calls,
+			per_ollama_call_timeout_ms:
+				numericArgument(args, "--per-ollama-call-timeout-ms") ??
+				baseCampaign.per_ollama_call_timeout_ms,
+		};
 		const seedFile = argument(args, "--seed-file");
 		const seeds = seedFile
 			? await loadCampaignSeeds(seedFile)
 			: campaign.seed_urls;
+		const progress = args.includes("--progress");
 		const result = await runLocalCampaign(campaign, seeds, {
 			stagingPath: argument(args, "--staging-path"),
+			seedStatusPath: argument(args, "--seed-status-path"),
+			perSeedTimeoutMs: numericArgument(args, "--per-seed-timeout-ms"),
+			onProgress: progress
+				? (event) => console.error(JSON.stringify(event))
+				: undefined,
 		});
 		console.log(JSON.stringify({ mode: "dry-run", ...result }, null, 2));
 		return;

@@ -16,6 +16,16 @@ export const localCampaignSchema = z
 		exclusions: z.array(z.string().trim().min(1)),
 		max_companies: z.number().int().positive().max(10_000),
 		max_pages_per_domain: z.number().int().positive().max(100),
+		max_source_units_per_page: z.number().int().positive().max(500).optional(),
+		max_source_unit_chars: z.number().int().positive().max(10_000).optional(),
+		max_ollama_calls_per_seed: z.number().int().positive().max(100).optional(),
+		max_total_ollama_calls: z.number().int().positive().max(10_000).optional(),
+		per_ollama_call_timeout_ms: z
+			.number()
+			.int()
+			.positive()
+			.max(120_000)
+			.optional(),
 		required_fields: z.array(z.string().trim().min(1)),
 		scoring_rules: z
 			.object({
@@ -29,6 +39,15 @@ export const localCampaignSchema = z
 
 export type LocalCampaign = z.infer<typeof localCampaignSchema>;
 
-export const localCampaignSeedSchema = z.object({
-	url: z.string().trim().url(),
-});
+export const localCampaignSeedSchema = z
+	.object({
+		url: z.string().trim().url().optional(),
+		source_url: z.string().trim().url().optional(),
+	})
+	.passthrough()
+	.refine((seed) => seed.url ?? seed.source_url, {
+		message: "Seed needs url or source_url.",
+	})
+	.transform((seed): { url: string } => {
+		return { url: seed.url ?? seed.source_url ?? "" };
+	});

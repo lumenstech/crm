@@ -21,18 +21,39 @@ export function createLocalOllamaClient(
 	return {
 		async generate({ model, prompt, timeoutMs = DEFAULT_TIMEOUT_MS }) {
 			const startedAt = performance.now();
-			const response = await fetchImpl(endpoint, {
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({
-					model,
-					prompt,
-					format: "json",
-					stream: false,
-					options: { temperature: 0 },
-				}),
-				signal: AbortSignal.timeout(timeoutMs),
+			const controller = new AbortController();
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+			const timeoutPromise = new Promise<never>((_resolve, reject) => {
+				timeout = setTimeout(() => {
+					controller.abort();
+					reject(new Error("Ollama request timed out."));
+				}, timeoutMs);
 			});
+			let response: Response;
+			try {
+				response = await Promise.race([
+					fetchImpl(endpoint, {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify({
+							model,
+							prompt,
+							format: "json",
+							stream: false,
+							options: { temperature: 0 },
+						}),
+						signal: controller.signal,
+					}),
+					timeoutPromise,
+				]);
+			} catch (error) {
+				if (controller.signal.aborted) {
+					throw new Error("Ollama request timed out.");
+				}
+				throw error;
+			} finally {
+				if (timeout) clearTimeout(timeout);
+			}
 
 			if (!response.ok) {
 				throw new Error(`Ollama returned HTTP ${response.status}.`);
