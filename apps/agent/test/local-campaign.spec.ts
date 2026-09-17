@@ -21,6 +21,7 @@ import { scoreLocalCampaignLead } from "../agent/lib/local-campaign-scoring";
 import {
 	extractLocalCampaignSourceUnits,
 	hasUsefulPageEvidence,
+	rankLocalCampaignSourceUnitText,
 } from "../agent/lib/local-campaign-source-units";
 import {
 	assertLocalCampaignPath,
@@ -371,6 +372,136 @@ describe("local campaign runner", () => {
 			"https://example.com/exhibitors",
 		);
 		expect(result).toHaveLength(1);
+	});
+
+	it("ranks company units with websites high", () => {
+		const ranking = rankLocalCampaignSourceUnitText(
+			"Acme Displays LLC https://acme.example custom trade show display fixtures",
+			{ source_domain: "event.example" },
+		);
+		expect(ranking.rank_score).toBeGreaterThanOrEqual(70);
+		expect(ranking.ranking_reasons).toContain("likely company name");
+		expect(ranking.ranking_reasons).toContain("external company website");
+	});
+
+	it("ranks company units with booth evidence high", () => {
+		const ranking = rankLocalCampaignSourceUnitText(
+			"Beta Fixtures Inc booth 1240 industrial display products Austin, TX",
+			{ source_domain: "event.example" },
+		);
+		expect(ranking.rank_score).toBeGreaterThanOrEqual(70);
+		expect(ranking.ranking_reasons).toContain("booth or stand number");
+	});
+
+	it("ranks event titles low", () => {
+		const ranking = rankLocalCampaignSourceUnitText(
+			"PartWall 2027 exhibitor directory trade show registration",
+			{ source_domain: "event.example" },
+		);
+		expect(ranking.rank_score).toBeLessThan(0);
+		expect(ranking.ranking_reasons).toContain("page title or event-only text");
+	});
+
+	it("ranks venue-only evidence low", () => {
+		const ranking = rankLocalCampaignSourceUnitText(
+			"JI Expo venue event floor plan attendee registration",
+			{ source_domain: "event.example" },
+		);
+		expect(ranking.rank_score).toBeLessThan(0);
+		expect(ranking.ranking_reasons).toContain("event or venue level evidence");
+	});
+
+	it("ranks organizer boilerplate low", () => {
+		const ranking = rankLocalCampaignSourceUnitText(
+			"Organizer newsletter privacy terms copyright all rights reserved",
+			{ source_domain: "event.example" },
+		);
+		expect(ranking.rank_score).toBeLessThan(0);
+		expect(ranking.ranking_reasons).toContain(
+			"navigation/footer/cookie boilerplate",
+		);
+	});
+
+	it("sends top-ranked source units to Ollama first", async () => {
+		const calls: string[] = [];
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 1, max_companies: 5 },
+			["https://example.com/exhibitors"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: [
+							"<tr><td>Beta Fixtures Inc</td><td>general supplier listing</td></tr>",
+							"<tr><td>Acme Displays LLC</td><td>https://acme.example</td><td>Booth 1240</td><td>custom trade show display fixtures</td></tr>",
+						].join(""),
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async ({ prompt }) => {
+						calls.push(prompt);
+						return {
+							text: leadJson.replace(
+								"https://example.com/one",
+								"https://example.com/exhibitors",
+							),
+							latencyMs: 4,
+						};
+					},
+				},
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.ollama_calls).toBe(1);
+		expect(calls[0]).toContain("Acme Displays LLC");
+		expect(calls[0]).not.toContain("Beta Fixtures Inc");
+	});
+
+	it("records source unit ranking reasons on staged leads", async () => {
+		const sourceText =
+			"Acme Displays LLC https://acme.example Booth 1240 custom display fixtures Chicago, IL";
+		const sourceLead = JSON.stringify({
+			...JSON.parse(leadJson),
+			source_url: "https://example.com/exhibitors",
+			evidence_excerpt: sourceText,
+		});
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 1, max_companies: 5 },
+			["https://example.com/exhibitors"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: `<tr><td>${sourceText}</td></tr>`,
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async () => ({
+						text: sourceLead,
+						latencyMs: 4,
+					}),
+				},
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.leads[0]?.source_unit_rank_score).toBeGreaterThan(0);
+		expect(result.leads[0]?.source_unit_ranking_reasons).toContain(
+			"external company website",
+		);
 	});
 
 	it("avoids whole-page model calls when source units exist", async () => {

@@ -18,6 +18,8 @@ export type LocalStagedLead = LocalCampaignLeadRecord &
 		source_unit_id?: string;
 		parent_source_url?: string;
 		extraction_method?: string;
+		source_unit_rank_score?: number;
+		source_unit_ranking_reasons?: string[];
 		status: LocalCampaignStatus;
 	};
 

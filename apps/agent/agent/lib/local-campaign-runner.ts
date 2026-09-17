@@ -464,6 +464,8 @@ export async function runLocalCampaign(
 				source_unit_id: candidate.sourceUnit?.unit_id,
 				parent_source_url: candidate.sourceUnit?.parent_source_url,
 				extraction_method: candidate.sourceUnit?.extraction_method,
+				source_unit_rank_score: candidate.sourceUnit?.rank_score,
+				source_unit_ranking_reasons: candidate.sourceUnit?.ranking_reasons,
 				status: missingRequired.length > 0 ? "needs_review" : "new",
 			};
 			let result: Awaited<ReturnType<typeof stageCampaignLead>>;

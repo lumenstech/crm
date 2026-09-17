@@ -12,6 +12,8 @@ export type LocalCampaignSourceUnit = {
 	evidence_excerpt: string;
 	extraction_method: "table_row" | "list_item" | "card" | "link_context";
 	content_hash: string;
+	rank_score: number;
+	ranking_reasons: string[];
 };
 
 export type LocalCampaignSourceUnitCaps = {
@@ -28,6 +30,15 @@ const BOILERPLATE =
 	/\b(cookie|privacy|terms|register now|buy tickets|subscribe|newsletter|sponsor|navigation|menu|login|sign in|venue|floor plan|organizer|copyright|all rights reserved)\b/i;
 const EVENT_LEVEL =
 	/\b(exhibitor directory|exhibitor list|trade show|conference|expo|event|venue|registration|attendee|speaker)\b/i;
+const EXHIBITOR_PROFILE = /\b(exhibitor|profile|company|listing|directory)\b/i;
+const BOOTH_PATTERN =
+	/\b(?:booth|stand|stall|pavilion)\s*(?:no\.?|number|#)?\s*[A-Z]?\d[\w.-]*\b/i;
+const LOCATION_PATTERN =
+	/\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*)?(?:[A-Z]{2}|USA|United States|Canada|Mexico|Germany|Taiwan|China|Thailand|Vietnam|India|Japan|Korea|United Kingdom|UK|France|Italy|Spain)\b/;
+const PRODUCT_SERVICE =
+	/\b(display|fixture|fabrication|manufacturing|supplier|distributor|automation|machinery|equipment|hardware|server|logistics|laboratory|lab|monitoring|energy|electrical|prototype|parts|services?|products?)\b/i;
+const PROMOTIONAL =
+	/\b(register|registration|schedule|agenda|attendee|buy tickets|book now|learn more|sponsorship opportunity|floor plan|hotel|travel)\b/i;
 const BLOCK_PATTERNS = [
 	{ pattern: /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, method: "table_row" as const },
 	{ pattern: /<li\b[^>]*>([\s\S]*?)<\/li>/gi, method: "list_item" as const },
@@ -79,12 +90,114 @@ export function extractLocalCampaignSourceUnits(
 		);
 		if (unit) units.push(unit);
 	}
-	return dedupeSourceUnits(units).slice(0, caps.max_source_units_per_page);
+	return dedupeSourceUnits(units)
+		.sort((left, right) => right.rank_score - left.rank_score)
+		.slice(0, caps.max_source_units_per_page);
 }
 
 export function hasUsefulPageEvidence(text: string): boolean {
 	const cleaned = cleanText(text);
 	return looksCompanyLevel(cleaned) && !isOnlyEventLevel(cleaned);
+}
+
+export type LocalCampaignSourceUnitRanking = {
+	rank_score: number;
+	ranking_reasons: string[];
+};
+
+export function rankLocalCampaignSourceUnitText(
+	text: string,
+	context: {
+		parent_source_url?: string;
+		source_domain?: string;
+		candidate_company_name?: string | null;
+		candidate_website?: string | null;
+		candidate_location?: string | null;
+		extraction_method?: LocalCampaignSourceUnit["extraction_method"];
+	} = {},
+): LocalCampaignSourceUnitRanking {
+	const cleaned = cleanText(text);
+	const parentDomain = context.source_domain ?? null;
+	const website =
+		context.candidate_website ??
+		cleaned.match(WEBSITE_PATTERN)?.[0]?.replace(/[),.]+$/, "") ??
+		null;
+	const company =
+		context.candidate_company_name ?? candidateCompanyName(cleaned);
+	const location = context.candidate_location ?? candidateLocation(cleaned);
+	const reasons: string[] = [];
+	let score = 0;
+
+	if (company) {
+		score += 30;
+		reasons.push("likely company name");
+	}
+	if (website) {
+		const websiteDomain = safeDomain(website);
+		if (websiteDomain && parentDomain && websiteDomain !== parentDomain) {
+			score += 30;
+			reasons.push("external company website");
+		} else if (EXHIBITOR_PROFILE.test(website)) {
+			score += 18;
+			reasons.push("exhibitor profile URL");
+		} else {
+			score += 12;
+			reasons.push("website or profile URL");
+		}
+	}
+	if (
+		context.extraction_method === "link_context" &&
+		website &&
+		EXHIBITOR_PROFILE.test(website)
+	) {
+		score += 12;
+		reasons.push("exhibitor profile link");
+	}
+	if (BOOTH_PATTERN.test(cleaned)) {
+		score += 20;
+		reasons.push("booth or stand number");
+	}
+	if (location || LOCATION_PATTERN.test(cleaned)) {
+		score += 10;
+		reasons.push("location evidence");
+	}
+	if (PRODUCT_SERVICE.test(cleaned)) {
+		score += 15;
+		reasons.push("product or service description");
+	}
+	if (/\b(exhibitor|sponsor|booth|stand|pavilion)\b/i.test(cleaned)) {
+		score += 10;
+		reasons.push("exhibitor context");
+	}
+	if (
+		cleaned.length <= 80 &&
+		EVENT_LEVEL.test(cleaned) &&
+		!company &&
+		!website
+	) {
+		score -= 30;
+		reasons.push("page title or event-only text");
+	}
+	if (isOnlyEventLevel(cleaned)) {
+		score -= 40;
+		reasons.push("event or venue level evidence");
+	}
+	if (BOILERPLATE.test(cleaned)) {
+		score -= 35;
+		reasons.push("navigation/footer/cookie boilerplate");
+	}
+	if (PROMOTIONAL.test(cleaned) && !company) {
+		score -= 25;
+		reasons.push("registration or promotional copy");
+	}
+
+	return {
+		rank_score: score,
+		ranking_reasons:
+			reasons.length > 0
+				? [...new Set(reasons)]
+				: ["weak source unit evidence"],
+	};
 }
 
 export function dedupeSourceUnits(
@@ -129,6 +242,14 @@ function buildSourceUnit(
 		candidateText.match(WEBSITE_PATTERN)?.[0]?.replace(/[),.]+$/, "") ??
 		null;
 	const location = candidateLocation(candidateText);
+	const ranking = rankLocalCampaignSourceUnitText(candidateText, {
+		parent_source_url: parentSourceUrl,
+		source_domain: sourceDomain,
+		candidate_company_name: company,
+		candidate_website: website,
+		candidate_location: location,
+		extraction_method: extractionMethod,
+	});
 	return {
 		unit_id: contentHash.slice(0, 24),
 		parent_source_url: parentSourceUrl,
@@ -140,6 +261,7 @@ function buildSourceUnit(
 		evidence_excerpt: candidateText.slice(0, 500),
 		extraction_method: extractionMethod,
 		content_hash: contentHash,
+		...ranking,
 	};
 }
 
@@ -190,6 +312,18 @@ function normalizeWebsite(
 		return new URL(value, parentSourceUrl).toString();
 	} catch {
 		return null;
+	}
+}
+
+function safeDomain(value: string): string | null {
+	try {
+		return normalizeDomain(new URL(value).hostname);
+	} catch {
+		try {
+			return normalizeDomain(new URL(`https://${value}`).hostname);
+		} catch {
+			return null;
+		}
 	}
 }
 
