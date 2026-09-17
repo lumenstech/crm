@@ -19,9 +19,11 @@ import {
 import { localCampaignSchema } from "../agent/lib/local-campaign-schema";
 import { scoreLocalCampaignLead } from "../agent/lib/local-campaign-scoring";
 import {
+	extractLocalCampaignSourceUnitCandidates,
 	extractLocalCampaignSourceUnits,
 	hasUsefulPageEvidence,
 	rankLocalCampaignSourceUnitText,
+	sourceUnitRejectionReason,
 } from "../agent/lib/local-campaign-source-units";
 import {
 	assertLocalCampaignPath,
@@ -503,7 +505,103 @@ describe("local campaign runner", () => {
 			"external company website",
 		);
 	});
+});
 
+describe("local campaign source unit filtering", () => {
+	it("rejects AIMG-style website-only event vendor links", () => {
+		const candidates = extractLocalCampaignSourceUnitCandidates(
+			"<a href='https://www.aimg.com/'>Website by Amplify Industrial Marketing + Guidance.</a>",
+			"https://www.automateshow.com/exhibitors",
+		);
+		expect(candidates.units).toHaveLength(0);
+		expect(candidates.rejected[0]?.rejection_reason).toBe("event_vendor_link");
+	});
+
+	it("rejects registration and ticketing source units", () => {
+		expect(
+			sourceUnitRejectionReason(
+				"Register now for attendee badges and buy tickets for the expo",
+			),
+		).toBe("registration_or_ticketing");
+	});
+
+	it("rejects footer social privacy and contact links", () => {
+		const candidates = extractLocalCampaignSourceUnitCandidates(
+			[
+				"<a href='https://facebook.com/example'>Facebook</a>",
+				"<a href='https://example.com/privacy'>Privacy Policy</a>",
+				"<a href='https://example.com/contact-us'>Contact Us</a>",
+			].join(""),
+			"https://example.com/exhibitors",
+		);
+		expect(candidates.units).toHaveLength(0);
+		expect(candidates.rejected.map((unit) => unit.rejection_reason)).toContain(
+			"navigation_or_footer",
+		);
+		expect(candidates.rejected.map((unit) => unit.rejection_reason)).toContain(
+			"boilerplate",
+		);
+	});
+
+	it("rejects organizer or venue-only source units", () => {
+		expect(
+			sourceUnitRejectionReason(
+				"Show organizer convention center floor plan event management",
+			),
+		).toBe("venue_or_organizer");
+	});
+
+	it("keeps company source units with website and product text", () => {
+		const candidates = extractLocalCampaignSourceUnitCandidates(
+			"<tr><td>Acme Displays LLC</td><td>https://acme.example</td><td>custom display fixtures and booth walls</td></tr>",
+			"https://example.com/exhibitors",
+		);
+		expect(candidates.units).toHaveLength(1);
+		expect(candidates.rejected).toHaveLength(0);
+	});
+
+	it("keeps company source units with booth or profile evidence", () => {
+		const candidates = extractLocalCampaignSourceUnitCandidates(
+			"<a href='/exhibitor/beta-fixtures'>Beta Fixtures Inc booth 1240</a>",
+			"https://example.com/exhibitors",
+		);
+		expect(candidates.units).toHaveLength(1);
+		expect(candidates.units[0]?.ranking_reasons).toContain(
+			"booth or stand number",
+		);
+	});
+
+	it("records rejected source unit reasons in run diagnostics", async () => {
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 1, max_companies: 5 },
+			["https://example.com/exhibitors"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: "<a href='https://www.aimg.com/'>Website by Amplify Industrial Marketing + Guidance.</a>",
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async () => {
+						throw new Error("Ollama should not be called.");
+					},
+				},
+			},
+		);
+		expect(result.ollama_calls).toBe(0);
+		expect(result.rejected_source_units).toBe(1);
+		expect(result.source_unit_rejection_reasons.event_vendor_link).toBe(1);
+		expect(result.seed_statuses[0]?.rejection_reasons.event_vendor_link).toBe(
+			1,
+		);
+	});
+});
+
+describe("local campaign runner extraction flow", () => {
 	it("avoids whole-page model calls when source units exist", async () => {
 		const calls: string[] = [];
 		const result = await runLocalCampaign(
@@ -581,6 +679,55 @@ describe("local campaign runner", () => {
 					},
 				}),
 				client: { generate: async () => ({ text: thinLead, latencyMs: 4 }) },
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.staged).toBe(0);
+		expect(result.failures[0]?.reason).toBe(
+			"Source unit did not produce company-level evidence.",
+		);
+	});
+
+	it("rejects source unit output that only has a website", async () => {
+		const websiteOnlyLead = JSON.stringify({
+			...JSON.parse(leadJson),
+			company_name: null,
+			website: "https://acme.example",
+			location: null,
+			source_url: "https://example.com/exhibitors",
+			evidence_excerpt: "Acme Displays LLC https://acme.example",
+			missing_fields: [
+				"company_name",
+				"contact_name",
+				"role",
+				"email",
+				"phone",
+				"location",
+			],
+		});
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 1, max_companies: 5 },
+			["https://example.com/exhibitors"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: "<li>Acme Displays LLC https://acme.example custom display fixtures</li>",
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: {
+					generate: async () => ({
+						text: websiteOnlyLead,
+						latencyMs: 4,
+					}),
+				},
 				stager: async (lead, path) => ({
 					path: path ?? "local",
 					staged: lead,

@@ -12,9 +12,10 @@ import {
 import { scoreLocalCampaignLead } from "./local-campaign-scoring";
 import {
 	DEFAULT_LOCAL_CAMPAIGN_SOURCE_UNIT_CAPS,
-	extractLocalCampaignSourceUnits,
+	extractLocalCampaignSourceUnitCandidates,
 	hasUsefulPageEvidence,
 	type LocalCampaignSourceUnit,
+	type LocalCampaignSourceUnitRejectionReason,
 } from "./local-campaign-source-units";
 import {
 	assertLocalCampaignPath,
@@ -75,6 +76,8 @@ export type LocalCampaignProgressEvent = {
 	elapsed_ms: number;
 	reason?: string;
 	source_unit_count?: number;
+	rejected_source_unit_count?: number;
+	rejection_reasons?: Record<LocalCampaignSourceUnitRejectionReason, number>;
 	ollama_call_count?: number;
 };
 
@@ -84,6 +87,8 @@ export type LocalCampaignSeedStatus = {
 	failure_reason: string | null;
 	elapsed_ms: number;
 	source_unit_count: number;
+	rejected_source_unit_count: number;
+	rejection_reasons: Record<LocalCampaignSourceUnitRejectionReason, number>;
 	ollama_call_count: number;
 	staged_count: number;
 	created_at: string;
@@ -95,6 +100,11 @@ export type LocalCampaignRunResult = {
 	fetched: number;
 	cached: number;
 	source_units: number;
+	rejected_source_units: number;
+	source_unit_rejection_reasons: Record<
+		LocalCampaignSourceUnitRejectionReason,
+		number
+	>;
 	ollama_calls: number;
 	rejected_by_url_safety: number;
 	failed_fetch: number;
@@ -154,6 +164,7 @@ async function flushSeedStatus(
 
 function extractionCandidates(
 	units: LocalCampaignSourceUnit[],
+	rejectedSourceUnitCount: number,
 	text: string,
 	url: string,
 	maxOllamaCallsPerSeed: number,
@@ -170,6 +181,7 @@ function extractionCandidates(
 			sourceUnit: unit,
 		}));
 	}
+	if (rejectedSourceUnitCount > 0) return [];
 	if (!hasUsefulPageEvidence(text)) return [];
 	return [
 		{
@@ -184,9 +196,7 @@ function lacksCompanyLevelEvidence(
 	lead: LocalCampaignLeadRecord,
 	sourceUnit: LocalCampaignSourceUnit | null,
 ): boolean {
-	return (
-		sourceUnit !== null && lead.company_name === null && lead.website === null
-	);
+	return sourceUnit !== null && lead.company_name === null;
 }
 
 function cacheCounters(wasCached: boolean): {
@@ -206,6 +216,32 @@ function seedCompletionFailureReason(
 	if (candidateCount > 0)
 		return "No source unit produced an accepted staged lead.";
 	return "No extraction candidates.";
+}
+
+function emptyRejectionReasons(): Record<
+	LocalCampaignSourceUnitRejectionReason,
+	number
+> {
+	return {
+		weak_website_only: 0,
+		event_vendor_link: 0,
+		navigation_or_footer: 0,
+		registration_or_ticketing: 0,
+		venue_or_organizer: 0,
+		boilerplate: 0,
+		insufficient_company_evidence: 0,
+	};
+}
+
+function addRejectionReasons(
+	target: Record<LocalCampaignSourceUnitRejectionReason, number>,
+	source: Record<LocalCampaignSourceUnitRejectionReason, number>,
+): void {
+	for (const key of Object.keys(
+		source,
+	) as LocalCampaignSourceUnitRejectionReason[]) {
+		target[key] += source[key];
+	}
 }
 
 export async function loadCampaignFile(path: string): Promise<LocalCampaign> {
@@ -258,6 +294,8 @@ export async function runLocalCampaign(
 	let fetched = 0;
 	let cached = 0;
 	let sourceUnits = 0;
+	let rejectedSourceUnits = 0;
+	const sourceUnitRejectionReasons = emptyRejectionReasons();
 	let ollamaCalls = 0;
 	let rejectedByUrlSafety = 0;
 	let failedFetch = 0;
@@ -280,6 +318,8 @@ export async function runLocalCampaign(
 	for (const url of uniqueSeeds) {
 		const seedStartedAt = performance.now();
 		let seedSourceUnitCount = 0;
+		let seedRejectedSourceUnitCount = 0;
+		let seedRejectionReasons = emptyRejectionReasons();
 		let seedOllamaCalls = 0;
 		let seedStagedCount = 0;
 		const emit = (
@@ -294,6 +334,8 @@ export async function runLocalCampaign(
 				url,
 				elapsed_ms: elapsedSince(seedStartedAt),
 				source_unit_count: seedSourceUnitCount,
+				rejected_source_unit_count: seedRejectedSourceUnitCount,
+				rejection_reasons: seedRejectionReasons,
 				ollama_call_count: seedOllamaCalls,
 				...details,
 			});
@@ -307,6 +349,8 @@ export async function runLocalCampaign(
 			failure_reason: failureReason,
 			elapsed_ms: elapsedSince(seedStartedAt),
 			source_unit_count: seedSourceUnitCount,
+			rejected_source_unit_count: seedRejectedSourceUnitCount,
+			rejection_reasons: seedRejectionReasons,
 			ollama_call_count: seedOllamaCalls,
 			staged_count: seedStagedCount,
 			created_at: new Date().toISOString(),
@@ -360,15 +404,32 @@ export async function runLocalCampaign(
 		cached += cache.cached;
 		fetched += cache.fetched;
 		emit(cache.event);
-		const units = extractLocalCampaignSourceUnits(loaded.page.text, url, {
-			max_source_units_per_page: maxSourceUnitsPerPage,
-			max_source_unit_chars: maxSourceUnitChars,
-		});
+		const sourceUnitCandidates = extractLocalCampaignSourceUnitCandidates(
+			loaded.page.text,
+			url,
+			{
+				max_source_units_per_page: maxSourceUnitsPerPage,
+				max_source_unit_chars: maxSourceUnitChars,
+			},
+		);
+		const units = sourceUnitCandidates.units;
+		seedRejectedSourceUnitCount = sourceUnitCandidates.rejected.length;
+		seedRejectionReasons = emptyRejectionReasons();
+		for (const rejection of sourceUnitCandidates.rejected) {
+			seedRejectionReasons[rejection.rejection_reason] += 1;
+		}
+		rejectedSourceUnits += seedRejectedSourceUnitCount;
+		addRejectionReasons(sourceUnitRejectionReasons, seedRejectionReasons);
 		seedSourceUnitCount = units.length;
 		sourceUnits += units.length;
-		emit("source_units_found", { source_unit_count: units.length });
+		emit("source_units_found", {
+			source_unit_count: units.length,
+			rejected_source_unit_count: seedRejectedSourceUnitCount,
+			rejection_reasons: seedRejectionReasons,
+		});
 		const candidates = extractionCandidates(
 			units,
+			seedRejectedSourceUnitCount,
 			loaded.page.text,
 			url,
 			maxOllamaCallsPerSeed,
@@ -376,7 +437,11 @@ export async function runLocalCampaign(
 		);
 		if (units.length === 0 && candidates.length === 0) {
 			const reason = "No company-level source unit or useful page evidence.";
-			emit("source_units_skipped", { reason });
+			emit("source_units_skipped", {
+				reason,
+				rejected_source_unit_count: seedRejectedSourceUnitCount,
+				rejection_reasons: seedRejectionReasons,
+			});
 			emit("seed_completed", { reason });
 			await flushSeedStatus(
 				seedStatuses,
@@ -518,6 +583,8 @@ export async function runLocalCampaign(
 		fetched,
 		cached,
 		source_units: sourceUnits,
+		rejected_source_units: rejectedSourceUnits,
+		source_unit_rejection_reasons: sourceUnitRejectionReasons,
 		ollama_calls: ollamaCalls,
 		rejected_by_url_safety: rejectedByUrlSafety,
 		failed_fetch: failedFetch,

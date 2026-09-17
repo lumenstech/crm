@@ -16,6 +16,24 @@ export type LocalCampaignSourceUnit = {
 	ranking_reasons: string[];
 };
 
+export type LocalCampaignSourceUnitRejectionReason =
+	| "weak_website_only"
+	| "event_vendor_link"
+	| "navigation_or_footer"
+	| "registration_or_ticketing"
+	| "venue_or_organizer"
+	| "boilerplate"
+	| "insufficient_company_evidence";
+
+export type LocalCampaignRejectedSourceUnit = {
+	parent_source_url: string;
+	source_domain: string;
+	candidate_text: string;
+	candidate_website: string | null;
+	extraction_method: LocalCampaignSourceUnit["extraction_method"];
+	rejection_reason: LocalCampaignSourceUnitRejectionReason;
+};
+
 export type LocalCampaignSourceUnitCaps = {
 	max_source_units_per_page: number;
 	max_source_unit_chars: number;
@@ -39,6 +57,16 @@ const PRODUCT_SERVICE =
 	/\b(display|fixture|fabrication|manufacturing|supplier|distributor|automation|machinery|equipment|hardware|server|logistics|laboratory|lab|monitoring|energy|electrical|prototype|parts|services?|products?)\b/i;
 const PROMOTIONAL =
 	/\b(register|registration|schedule|agenda|attendee|buy tickets|book now|learn more|sponsorship opportunity|floor plan|hotel|travel)\b/i;
+const REGISTRATION_TICKETING =
+	/\b(register|registration|tickets?|buy tickets|book now|attendee registration|visitor registration|badge|passes)\b/i;
+const NAVIGATION_FOOTER =
+	/\b(home|about us|contact us|contact-us|privacy|terms|cookie|newsletter|subscribe|login|sign in|menu|navigation|copyright|all rights reserved|media kit|advertise)\b/i;
+const SOCIAL_OR_UTILITY_DOMAIN =
+	/\b(?:facebook|instagram|linkedin|twitter|x|youtube|tiktok|pinterest|google|apple|wa\.me|whatsapp)\.com\b/i;
+const EVENT_VENDOR =
+	/\b(website by|powered by|designed by|marketing \+ guidance|amplify industrial marketing|aimg|map your show|expocad|cvent|eventbrite|swoogo|swapcard|bizzabo|event platform|marketing platform)\b/i;
+const VENUE_OR_ORGANIZER =
+	/\b(venue|organizer|organiser|convention center|conference center|exhibition center|expo center|floor plan|show management|event management)\b/i;
 const BLOCK_PATTERNS = [
 	{ pattern: /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, method: "table_row" as const },
 	{ pattern: /<li\b[^>]*>([\s\S]*?)<\/li>/gi, method: "list_item" as const },
@@ -60,18 +88,32 @@ export function extractLocalCampaignSourceUnits(
 	parentSourceUrl: string,
 	caps: LocalCampaignSourceUnitCaps = DEFAULT_LOCAL_CAMPAIGN_SOURCE_UNIT_CAPS,
 ): LocalCampaignSourceUnit[] {
+	return extractLocalCampaignSourceUnitCandidates(text, parentSourceUrl, caps)
+		.units;
+}
+
+export function extractLocalCampaignSourceUnitCandidates(
+	text: string,
+	parentSourceUrl: string,
+	caps: LocalCampaignSourceUnitCaps = DEFAULT_LOCAL_CAMPAIGN_SOURCE_UNIT_CAPS,
+): {
+	units: LocalCampaignSourceUnit[];
+	rejected: LocalCampaignRejectedSourceUnit[];
+} {
 	const sourceDomain = normalizeDomain(new URL(parentSourceUrl).hostname);
 	const units: LocalCampaignSourceUnit[] = [];
+	const rejected: LocalCampaignRejectedSourceUnit[] = [];
 	for (const entry of BLOCK_PATTERNS) {
 		for (const match of text.matchAll(entry.pattern)) {
-			const unit = buildSourceUnit(
+			const result = buildSourceUnit(
 				match[1] ?? "",
 				parentSourceUrl,
 				sourceDomain,
 				entry.method,
 				caps.max_source_unit_chars,
 			);
-			if (unit) units.push(unit);
+			if (result.unit) units.push(result.unit);
+			else if (result.rejected) rejected.push(result.rejected);
 		}
 	}
 	for (const match of text.matchAll(
@@ -80,7 +122,7 @@ export function extractLocalCampaignSourceUnits(
 		const href = normalizeWebsite(match[1] ?? "", parentSourceUrl);
 		const label = cleanText(match[2] ?? "");
 		const block = [label, href].filter(Boolean).join(" ");
-		const unit = buildSourceUnit(
+		const result = buildSourceUnit(
 			block,
 			parentSourceUrl,
 			sourceDomain,
@@ -88,11 +130,15 @@ export function extractLocalCampaignSourceUnits(
 			caps.max_source_unit_chars,
 			href,
 		);
-		if (unit) units.push(unit);
+		if (result.unit) units.push(result.unit);
+		else if (result.rejected) rejected.push(result.rejected);
 	}
-	return dedupeSourceUnits(units)
-		.sort((left, right) => right.rank_score - left.rank_score)
-		.slice(0, caps.max_source_units_per_page);
+	return {
+		units: dedupeSourceUnits(units)
+			.sort((left, right) => right.rank_score - left.rank_score)
+			.slice(0, caps.max_source_units_per_page),
+		rejected,
+	};
 }
 
 export function hasUsefulPageEvidence(text: string): boolean {
@@ -229,19 +275,40 @@ function buildSourceUnit(
 	extractionMethod: LocalCampaignSourceUnit["extraction_method"],
 	maxChars: number,
 	websiteHint: string | null = null,
-): LocalCampaignSourceUnit | null {
+): {
+	unit: LocalCampaignSourceUnit | null;
+	rejected: LocalCampaignRejectedSourceUnit | null;
+} {
 	const cleaned = cleanText(raw);
-	if (!looksCompanyLevel(cleaned) || isOnlyEventLevel(cleaned)) return null;
 	const candidateText = cleaned.slice(0, maxChars);
-	const contentHash = createHash("sha256")
-		.update(`${parentSourceUrl}:${candidateText}`, "utf8")
-		.digest("hex");
 	const company = candidateCompanyName(candidateText);
 	const website =
 		websiteHint ??
 		candidateText.match(WEBSITE_PATTERN)?.[0]?.replace(/[),.]+$/, "") ??
 		null;
 	const location = candidateLocation(candidateText);
+	const rejectionReason = sourceUnitRejectionReason(candidateText, {
+		candidate_company_name: company,
+		candidate_website: website,
+		candidate_location: location,
+		extraction_method: extractionMethod,
+	});
+	if (rejectionReason) {
+		return {
+			unit: null,
+			rejected: {
+				parent_source_url: parentSourceUrl,
+				source_domain: sourceDomain,
+				candidate_text: candidateText,
+				candidate_website: website,
+				extraction_method: extractionMethod,
+				rejection_reason: rejectionReason,
+			},
+		};
+	}
+	const contentHash = createHash("sha256")
+		.update(`${parentSourceUrl}:${candidateText}`, "utf8")
+		.digest("hex");
 	const ranking = rankLocalCampaignSourceUnitText(candidateText, {
 		parent_source_url: parentSourceUrl,
 		source_domain: sourceDomain,
@@ -251,18 +318,68 @@ function buildSourceUnit(
 		extraction_method: extractionMethod,
 	});
 	return {
-		unit_id: contentHash.slice(0, 24),
-		parent_source_url: parentSourceUrl,
-		source_domain: sourceDomain,
-		candidate_company_name: company,
-		candidate_website: website,
-		candidate_location: location,
-		candidate_text: candidateText,
-		evidence_excerpt: candidateText.slice(0, 500),
-		extraction_method: extractionMethod,
-		content_hash: contentHash,
-		...ranking,
+		unit: {
+			unit_id: contentHash.slice(0, 24),
+			parent_source_url: parentSourceUrl,
+			source_domain: sourceDomain,
+			candidate_company_name: company,
+			candidate_website: website,
+			candidate_location: location,
+			candidate_text: candidateText,
+			evidence_excerpt: candidateText.slice(0, 500),
+			extraction_method: extractionMethod,
+			content_hash: contentHash,
+			...ranking,
+		},
+		rejected: null,
 	};
+}
+
+export function sourceUnitRejectionReason(
+	text: string,
+	context: {
+		candidate_company_name?: string | null;
+		candidate_website?: string | null;
+		candidate_location?: string | null;
+		extraction_method?: LocalCampaignSourceUnit["extraction_method"];
+	} = {},
+): LocalCampaignSourceUnitRejectionReason | null {
+	const cleaned = cleanText(text);
+	const website = context.candidate_website ?? null;
+	const company =
+		context.candidate_company_name ?? candidateCompanyName(cleaned);
+	const location = context.candidate_location ?? candidateLocation(cleaned);
+	const hasWebsite = website !== null || WEBSITE_PATTERN.test(cleaned);
+	const hasBooth = BOOTH_PATTERN.test(cleaned);
+	const hasProduct = PRODUCT_SERVICE.test(cleaned);
+	const hasExhibitorContext =
+		/\b(exhibitor|booth|stand|pavilion)\b/i.test(cleaned) ||
+		(context.extraction_method === "link_context" &&
+			website !== null &&
+			EXHIBITOR_PROFILE.test(website));
+
+	if (cleaned.length < 20) return "insufficient_company_evidence";
+	if (EVENT_VENDOR.test(cleaned) || (website && EVENT_VENDOR.test(website))) {
+		return "event_vendor_link";
+	}
+	if (website && SOCIAL_OR_UTILITY_DOMAIN.test(website)) {
+		return "navigation_or_footer";
+	}
+	if (REGISTRATION_TICKETING.test(cleaned)) return "registration_or_ticketing";
+	if (VENUE_OR_ORGANIZER.test(cleaned) && !company) return "venue_or_organizer";
+	if (BOILERPLATE.test(cleaned) || NAVIGATION_FOOTER.test(cleaned)) {
+		return "boilerplate";
+	}
+	if (isOnlyEventLevel(cleaned)) return "venue_or_organizer";
+	if (!looksCompanyLevel(cleaned)) return "insufficient_company_evidence";
+	if (!company)
+		return hasWebsite ? "weak_website_only" : "insufficient_company_evidence";
+	if (
+		!(hasWebsite || location || hasBooth || hasProduct || hasExhibitorContext)
+	) {
+		return "insufficient_company_evidence";
+	}
+	return null;
 }
 
 function looksCompanyLevel(text: string): boolean {
