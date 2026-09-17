@@ -167,7 +167,9 @@ export async function fetchLocalLeadSource(
 	const maxBytes = options.maxBytes ?? DEFAULT_MAX_SOURCE_BYTES;
 	const contentLength = Number(response.headers.get("content-length"));
 	if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-		throw new Error("Source exceeds the maximum content size.");
+		throw new Error(
+			`Source exceeds the maximum content size of ${maxBytes} bytes.`,
+		);
 	}
 	if (!response.body) throw new Error("Source returned no body.");
 
@@ -181,7 +183,9 @@ export async function fetchLocalLeadSource(
 			size += next.value.byteLength;
 			if (size > maxBytes) {
 				await reader.cancel();
-				throw new Error("Source exceeds the maximum content size.");
+				throw new Error(
+					`Source exceeds the maximum content size of ${maxBytes} bytes.`,
+				);
 			}
 			chunks.push(next.value);
 		}

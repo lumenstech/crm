@@ -7,7 +7,10 @@ import {
 	localCampaignCsv,
 	localCampaignJsonl,
 } from "../agent/lib/local-campaign-export";
-import { parseLocalCampaignResponse } from "../agent/lib/local-campaign-extraction";
+import {
+	extractLocalCampaignLead,
+	parseLocalCampaignResponse,
+} from "../agent/lib/local-campaign-extraction";
 import {
 	assertLocalCampaignOnly,
 	loadCampaignSeeds,
@@ -132,14 +135,14 @@ describe("local campaign runner", () => {
 					page: {
 						url,
 						content_hash: url,
-						text: "Acme Displays LLC is an exhibitor display company in Chicago.",
+						text: "Acme Displays, https://acme.example, is an exhibitor display company in Chicago.",
 						fetched_at: new Date().toISOString(),
 					},
 				}),
 				client: {
 					generate: async () => ({
 						text:
-							calls++ === 0
+							calls++ < 2
 								? '{"invalid":true}'
 								: leadJson.replace("https://example.com/one", secondUrl),
 						latencyMs: 4,
@@ -200,6 +203,90 @@ describe("local campaign runner", () => {
 				"https://example.com/one",
 			),
 		).toThrow("company_name is not present");
+	});
+
+	it("requires project_fit_reason to be a string", () => {
+		const value = JSON.parse(leadJson) as Record<string, unknown>;
+		value.project_fit_reason = null;
+		expect(() =>
+			parseLocalCampaignResponse(
+				JSON.stringify(value),
+				"https://example.com/one",
+			),
+		).toThrow("project_fit_reason");
+	});
+
+	it("requires non-empty exact source evidence", () => {
+		const emptyEvidence = JSON.parse(leadJson) as Record<string, unknown>;
+		emptyEvidence.evidence_excerpt = "";
+		expect(() =>
+			parseLocalCampaignResponse(
+				JSON.stringify(emptyEvidence),
+				"https://example.com/one",
+				"Acme Displays source text.",
+			),
+		).toThrow("evidence_excerpt");
+		const wrongEvidence = JSON.parse(leadJson) as Record<string, unknown>;
+		wrongEvidence.evidence_excerpt =
+			"Acme Displays, https://acme.example, is an exhibitor display company in Chicago.";
+		expect(() =>
+			parseLocalCampaignResponse(
+				JSON.stringify(wrongEvidence),
+				"https://example.com/one",
+				"Different source text.",
+			),
+		).toThrow("evidence_excerpt is not present");
+	});
+
+	it("retries schema-invalid model output once and accepts a repaired response", async () => {
+		const sourceText =
+			"Acme Displays, https://acme.example, is an exhibitor display company in Chicago.";
+		let calls = 0;
+		const result = await extractLocalCampaignLead(
+			sourceText,
+			"https://example.com/one",
+			{
+				generate: async () => {
+					calls += 1;
+					return {
+						text:
+							calls === 1
+								? JSON.stringify({
+										...JSON.parse(leadJson),
+										evidence_excerpt: "",
+										project_fit_reason: null,
+									})
+								: leadJson,
+						latencyMs: 5,
+					};
+				},
+			},
+		);
+		expect(result.attempt_count).toBe(2);
+		expect(result.latency_ms).toBe(10);
+	});
+
+	it("rejects after one failed repair attempt with the Zod issue", async () => {
+		let calls = 0;
+		await expect(
+			extractLocalCampaignLead(
+				"Acme Displays, https://acme.example, is an exhibitor display company in Chicago.",
+				"https://example.com/one",
+				{
+					generate: async () => {
+						calls += 1;
+						return {
+							text: JSON.stringify({
+								...JSON.parse(leadJson),
+								project_fit_reason: null,
+							}),
+							latencyMs: 5,
+						};
+					},
+				},
+			),
+		).rejects.toThrow("project_fit_reason");
+		expect(calls).toBe(2);
 	});
 
 	it("scores from keywords, evidence, and fields", () => {
@@ -326,6 +413,56 @@ describe("local campaign runner", () => {
 		expect(calls.every((prompt) => !prompt.includes("<tr>"))).toBe(true);
 	});
 
+	it("rejects source unit output without company-level evidence", async () => {
+		const thinLead = JSON.stringify({
+			company_name: null,
+			website: null,
+			contact_name: null,
+			role: null,
+			email: null,
+			phone: null,
+			location: null,
+			source_url: "https://example.com/exhibitors",
+			evidence_excerpt: "Members Company Application",
+			project_fit_reason:
+				"The source text does not identify a specific company or website.",
+			missing_fields: [
+				"company_name",
+				"website",
+				"contact_name",
+				"role",
+				"email",
+				"phone",
+				"location",
+			],
+		});
+		const result = await runLocalCampaign(
+			{ ...campaign, max_ollama_calls_per_seed: 1, max_companies: 5 },
+			["https://example.com/exhibitors"],
+			{
+				pageLoader: async (url) => ({
+					cached: false,
+					page: {
+						url,
+						content_hash: "hash",
+						text: "<li>Members Company Application https://application.example</li>",
+						fetched_at: new Date().toISOString(),
+					},
+				}),
+				client: { generate: async () => ({ text: thinLead, latencyMs: 4 }) },
+				stager: async (lead, path) => ({
+					path: path ?? "local",
+					staged: lead,
+					duplicate: false,
+				}),
+			},
+		);
+		expect(result.staged).toBe(0);
+		expect(result.failures[0]?.reason).toBe(
+			"Source unit did not produce company-level evidence.",
+		);
+	});
+
 	it("falls back to page-level extraction when no source units are found", async () => {
 		let calls = 0;
 		const result = await runLocalCampaign(
@@ -337,7 +474,7 @@ describe("local campaign runner", () => {
 					page: {
 						url,
 						content_hash: "hash",
-						text: "Acme Displays LLC is an exhibitor display company in Chicago.",
+						text: "Acme Displays, https://acme.example, is an exhibitor display company in Chicago.",
 						fetched_at: new Date().toISOString(),
 					},
 				}),

@@ -180,6 +180,34 @@ function extractionCandidates(
 	];
 }
 
+function lacksCompanyLevelEvidence(
+	lead: LocalCampaignLeadRecord,
+	sourceUnit: LocalCampaignSourceUnit | null,
+): boolean {
+	return (
+		sourceUnit !== null && lead.company_name === null && lead.website === null
+	);
+}
+
+function cacheCounters(wasCached: boolean): {
+	cached: number;
+	fetched: number;
+	event: "cache_hit" | "cache_miss";
+} {
+	if (wasCached) return { cached: 1, fetched: 0, event: "cache_hit" };
+	return { cached: 0, fetched: 1, event: "cache_miss" };
+}
+
+function seedCompletionFailureReason(
+	stagedCount: number,
+	candidateCount: number,
+): string | null {
+	if (stagedCount > 0) return null;
+	if (candidateCount > 0)
+		return "No source unit produced an accepted staged lead.";
+	return "No extraction candidates.";
+}
+
 export async function loadCampaignFile(path: string): Promise<LocalCampaign> {
 	return localCampaignSchema.parse(JSON.parse(await readFile(path, "utf8")));
 }
@@ -328,13 +356,10 @@ export async function runLocalCampaign(
 			);
 			continue;
 		}
-		if (loaded.cached) {
-			cached += 1;
-			emit("cache_hit");
-		} else {
-			fetched += 1;
-			emit("cache_miss");
-		}
+		const cache = cacheCounters(loaded.cached);
+		cached += cache.cached;
+		fetched += cache.fetched;
+		emit(cache.event);
 		const units = extractLocalCampaignSourceUnits(loaded.page.text, url, {
 			max_source_units_per_page: maxSourceUnitsPerPage,
 			max_source_unit_chars: maxSourceUnitChars,
@@ -410,6 +435,17 @@ export async function runLocalCampaign(
 				});
 				continue;
 			}
+			if (lacksCompanyLevelEvidence(lead, candidate.sourceUnit)) {
+				const reason = "Source unit did not produce company-level evidence.";
+				extractionFailures += 1;
+				emit("ollama_call_failed", { reason });
+				failures.push({
+					url: candidate.sourceUrl,
+					stage: "extraction",
+					reason,
+				});
+				continue;
+			}
 			const scores = scoreLocalCampaignLead(lead, campaign, {
 				sourceUnit: candidate.sourceUnit !== null,
 				extractionMethod: candidate.sourceUnit?.extraction_method ?? null,
@@ -458,12 +494,10 @@ export async function runLocalCampaign(
 			}
 		}
 		if (!seedTimedOut && !seedStatuses.some((entry) => entry.url === url)) {
-			const reason =
-				seedStagedCount > 0
-					? null
-					: candidates.length > 0
-						? "No source unit produced an accepted staged lead."
-						: "No extraction candidates.";
+			const reason = seedCompletionFailureReason(
+				seedStagedCount,
+				candidates.length,
+			);
 			emit(reason ? "seed_failed" : "seed_completed", {
 				reason: reason ?? undefined,
 			});
