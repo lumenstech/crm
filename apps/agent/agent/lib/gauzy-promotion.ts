@@ -1,20 +1,25 @@
-import { db } from "@crm/db";
+import { loadRootEnv } from "@crm/env";
 import type { LeasedTask } from "./tasks";
 
+loadRootEnv();
+
 export async function runGauzyPromotion(task: LeasedTask): Promise<void> {
-	if (!task.payload || typeof task.payload !== "object" || Array.isArray(task.payload)) {
-		throw new Error("Gauzy promotion task has no valid payload.");
-	}
+	if (!task.payload || typeof task.payload !== "object" || Array.isArray(task.payload)) throw new Error("Gauzy promotion task has no valid payload.");
 	const payload = task.payload as Record<string, unknown>;
 	const eventId = typeof payload.eventId === "string" ? payload.eventId : null;
 	if (!eventId) throw new Error("Gauzy promotion task has no eventId.");
 
-	// The API owns the Gauzy adapter and promotion transaction. Agent dispatch only
-	// owns durable claiming/retry. Keep this boundary explicit rather than importing
-	// API internals into the agent package.
-	const event = await db.lumensOsEvent.findUnique({ where: { id: eventId }, select: { status: true } });
-	if (!event) throw new Error(`Lumens OS event ${eventId} no longer exists.`);
-	if (event.status === "processed") return;
+	const baseUrl = process.env.API_URL?.replace(/\/$/, "");
+	const secret = process.env.CRON_SECRET;
+	if (!baseUrl || !secret) throw new Error("API_URL and CRON_SECRET are required for Gauzy task execution.");
 
-	throw new Error("Gauzy promotion execution requires the API promotion boundary.");
+	const response = await fetch(`${baseUrl}/internal/lumens-os/gauzy/promote/${encodeURIComponent(eventId)}`, {
+		method: "POST",
+		headers: { authorization: `Bearer ${secret}` },
+		signal: AbortSignal.timeout(30_000),
+	});
+	if (!response.ok) {
+		const body = await response.text().catch(() => "");
+		throw new Error(`Gauzy promotion API returned ${response.status}: ${body.slice(0, 300)}`);
+	}
 }
