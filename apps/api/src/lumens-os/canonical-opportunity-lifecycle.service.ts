@@ -20,7 +20,7 @@ export class CanonicalOpportunityLifecycleService {
 			const current = rows[0];
 			if (!current) throw new NotFoundException(`Canonical opportunity ${input.opportunityId} not found.`);
 			const previousStage = current.stage;
-			if (previousStage === nextStage) return { opportunityId: current.id, previousStage, stage: nextStage, changed: false, wonEventCreated: false };
+			if (previousStage.trim().toLowerCase() === nextStage.toLowerCase()) return { opportunityId: current.id, previousStage, stage: nextStage, changed: false, wonEventCreated: false };
 			await tx.canonicalOpportunity.update({ where: { id: current.id }, data: { stage: nextStage } });
 			let wonEventCreated = false;
 			if (previousStage.trim().toLowerCase() !== "won" && nextStage.toLowerCase() === "won") {
