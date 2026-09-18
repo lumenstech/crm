@@ -15,6 +15,7 @@ const STEPS = {
 	"slack-people-match": "Matching people in Slack",
 	"slack-channel-join": "Joining a Slack channel",
 	"agent-event": "Reacting to a change",
+	gauzy_promotion: "Promoting won opportunity to Gauzy",
 } satisfies Record<TaskKind, string>;
 
 const STEP_BY_KIND = new Map<string, string>(Object.entries(STEPS));
