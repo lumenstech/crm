@@ -277,7 +277,7 @@ async function callTool(
 			const { eventId } = lumensOperationInput.parse(args);
 			return db.lumensOsEvent.findUnique({
 				where: { id: eventId },
-				select: { id: true, eventType: true, aggregateType: true, aggregateId: true, businessUnitId: true, status: true, attempts: true, lastError: true, nextAttemptAt: true, processedAt: true, createdAt: true, updatedAt: true },
+				select: { id: true, eventType: true, aggregateType: true, aggregateId: true, businessUnitId: true, status: true, attempts: true, lastError: true, availableAt: true, leasedUntil: true, processedAt: true, createdAt: true, updatedAt: true },
 			});
 		}
 		default:
