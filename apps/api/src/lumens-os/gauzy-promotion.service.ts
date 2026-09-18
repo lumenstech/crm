@@ -180,10 +180,6 @@ export class GauzyPromotionService {
 				where: { id: promotionId },
 				data: { status: "processing", lastError: null, updatedAt: now },
 			}),
-			this.db.agentTask.updateMany({
-				where: { kind: "gauzy_promotion", subject: eventId, finishedAt: null },
-				data: { attempts: { increment: 1 }, startedAt: now },
-			}),
 		]);
 	}
 
