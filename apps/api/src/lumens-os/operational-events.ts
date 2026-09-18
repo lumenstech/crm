@@ -20,7 +20,7 @@ export type OperationalEventV1 = {
 	businessUnitId: string;
 	/** Stable command/revision identifier. Required for mutable operations so later updates are not suppressed. */
 	commandId?: string;
-	data: Record<string, unknown>;
+	data: Prisma.InputJsonObject;
 };
 
 type TransactionDb = Prisma.TransactionClient;
@@ -44,7 +44,7 @@ export async function emitOperationalEvent(tx: TransactionDb, input: Operational
 			aggregateType: input.canonicalType,
 			aggregateId: input.canonicalId,
 			businessUnitId: input.businessUnitId,
-			payload: input,
+			payload: input as Prisma.InputJsonObject,
 			idempotencyKey,
 			createdAt: now,
 			updatedAt: now,
