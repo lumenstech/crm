@@ -8,19 +8,19 @@ class FakeGauzy implements GauzyAdapter {
 	projects = 0;
 	failProjectOnce = false;
 
-	async findOrCreateOrganization() {
+	async findOrCreateOrganization(_input: Parameters<GauzyAdapter["findOrCreateOrganization"]>[0]) {
 		this.organizations += 1;
 		return { id: "org-1" };
 	}
-	async findOrCreateCustomer() {
+	async findOrCreateCustomer(_input: Parameters<GauzyAdapter["findOrCreateCustomer"]>[0]) {
 		this.customers += 1;
 		return { id: "customer-1" };
 	}
-	async findOrCreateContact() {
+	async findOrCreateContact(_input: Parameters<GauzyAdapter["findOrCreateContact"]>[0]) {
 		this.contacts += 1;
 		return { id: "contact-1" };
 	}
-	async findOrCreateProject() {
+	async findOrCreateProject(_input: Parameters<GauzyAdapter["findOrCreateProject"]>[0]) {
 		this.projects += 1;
 		if (this.failProjectOnce) {
 			this.failProjectOnce = false;
