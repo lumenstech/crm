@@ -1,3 +1,4 @@
+import { db } from "@crm/db";
 import type { AnyRouter } from "@trpc/server";
 import type { Request, Response } from "express";
 import { z } from "zod";
@@ -16,6 +17,7 @@ import {
 	sourceIdInput,
 } from "../ingest/resolution.contracts";
 import { createBaseTrpcContext } from "../trpc/trpc.context";
+import { emitOperationalEvent } from "../lumens-os/operational-events";
 import { MCP } from "./mcp.config";
 import { mcpRequest, mcpToolCallParams } from "./mcp.contracts";
 
@@ -26,6 +28,37 @@ const confirmedIngestInput = ingestSignalInput.extend({
 const confirmedResearchInput = companyIdInput.extend({
 	confirm: z.literal(true),
 });
+const lumensProjectInput = z.object({
+	businessUnitId: z.string().min(1),
+	opportunityId: z.string().min(1),
+	companyId: z.string().min(1),
+	name: z.string().min(1),
+	confirm: z.literal(true),
+});
+const lumensTaskInput = z.object({
+	businessUnitId: z.string().min(1),
+	taskId: z.string().min(1),
+	opportunityId: z.string().min(1),
+	title: z.string().min(1),
+	description: z.string().nullable().optional(),
+	confirm: z.literal(true),
+});
+const lumensAssignmentInput = z.object({
+	businessUnitId: z.string().min(1),
+	taskId: z.string().min(1),
+	personId: z.string().min(1),
+	commandId: z.string().min(1),
+	confirm: z.literal(true),
+});
+const lumensScheduleInput = z.object({
+	businessUnitId: z.string().min(1),
+	taskId: z.string().min(1),
+	startAt: z.string().datetime(),
+	endAt: z.string().datetime().nullable().optional(),
+	commandId: z.string().min(1),
+	confirm: z.literal(true),
+});
+const lumensOperationInput = z.object({ eventId: z.string().min(1) });
 
 const tools = [
 	{
@@ -175,7 +208,32 @@ const tools = [
 			required: ["reviewId", "decision", "reason", "confirm"],
 			additionalProperties: false,
 		},
+	},,
+	{
+		name: "lumens_sync_project",
+		description: "Queue an idempotent canonical opportunity-to-Gauzy project synchronization.",
+		inputSchema: { type: "object", properties: { businessUnitId: { type: "string" }, opportunityId: { type: "string" }, companyId: { type: "string" }, name: { type: "string" }, confirm: { const: true } }, required: ["businessUnitId", "opportunityId", "companyId", "name", "confirm"], additionalProperties: false },
 	},
+	{
+		name: "lumens_sync_task",
+		description: "Queue an idempotent canonical task-to-Gauzy task synchronization.",
+		inputSchema: { type: "object", properties: { businessUnitId: { type: "string" }, taskId: { type: "string" }, opportunityId: { type: "string" }, title: { type: "string" }, description: { type: ["string", "null"] }, confirm: { const: true } }, required: ["businessUnitId", "taskId", "opportunityId", "title", "confirm"], additionalProperties: false },
+	},
+	{
+		name: "lumens_assign_task",
+		description: "Queue a versioned canonical task assignment command.",
+		inputSchema: { type: "object", properties: { businessUnitId: { type: "string" }, taskId: { type: "string" }, personId: { type: "string" }, commandId: { type: "string" }, confirm: { const: true } }, required: ["businessUnitId", "taskId", "personId", "commandId", "confirm"], additionalProperties: false },
+	},
+	{
+		name: "lumens_schedule_task",
+		description: "Queue a versioned canonical task scheduling command.",
+		inputSchema: { type: "object", properties: { businessUnitId: { type: "string" }, taskId: { type: "string" }, startAt: { type: "string", format: "date-time" }, endAt: { type: ["string", "null"], format: "date-time" }, commandId: { type: "string" }, confirm: { const: true } }, required: ["businessUnitId", "taskId", "startAt", "commandId", "confirm"], additionalProperties: false },
+	},
+	{
+		name: "lumens_get_operation",
+		description: "Read durable Lumens OS operation status by event id.",
+		inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"], additionalProperties: false },
+	}
 ] as const;
 
 type Caller = ReturnType<AppRouter["createCaller"]>;
@@ -254,6 +312,45 @@ async function callTool(
 			return caller.resolution.listReviews(reviewListInput.parse(args ?? {}));
 		case "crm_decide_resolution_review":
 			return caller.resolution.decide(reviewDecisionInput.parse(args));
+		case "lumens_sync_project": {
+			const input = lumensProjectInput.parse(args);
+			return db.$transaction((tx) => emitOperationalEvent(tx, {
+				version: 1, eventType: "project.sync", canonicalType: "opportunity",
+				canonicalId: input.opportunityId, businessUnitId: input.businessUnitId,
+				data: { companyId: input.companyId, name: input.name },
+			}));
+		}
+		case "lumens_sync_task": {
+			const input = lumensTaskInput.parse(args);
+			return db.$transaction((tx) => emitOperationalEvent(tx, {
+				version: 1, eventType: "task.sync", canonicalType: "task",
+				canonicalId: input.taskId, businessUnitId: input.businessUnitId,
+				data: { opportunityId: input.opportunityId, title: input.title, description: input.description ?? null },
+			}));
+		}
+		case "lumens_assign_task": {
+			const input = lumensAssignmentInput.parse(args);
+			return db.$transaction((tx) => emitOperationalEvent(tx, {
+				version: 1, eventType: "task.assign", canonicalType: "task",
+				canonicalId: input.taskId, businessUnitId: input.businessUnitId, commandId: input.commandId,
+				data: { taskId: input.taskId, personId: input.personId },
+			}));
+		}
+		case "lumens_schedule_task": {
+			const input = lumensScheduleInput.parse(args);
+			return db.$transaction((tx) => emitOperationalEvent(tx, {
+				version: 1, eventType: "task.schedule", canonicalType: "task",
+				canonicalId: input.taskId, businessUnitId: input.businessUnitId, commandId: input.commandId,
+				data: { taskId: input.taskId, startAt: input.startAt, endAt: input.endAt ?? null },
+			}));
+		}
+		case "lumens_get_operation": {
+			const { eventId } = lumensOperationInput.parse(args);
+			return db.lumensOsEvent.findUnique({
+				where: { id: eventId },
+				select: { id: true, eventType: true, aggregateType: true, aggregateId: true, businessUnitId: true, status: true, attempts: true, lastError: true, nextAttemptAt: true, processedAt: true, createdAt: true, updatedAt: true },
+			});
+		}
 		default:
 			throw new Error(`Unknown MCP tool: ${name}.`);
 	}
@@ -318,7 +415,7 @@ export function createMcpGateway(router: AnyRouter) {
 						supportedVersions: [MCP.protocolVersion],
 						capabilities: { tools: { listChanged: false } },
 						instructions:
-							"Use the CRM tools for authenticated internal CRM reads and staged signal ingestion.",
+							"Use CRM tools for authenticated intelligence workflows and Lumens OS tools for confirmed, durable operational commands. Lumens OS mutations are queued and auditable; they do not bypass orchestration.",
 						ttlMs: MCP.toolListTtlMs,
 						cacheScope: "private",
 					}),
