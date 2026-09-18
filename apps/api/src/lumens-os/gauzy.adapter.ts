@@ -16,6 +16,7 @@ export type GauzyCustomerInput = {
 export type GauzyContactInput = {
 	canonicalPersonId: string;
 	customerId: string;
+	organizationId: string;
 	firstName?: string | null;
 	lastName?: string | null;
 	email?: string | null;
