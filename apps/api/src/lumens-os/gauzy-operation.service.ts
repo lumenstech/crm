@@ -42,6 +42,24 @@ function optionalDateField(data: Record<string, unknown>, key: string): Date | n
 	return dateField(data, key);
 }
 
+type GauzyExternalType = "organization" | "customer" | "contact" | "project" | "task" | "employee";
+
+async function resolveGauzyIdentity(db: Db, canonicalType: string, canonicalId: string, externalType: GauzyExternalType): Promise<string> {
+	const identity = await db.externalIdentity.findUnique({
+		where: {
+			canonicalType_canonicalId_provider_externalType: {
+				canonicalType,
+				canonicalId,
+				provider: "gauzy",
+				externalType,
+			},
+		},
+		select: { externalId: true },
+	});
+	if (!identity) throw new PermanentOperationError(`No Gauzy ${externalType} identity for ${canonicalType} ${canonicalId}.`);
+	return identity.externalId;
+}
+
 @Injectable()
 export class GauzyOperationService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
@@ -63,21 +81,22 @@ export class GauzyOperationService {
 			}
 
 		await this.markAttempt(eventId);
+		const organizationId = await resolveGauzyIdentity(this.db, "business_unit", payload.businessUnitId, "organization");
 		let result: { id: string };
 		switch (payload.eventType) {
 			case "project.sync":
 				result = await gauzy.findOrCreateProject({
 					canonicalOpportunityId: payload.canonicalId,
-					customerId: stringField(data, "customerId"),
-					organizationId: stringField(data, "organizationId"),
+					customerId: await resolveGauzyIdentity(this.db, "company", stringField(data, "companyId"), "customer"),
+					organizationId,
 					name: stringField(data, "name"),
 				});
 				break;
 			case "task.sync":
 				result = await gauzy.findOrCreateTask({
 					canonicalTaskId: payload.canonicalId,
-					projectId: stringField(data, "projectId"),
-					organizationId: stringField(data, "organizationId"),
+					projectId: await resolveGauzyIdentity(this.db, "opportunity", stringField(data, "opportunityId"), "project"),
+					organizationId,
 					title: stringField(data, "title"),
 					description: typeof data.description === "string" ? data.description : null,
 				});
@@ -85,16 +104,16 @@ export class GauzyOperationService {
 			case "task.assign":
 				result = await gauzy.assignTask({
 					canonicalAssignmentId: payload.canonicalId,
-					taskId: stringField(data, "taskId"),
-					organizationId: stringField(data, "organizationId"),
-					employeeId: stringField(data, "employeeId"),
+					taskId: await resolveGauzyIdentity(this.db, "task", stringField(data, "taskId"), "task"),
+					organizationId,
+					employeeId: await resolveGauzyIdentity(this.db, "person", stringField(data, "personId"), "employee"),
 				});
 				break;
 			case "task.schedule":
 				result = await gauzy.upsertSchedule({
 					canonicalScheduleId: payload.canonicalId,
-					taskId: stringField(data, "taskId"),
-					organizationId: stringField(data, "organizationId"),
+					taskId: await resolveGauzyIdentity(this.db, "task", stringField(data, "taskId"), "task"),
+					organizationId,
 					startAt: dateField(data, "startAt"),
 					endAt: optionalDateField(data, "endAt"),
 				});
