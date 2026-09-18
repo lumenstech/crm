@@ -39,6 +39,16 @@ export class GauzyOperationService {
 		const payload = event.payload;
 		const data = payload.data;
 
+		if (event.status === "processed") {
+			const existing = await this.db.externalIdentity.findUnique({
+				where: { canonicalType_canonicalId_provider_externalType: { canonicalType: payload.canonicalType, canonicalId: payload.canonicalId, provider: "gauzy", externalType: payload.eventType } },
+				select: { externalId: true },
+			});
+			if (existing) return { id: existing.externalId };
+		}
+
+		await this.markAttempt(eventId);
+		try {
 		let result: { id: string };
 		switch (payload.eventType) {
 			case "project.sync":
@@ -108,5 +118,33 @@ export class GauzyOperationService {
 			}),
 		]);
 		return result;
+		} catch (error) {
+			await this.recordFailure(eventId, error);
+			throw error;
+		}
+	}
+
+	private async markAttempt(eventId: string) {
+		const now = new Date();
+		await this.db.lumensOsEvent.update({
+			where: { id: eventId },
+			data: { status: "processing", attempts: { increment: 1 }, leasedUntil: new Date(now.getTime() + 5 * 60_000), lastError: null, updatedAt: now },
+		});
+	}
+
+	private async recordFailure(eventId: string, error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		const now = new Date();
+		const retryAt = new Date(now.getTime() + 60_000);
+		await this.db.$transaction([
+			this.db.lumensOsEvent.update({
+				where: { id: eventId },
+				data: { status: "pending", lastError: message, leasedUntil: null, availableAt: retryAt, updatedAt: now },
+			}),
+			this.db.agentTask.updateMany({
+				where: { kind: "gauzy_operation", subject: eventId, finishedAt: null },
+				data: { dueAt: retryAt, outcome: `retry: ${message}` },
+			}),
+		]);
 	}
 }
