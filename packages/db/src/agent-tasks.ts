@@ -24,6 +24,7 @@ export const DIRECT_KINDS = [
 	"slack-channel-join",
 	"agent-event",
 	"gauzy_promotion",
+	"gauzy_operation",
 ] as const;
 
 export type DirectKind = (typeof DIRECT_KINDS)[number];
