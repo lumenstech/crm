@@ -10,6 +10,7 @@ import { collapsing, runLimited } from "./pool";
 import { runPortrait } from "./portrait";
 import { runSlackChannelJoin } from "./slack-join-task";
 import { runSlackPeopleMatch } from "./slack-people";
+import { runGauzyPromotion } from "./gauzy-promotion";
 import { staleTaskSweep } from "./stale-tasks";
 import {
 	claimDue,
@@ -114,6 +115,11 @@ async function handleDirect(task: LeasedTask): Promise<void> {
 
 	if (task.kind === "slack-channel-join") {
 		await completeTask(task.id, await runSlackChannelJoin(task.payload));
+		return;
+	}
+
+	if (task.kind === "gauzy_promotion") {
+		await runGauzyPromotion(task);
 		return;
 	}
 
