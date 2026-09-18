@@ -11,6 +11,7 @@ import { runPortrait } from "./portrait";
 import { runSlackChannelJoin } from "./slack-join-task";
 import { runSlackPeopleMatch } from "./slack-people";
 import { runGauzyPromotion } from "./gauzy-promotion";
+import { runGauzyOperation } from "./gauzy-operation";
 import { staleTaskSweep } from "./stale-tasks";
 import {
 	claimDue,
@@ -120,6 +121,11 @@ async function handleDirect(task: LeasedTask): Promise<void> {
 
 	if (task.kind === "gauzy_promotion") {
 		await runGauzyPromotion(task);
+		return;
+	}
+
+	if (task.kind === "gauzy_operation") {
+		await runGauzyOperation(task);
 		return;
 	}
 
