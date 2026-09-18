@@ -18,13 +18,17 @@ export type OperationalEventV1 = {
 	canonicalType: string;
 	canonicalId: string;
 	businessUnitId: string;
+	/** Stable command/revision identifier. Required for mutable operations so later updates are not suppressed. */
+	commandId?: string;
 	data: Record<string, unknown>;
 };
 
 type TransactionDb = Prisma.TransactionClient;
 
 export async function emitOperationalEvent(tx: TransactionDb, input: OperationalEventV1) {
-	const idempotencyKey = `${input.eventType}:${input.canonicalType}:${input.canonicalId}`;
+	const mutable = input.eventType === "task.assign" || input.eventType === "task.schedule";
+	if (mutable && !input.commandId) throw new Error(`Lumens OS ${input.eventType} requires commandId.`);
+	const idempotencyKey = [input.eventType, input.canonicalType, input.canonicalId, input.commandId].filter(Boolean).join(":");
 	const existing = await tx.lumensOsEvent.findUnique({
 		where: { idempotencyKey },
 		select: { id: true },
