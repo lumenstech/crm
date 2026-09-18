@@ -16,8 +16,8 @@ import {
 	reviewListInput,
 	sourceIdInput,
 } from "../ingest/resolution.contracts";
-import { createBaseTrpcContext } from "../trpc/trpc.context";
 import { emitOperationalEvent } from "../lumens-os/operational-events";
+import { createBaseTrpcContext } from "../trpc/trpc.context";
 import { MCP } from "./mcp.config";
 import { mcpRequest, mcpToolCallParams } from "./mcp.contracts";
 
@@ -208,7 +208,7 @@ const tools = [
 			required: ["reviewId", "decision", "reason", "confirm"],
 			additionalProperties: false,
 		},
-	},,
+	},
 	{
 		name: "lumens_sync_project",
 		description: "Queue an idempotent canonical opportunity-to-Gauzy project synchronization.",
