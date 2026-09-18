@@ -88,20 +88,18 @@ export class GauzyHttpAdapter implements GauzyAdapter {
 	}
 
 	async assignTask(input: GauzyAssignmentInput): Promise<ExternalEntity> {
-		return this.post("/tasks/assignment", {
-			taskId: input.taskId,
-			employeeId: input.employeeId,
+		return this.put(`/tasks/${input.taskId}`, {
 			organizationId: input.organizationId,
+			members: [{ id: input.employeeId }],
 			...(this.config.tenantId ? { tenantId: this.config.tenantId } : {}),
 		});
 	}
 
 	async upsertSchedule(input: GauzyScheduleInput): Promise<ExternalEntity> {
-		return this.post("/time-off-policy", {
-			taskId: input.taskId,
+		return this.put(`/tasks/${input.taskId}`, {
 			organizationId: input.organizationId,
-			startAt: input.startAt.toISOString(),
-			endAt: input.endAt?.toISOString(),
+			startDate: input.startAt.toISOString(),
+			dueDate: input.endAt?.toISOString(),
 			...(this.config.tenantId ? { tenantId: this.config.tenantId } : {}),
 		});
 	}
@@ -115,8 +113,16 @@ export class GauzyHttpAdapter implements GauzyAdapter {
 	}
 
 	private async post(path: string, body: JsonRecord): Promise<ExternalEntity> {
+		return this.write(path, "POST", body);
+	}
+
+	private async put(path: string, body: JsonRecord): Promise<ExternalEntity> {
+		return this.write(path, "PUT", body);
+	}
+
+	private async write(path: string, method: "POST" | "PUT", body: JsonRecord): Promise<ExternalEntity> {
 		const result = await this.request<JsonRecord>(path, {
-			method: "POST",
+			method,
 			body: JSON.stringify(body),
 		});
 		if (typeof result.id !== "string") throw new GauzyHttpError(502, `Gauzy ${path} response had no id.`);
