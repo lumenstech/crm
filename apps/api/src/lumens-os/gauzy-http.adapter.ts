@@ -6,6 +6,9 @@ import type {
 	GauzyCustomerInput,
 	GauzyOrganizationInput,
 	GauzyProjectInput,
+	GauzyTaskInput,
+	GauzyAssignmentInput,
+	GauzyScheduleInput,
 } from "./gauzy.adapter";
 
 type JsonRecord = Record<string, unknown>;
@@ -68,6 +71,37 @@ export class GauzyHttpAdapter implements GauzyAdapter {
 		return this.post("/organization-projects", {
 			name: input.name,
 			organizationId: input.organizationId,
+			...(this.config.tenantId ? { tenantId: this.config.tenantId } : {}),
+		});
+	}
+
+	async findOrCreateTask(input: GauzyTaskInput): Promise<ExternalEntity> {
+		const existing = await this.findOne("/tasks", input.title);
+		if (existing) return existing;
+		return this.post("/tasks", {
+			title: input.title,
+			description: input.description ?? undefined,
+			projectId: input.projectId,
+			organizationId: input.organizationId,
+			...(this.config.tenantId ? { tenantId: this.config.tenantId } : {}),
+		});
+	}
+
+	async assignTask(input: GauzyAssignmentInput): Promise<ExternalEntity> {
+		return this.post("/tasks/assignment", {
+			taskId: input.taskId,
+			employeeId: input.employeeId,
+			organizationId: input.organizationId,
+			...(this.config.tenantId ? { tenantId: this.config.tenantId } : {}),
+		});
+	}
+
+	async upsertSchedule(input: GauzyScheduleInput): Promise<ExternalEntity> {
+		return this.post("/time-off-policy", {
+			taskId: input.taskId,
+			organizationId: input.organizationId,
+			startAt: input.startAt.toISOString(),
+			endAt: input.endAt?.toISOString(),
 			...(this.config.tenantId ? { tenantId: this.config.tenantId } : {}),
 		});
 	}
