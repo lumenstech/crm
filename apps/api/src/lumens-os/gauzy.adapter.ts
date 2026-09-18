@@ -30,9 +30,35 @@ export type GauzyProjectInput = {
 	name: string;
 };
 
+export type GauzyTaskInput = {
+	canonicalTaskId: string;
+	projectId: string;
+	organizationId: string;
+	title: string;
+	description?: string | null;
+};
+
+export type GauzyAssignmentInput = {
+	canonicalAssignmentId: string;
+	taskId: string;
+	organizationId: string;
+	employeeId: string;
+};
+
+export type GauzyScheduleInput = {
+	canonicalScheduleId: string;
+	taskId: string;
+	organizationId: string;
+	startAt: Date;
+	endAt?: Date | null;
+};
+
 export interface GauzyAdapter {
 	findOrCreateOrganization(input: GauzyOrganizationInput): Promise<ExternalEntity>;
 	findOrCreateCustomer(input: GauzyCustomerInput): Promise<ExternalEntity>;
 	findOrCreateContact(input: GauzyContactInput): Promise<ExternalEntity>;
 	findOrCreateProject(input: GauzyProjectInput): Promise<ExternalEntity>;
+	findOrCreateTask(input: GauzyTaskInput): Promise<ExternalEntity>;
+	assignTask(input: GauzyAssignmentInput): Promise<ExternalEntity>;
+	upsertSchedule(input: GauzyScheduleInput): Promise<ExternalEntity>;
 }
