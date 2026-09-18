@@ -18,6 +18,7 @@ export async function runGauzyPromotion(task: LeasedTask): Promise<void> {
 		headers: { authorization: `Bearer ${secret}` },
 		signal: AbortSignal.timeout(30_000),
 	});
+	if (response.status === 409) return;
 	if (!response.ok) {
 		const body = await response.text().catch(() => "");
 		throw new Error(`Gauzy promotion API returned ${response.status}: ${body.slice(0, 300)}`);
