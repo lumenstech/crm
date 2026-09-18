@@ -6,7 +6,6 @@ import { CanonicalOpportunityLifecycleService } from "./canonical-opportunity-li
 import { LumensOsController } from "./lumens-os.controller";
 import { GauzyHttpAdapter } from "./gauzy-http.adapter";
 import { GauzyPromotionService } from "./gauzy-promotion.service";
-import { LumensOsTaskService } from "./lumens-os-task.service";
 
 @Module({
 	controllers: [LumensOsController],
@@ -29,9 +28,8 @@ import { LumensOsTaskService } from "./lumens-os-task.service";
 			},
 		},
 		GauzyPromotionService,
-		LumensOsTaskService,
 		CanonicalOpportunityLifecycleService,
 	],
-	exports: [GauzyPromotionService, LumensOsTaskService, CanonicalOpportunityLifecycleService],
+	exports: [GauzyPromotionService, CanonicalOpportunityLifecycleService],
 })
 export class LumensOsModule {}
