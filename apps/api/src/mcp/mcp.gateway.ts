@@ -11,12 +11,6 @@ import {
 	ingestSignalInput,
 	signalInboxInput,
 } from "../ingest/ingest.contracts";
-import {
-	batchInput,
-	reviewDecisionInput,
-	reviewListInput,
-	sourceIdInput,
-} from "../ingest/resolution.contracts";
 import { emitOperationalEvent } from "../lumens-os/operational-events";
 import { createBaseTrpcContext } from "../trpc/trpc.context";
 import { MCP } from "./mcp.config";
@@ -150,67 +144,6 @@ const tools = [
 		},
 	},
 	{
-		name: "crm_process_signal",
-		description:
-			"Resolve and promote one staged signal, or place it in review.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				sourceRecordId: { type: "string" },
-				confirm: { const: true },
-			},
-			required: ["sourceRecordId", "confirm"],
-			additionalProperties: false,
-		},
-	},
-	{
-		name: "crm_process_signal_batch",
-		description: "Process a bounded page of staged signals.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				limit: { type: "integer", minimum: 1, maximum: 50 },
-				cursor: { type: "string" },
-				confirm: { const: true },
-			},
-			required: ["confirm"],
-			additionalProperties: false,
-		},
-	},
-	{
-		name: "crm_list_resolution_reviews",
-		description: "List internal resolution reviews.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				status: { type: "string" },
-				businessUnitId: { type: "string" },
-				limit: { type: "integer", minimum: 1, maximum: 100 },
-			},
-			additionalProperties: false,
-		},
-	},
-	{
-		name: "crm_decide_resolution_review",
-		description: "Approve or reject one resolution review.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				reviewId: { type: "string" },
-				decision: {
-					type: "string",
-					enum: ["approved_match", "approved_new", "rejected", "ignored"],
-				},
-				canonicalId: { type: "string" },
-				ownerId: { type: "string" },
-				reason: { type: "string" },
-				confirm: { const: true },
-			},
-			required: ["reviewId", "decision", "reason", "confirm"],
-			additionalProperties: false,
-		},
-	},
-	{
 		name: "lumens_sync_project",
 		description: "Queue an idempotent canonical opportunity-to-Gauzy project synchronization.",
 		inputSchema: { type: "object", properties: { businessUnitId: { type: "string" }, opportunityId: { type: "string" }, companyId: { type: "string" }, name: { type: "string" }, confirm: { const: true } }, required: ["businessUnitId", "opportunityId", "companyId", "name", "confirm"], additionalProperties: false },
@@ -308,16 +241,6 @@ async function callTool(
 			const input = confirmedResearchInput.parse(args);
 			return caller.companies.research({ id: input.id });
 		}
-		case "crm_process_signal": {
-			const input = sourceIdInput.parse(args);
-			return caller.resolution.process(input);
-		}
-		case "crm_process_signal_batch":
-			return caller.resolution.batch(batchInput.parse(args));
-		case "crm_list_resolution_reviews":
-			return caller.resolution.listReviews(reviewListInput.parse(args ?? {}));
-		case "crm_decide_resolution_review":
-			return caller.resolution.decide(reviewDecisionInput.parse(args));
 		case "lumens_sync_project": {
 			const input = lumensProjectInput.parse(args);
 			return db.$transaction((tx) => emitOperationalEvent(tx, {
