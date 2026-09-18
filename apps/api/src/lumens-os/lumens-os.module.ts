@@ -3,11 +3,13 @@ import { ConfigService } from "@nestjs/config";
 import type { EnvironmentVariables } from "../config/env.validation";
 import { GAUZY_ADAPTER } from "./lumens-os.constants";
 import { CanonicalOpportunityLifecycleService } from "./canonical-opportunity-lifecycle.service";
+import { LumensOsController } from "./lumens-os.controller";
 import { GauzyHttpAdapter } from "./gauzy-http.adapter";
 import { GauzyPromotionService } from "./gauzy-promotion.service";
 import { LumensOsTaskService } from "./lumens-os-task.service";
 
 @Module({
+	controllers: [LumensOsController],
 	providers: [
 		{
 			provide: GAUZY_ADAPTER,
