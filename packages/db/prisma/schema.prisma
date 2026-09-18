@@ -1838,3 +1838,63 @@ model AgentRunContext {
   @@index([businessUnitId, createdAt])
   @@map("agent_run_context")
 }
+
+model LumensOsEvent {
+  id             String   @id
+  eventType      String   @map("event_type")
+  aggregateType  String   @map("aggregate_type")
+  aggregateId    String   @map("aggregate_id")
+  businessUnitId String?  @map("business_unit_id")
+  payload        Json     @default("{}")
+  status         String   @default("pending")
+  attempts       Int      @default(0)
+  availableAt    DateTime @default(now()) @map("available_at")
+  leasedUntil    DateTime? @map("leased_until")
+  processedAt    DateTime? @map("processed_at")
+  lastError      String?  @map("last_error")
+  idempotencyKey String   @unique @map("idempotency_key")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@index([status, availableAt, createdAt], map: "lumens_os_event_dispatch_idx")
+  @@index([aggregateType, aggregateId], map: "lumens_os_event_aggregate_idx")
+  @@map("lumens_os_event")
+}
+
+model ExternalIdentity {
+  id            String   @id
+  canonicalType String   @map("canonical_type")
+  canonicalId   String   @map("canonical_id")
+  provider      String
+  externalType  String   @map("external_type")
+  externalId    String   @map("external_id")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  @@unique([provider, externalType, externalId])
+  @@unique([canonicalType, canonicalId, provider, externalType])
+  @@index([canonicalType, canonicalId], map: "external_identity_canonical_idx")
+  @@map("external_identity")
+}
+
+model GauzyPromotion {
+  id                  String   @id
+  opportunityId       String   @unique @map("opportunity_id")
+  companyId           String?  @map("company_id")
+  businessUnitId      String   @map("business_unit_id")
+  status              String   @default("pending")
+  gauzyOrganizationId String?  @map("gauzy_organization_id")
+  gauzyContactId      String?  @map("gauzy_contact_id")
+  gauzyProjectId      String?  @map("gauzy_project_id")
+  eventId             String?  @map("event_id")
+  payload             Json     @default("{}")
+  lastError           String?  @map("last_error")
+  promotedAt          DateTime? @map("promoted_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @map("updated_at")
+
+  @@index([status, createdAt], map: "gauzy_promotion_status_idx")
+  @@map("gauzy_promotion")
+}
+

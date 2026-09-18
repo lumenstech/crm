@@ -124,6 +124,26 @@ export class EnvironmentVariables {
 	AGENT_BRIDGE_SECRET?: string;
 
 	@IsOptional()
+	@IsUrl({ require_tld: false, require_protocol: true })
+	GAUZY_API_URL?: string;
+
+	@IsOptional()
+	@IsString()
+	GAUZY_EMAIL?: string;
+
+	@IsOptional()
+	@IsString()
+	GAUZY_PASSWORD?: string;
+
+	@IsOptional()
+	@IsString()
+	GAUZY_TENANT_ID?: string;
+
+	@IsOptional()
+	@IsString()
+	GAUZY_CURRENCY?: string;
+
+	@IsOptional()
 	@IsString()
 	CRM_TELEMETRY_DISABLED?: string;
 }
