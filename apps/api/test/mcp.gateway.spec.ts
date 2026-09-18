@@ -86,7 +86,7 @@ describe("MCP gateway", () => {
 				});
 				return { status: "accepted" as const, sourceRecordId: result.id, project: input.project, deduplicated: false, promoted: false as const };
 			},
-			inbox: async () => ({ rows: [], count: 0 }),
+			inbox: async (_input: Parameters<IngestService["inbox"]>[0]) => ({ rows: [], count: 0 }),
 		};
 		const router = {
 			createCaller: () => ({
