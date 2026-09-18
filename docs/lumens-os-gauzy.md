@@ -102,3 +102,62 @@ Credentials, endpoint paths, Gauzy DTOs, authentication, retries, and response n
 ## Deployment
 
 No production deployment or production migration from this feature branch. After tests and review: open PR to `release`, approve/merge, monitor the existing Cloudflare GitHub/Workers Build, then verify production in a fresh browser. Never use remote Wrangler OAuth/device-code login.
+
+
+## Operational bridge roadmap
+
+The WON promotion is the first vertical slice, not the full Lumens OS feature set.
+
+### Phase 2: canonical synchronization
+
+Lumens OS should reuse `external_identity` to synchronize operational records without turning Gauzy into a prospect database:
+
+- `business_unit -> Gauzy organization`
+- `canonical_company -> Gauzy customer`
+- `canonical_person -> Gauzy contact`
+- `canonical_opportunity -> Gauzy project`
+
+Synchronization must be idempotent and update existing mapped records rather than creating duplicates.
+
+### Phase 3: operational domain
+
+Add adapter capabilities behind Lumens OS events for:
+
+- project create/update/status
+- task/work-order create/update/status
+- employee/contractor assignment
+- scheduling
+- time entries
+- expenses
+- project completion
+- invoice lifecycle
+
+These are operational records. Prospect research, source evidence, scoring and outreach stay in Comp CRM/SequenceNow.
+
+### Phase 4: Gauzy -> Lumens OS events
+
+Operational changes should return through the Lumens OS event boundary rather than writing directly into Comp CRM. Initial event vocabulary:
+
+- `project.created`
+- `project.started`
+- `project.updated`
+- `task.created`
+- `task.assigned`
+- `task.completed`
+- `time.recorded`
+- `expense.recorded`
+- `project.completed`
+- `invoice.created`
+- `invoice.paid`
+
+Comp CRM can project these events into a unified customer timeline while Gauzy remains authoritative for operational state.
+
+### Terminal opportunity semantics
+
+Canonical terminal outcomes must be explicit:
+
+- `WON` means the opportunity is approved to cross the operational boundary.
+- `LOST` means the opportunity is closed without Gauzy promotion.
+- Existing ambiguous values such as `closed` must not be silently interpreted as WON.
+
+The actual Comp CRM opportunity-stage mutation surface must be identified and routed through the lifecycle boundary before production deployment. Do not create a parallel stage API merely to trigger Lumens OS.
