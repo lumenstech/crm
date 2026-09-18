@@ -3,6 +3,7 @@ import type { Db } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import type { GauzyAdapter } from "./gauzy.adapter";
+import { GauzyHttpError } from "./gauzy-http.adapter";
 import type { OperationalEventV1 } from "./operational-events";
 import { OPERATIONAL_EVENT_TYPES } from "./operational-events";
 
@@ -24,8 +25,20 @@ function assertOperationalPayload(value: unknown): asserts value is OperationalE
 
 function stringField(data: Record<string, unknown>, key: string): string {
 	const value = data[key];
-	if (typeof value !== "string" || !value) throw new Error(`Operational event requires ${key}.`);
+	if (typeof value !== "string" || !value) throw new PermanentOperationError(`Operational event requires ${key}.`);
 	return value;
+}
+
+function dateField(data: Record<string, unknown>, key: string): Date {
+	const value = stringField(data, key);
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) throw new PermanentOperationError(`Operational event has invalid ${key}.`);
+	return date;
+}
+
+function optionalDateField(data: Record<string, unknown>, key: string): Date | null {
+	if (data[key] == null) return null;
+	return dateField(data, key);
 }
 
 @Injectable()
@@ -34,7 +47,7 @@ export class GauzyOperationService {
 
 	async execute(eventId: string, gauzy: GauzyAdapter) {
 		const event = await this.db.lumensOsEvent.findUnique({ where: { id: eventId } });
-		if (!event) throw new Error(`No Lumens OS event with id ${eventId}.`);
+		if (!event) throw new PermanentOperationError(`No Lumens OS event with id ${eventId}.`);
 		assertOperationalPayload(event.payload);
 		const payload = event.payload;
 		const data = payload.data;
@@ -81,8 +94,8 @@ export class GauzyOperationService {
 					canonicalScheduleId: payload.canonicalId,
 					taskId: stringField(data, "taskId"),
 					organizationId: stringField(data, "organizationId"),
-					startAt: new Date(stringField(data, "startAt")),
-					endAt: typeof data.endAt === "string" ? new Date(data.endAt) : null,
+					startAt: dateField(data, "startAt"),
+					endAt: optionalDateField(data, "endAt"),
 				});
 				break;
 		}
@@ -135,16 +148,19 @@ export class GauzyOperationService {
 	private async recordFailure(eventId: string, error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		const now = new Date();
+		const permanent = error instanceof PermanentOperationError || (error instanceof GauzyHttpError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 409 && error.status !== 429);
 		const retryAt = new Date(now.getTime() + 60_000);
 		await this.db.$transaction([
 			this.db.lumensOsEvent.update({
 				where: { id: eventId },
-				data: { status: "pending", lastError: message, leasedUntil: null, availableAt: retryAt, updatedAt: now },
+				data: { status: permanent ? "failed" : "pending", lastError: message, leasedUntil: null, availableAt: permanent ? now : retryAt, updatedAt: now },
 			}),
 			this.db.agentTask.updateMany({
 				where: { kind: "gauzy_operation", subject: eventId, finishedAt: null },
-				data: { dueAt: retryAt, outcome: `retry: ${message}` },
+				data: permanent ? { finishedAt: now, outcome: `failed: ${message}` } : { dueAt: retryAt, outcome: `retry: ${message}` },
 			}),
 		]);
 	}
 }
+
+export class PermanentOperationError extends Error {}
