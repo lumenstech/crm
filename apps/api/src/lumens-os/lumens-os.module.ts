@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { EnvironmentVariables } from "../config/env.validation";
 import { GAUZY_ADAPTER } from "./lumens-os.constants";
+import { CanonicalOpportunityLifecycleService } from "./canonical-opportunity-lifecycle.service";
 import { GauzyHttpAdapter } from "./gauzy-http.adapter";
 import { GauzyPromotionService } from "./gauzy-promotion.service";
 import { LumensOsTaskService } from "./lumens-os-task.service";
@@ -27,7 +28,8 @@ import { LumensOsTaskService } from "./lumens-os-task.service";
 		},
 		GauzyPromotionService,
 		LumensOsTaskService,
+		CanonicalOpportunityLifecycleService,
 	],
-	exports: [GauzyPromotionService, LumensOsTaskService],
+	exports: [GauzyPromotionService, LumensOsTaskService, CanonicalOpportunityLifecycleService],
 })
 export class LumensOsModule {}
