@@ -5,7 +5,7 @@ import { createAuthMiddleware } from "better-auth/api";
 import { applySetCookies } from "better-auth/cookies";
 import express from "express";
 import request from "supertest";
-import { IngestService } from "../src/ingest/ingest.service";
+import type { IngestService } from "../src/ingest/ingest.service";
 import { createMcpGateway } from "../src/mcp/mcp.gateway";
 
 const suffix = `mcp-${Date.now()}`;
@@ -72,7 +72,22 @@ describe("MCP gateway", () => {
 			body: { name: `${suffix}-key`, expiresIn: null },
 		});
 		apiKey = created.key;
-		const ingest = new IngestService(db);
+		const ingest = {
+			signal: async (input: Parameters<IngestService["signal"]>[0]) => {
+				const result = await db.sourceRecord.create({
+					data: {
+						businessUnitId: unitId,
+						sourceSystem: input.source,
+						sourceType: input.sourceType,
+						sourceId: input.sourceId,
+						payload: input.payload,
+					},
+					select: { id: true },
+				});
+				return { status: "accepted" as const, sourceRecordId: result.id, project: input.project, deduplicated: false, promoted: false as const };
+			},
+			inbox: async () => ({ rows: [], count: 0 }),
+		};
 		const router = {
 			createCaller: () => ({
 				search: {
@@ -98,9 +113,7 @@ describe("MCP gateway", () => {
 	});
 
 	afterAll(async () => {
-		await db.recordMapping.deleteMany({
-			where: { sourceRecord: { businessUnitId: unitId } },
-		});
+		await db.recordMapping.deleteMany({ where: { sourceId } });
 		await db.sourceRecord.deleteMany({ where: { businessUnitId: unitId } });
 		await db.businessUnit.delete({ where: { id: unitId } });
 		await db.apikey.deleteMany({ where: { referenceId: userId } });
