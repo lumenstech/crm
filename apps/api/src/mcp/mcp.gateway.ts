@@ -1,3 +1,4 @@
+import { workspaceRoleOf } from "@crm/auth";
 import { db } from "@crm/db";
 import type { AnyRouter } from "@trpc/server";
 import type { Request, Response } from "express";
@@ -279,7 +280,12 @@ async function callTool(
 	caller: Caller,
 	name: string,
 	args: JsonValue | undefined,
+	userId: string,
 ) {
+	if (name.startsWith("lumens_") && name !== "lumens_get_operation") {
+		const role = await workspaceRoleOf(userId);
+		if (role !== "owner" && role !== "admin") throw new Error("Lumens OS mutations require workspace owner or admin.");
+	}
 	switch (name) {
 		case "crm_search": {
 			const input = searchInput.parse(args ?? {});
@@ -446,6 +452,7 @@ export function createMcpGateway(router: AnyRouter) {
 						caller,
 						toolParams.data.name,
 						toolParams.data.arguments,
+						context.session.user.id,
 					);
 					res.json(
 						toolResult(
