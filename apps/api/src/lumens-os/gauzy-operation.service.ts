@@ -8,7 +8,7 @@ import type { OperationalEventV1 } from "./operational-events";
 import { OPERATIONAL_EVENT_TYPES } from "./operational-events";
 
 function assertOperationalPayload(value: unknown): asserts value is OperationalEventV1 {
-	if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Lumens OS operational payload.");
+	if (!value || typeof value !== "object" || Array.isArray(value)) throw new PermanentOperationError("Invalid Lumens OS operational payload.");
 	const payload = value as Partial<OperationalEventV1>;
 	if (
 		payload.version !== 1 ||
@@ -20,7 +20,7 @@ function assertOperationalPayload(value: unknown): asserts value is OperationalE
 		!payload.data ||
 		typeof payload.data !== "object" ||
 		Array.isArray(payload.data)
-	) throw new Error("Invalid Lumens OS operational v1 payload.");
+	) throw new PermanentOperationError("Invalid Lumens OS operational v1 payload.");
 }
 
 function stringField(data: Record<string, unknown>, key: string): string {
@@ -60,8 +60,8 @@ export class GauzyOperationService {
 			if (existing) return { id: existing.externalId };
 		}
 
-		await this.markAttempt(eventId);
 		try {
+		await this.markAttempt(eventId);
 		let result: { id: string };
 		switch (payload.eventType) {
 			case "project.sync":
@@ -148,7 +148,9 @@ export class GauzyOperationService {
 	private async recordFailure(eventId: string, error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		const now = new Date();
-		const permanent = error instanceof PermanentOperationError || (error instanceof GauzyHttpError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 409 && error.status !== 429);
+		const task = await this.db.agentTask.findFirst({ where: { kind: "gauzy_operation", subject: eventId, finishedAt: null }, select: { attempts: true } });
+		const exhausted = (task?.attempts ?? 0) >= 3;
+		const permanent = error instanceof PermanentOperationError || exhausted || (error instanceof GauzyHttpError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 409 && error.status !== 429);
 		const retryAt = new Date(now.getTime() + 60_000);
 		await this.db.$transaction([
 			this.db.lumensOsEvent.update({
