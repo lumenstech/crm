@@ -5,6 +5,14 @@ import { InjectDatabase } from "../database/database.constants";
 import type { GauzyAdapter } from "./gauzy.adapter";
 import type { OpportunityWonPayloadV1 } from "./opportunity-won";
 
+function assertOpportunityWonPayload(value: unknown): asserts value is OpportunityWonPayloadV1 {
+	if (!value || typeof value !== "object") throw new PermanentPromotionError("Invalid opportunity.won payload.");
+	const payload = value as Partial<OpportunityWonPayloadV1>;
+	if (payload.version !== 1 || typeof payload.opportunityId !== "string" || typeof payload.businessUnitId !== "string" || !Array.isArray(payload.contactIds) || !Array.isArray(payload.provenanceIds)) {
+		throw new PermanentPromotionError("Invalid opportunity.won v1 payload.");
+	}
+}
+
 const PROVIDER = "gauzy";
 
 @Injectable()
@@ -16,7 +24,8 @@ export class GauzyPromotionService {
 		if (!event || event.eventType !== "opportunity.won") {
 			throw new Error(`No opportunity.won event with id ${eventId}.`);
 		}
-		const payload = event.payload as OpportunityWonPayloadV1;
+		assertOpportunityWonPayload(event.payload);
+		const payload = event.payload;
 		const promotion = await this.db.gauzyPromotion.findUnique({
 			where: { opportunityId: payload.opportunityId },
 		});
