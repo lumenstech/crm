@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
+import { MAX_ATTEMPTS } from "@crm/db/agent-tasks";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import type { GauzyAdapter } from "./gauzy.adapter";
@@ -48,19 +49,19 @@ export class GauzyOperationService {
 	async execute(eventId: string, gauzy: GauzyAdapter) {
 		const event = await this.db.lumensOsEvent.findUnique({ where: { id: eventId } });
 		if (!event) throw new PermanentOperationError(`No Lumens OS event with id ${eventId}.`);
-		assertOperationalPayload(event.payload);
-		const payload = event.payload;
-		const data = payload.data;
+		try {
+			assertOperationalPayload(event.payload);
+			const payload = event.payload;
+			const data = payload.data;
 
-		if (event.status === "processed") {
+			if (event.status === "processed") {
 			const existing = await this.db.externalIdentity.findUnique({
 				where: { canonicalType_canonicalId_provider_externalType: { canonicalType: payload.canonicalType, canonicalId: payload.canonicalId, provider: "gauzy", externalType: payload.eventType } },
 				select: { externalId: true },
 			});
-			if (existing) return { id: existing.externalId };
-		}
+				if (existing) return { id: existing.externalId };
+			}
 
-		try {
 		await this.markAttempt(eventId);
 		let result: { id: string };
 		switch (payload.eventType) {
@@ -149,7 +150,7 @@ export class GauzyOperationService {
 		const message = error instanceof Error ? error.message : String(error);
 		const now = new Date();
 		const task = await this.db.agentTask.findFirst({ where: { kind: "gauzy_operation", subject: eventId, finishedAt: null }, select: { attempts: true } });
-		const exhausted = (task?.attempts ?? 0) >= 3;
+		const exhausted = (task?.attempts ?? 0) >= MAX_ATTEMPTS;
 		const permanent = error instanceof PermanentOperationError || exhausted || (error instanceof GauzyHttpError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 409 && error.status !== 429);
 		const retryAt = new Date(now.getTime() + 60_000);
 		await this.db.$transaction([
