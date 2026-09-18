@@ -54,6 +54,7 @@ export class GauzyHttpAdapter implements GauzyAdapter {
 		if (existing) return existing;
 		return this.post("/organization-contact", {
 			name,
+			organizationId: input.organizationId,
 			primaryEmail: input.email ?? undefined,
 			primaryPhone: input.phone ?? undefined,
 			contactType: "CLIENT",
