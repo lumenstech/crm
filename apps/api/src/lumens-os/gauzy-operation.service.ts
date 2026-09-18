@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
@@ -88,7 +89,7 @@ export class GauzyOperationService {
 					},
 				},
 				create: {
-					id: crypto.randomUUID(),
+					id: randomUUID(),
 					canonicalType: payload.canonicalType,
 					canonicalId: payload.canonicalId,
 					provider: "gauzy",
