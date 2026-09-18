@@ -54,9 +54,9 @@ export class GauzyOperationService {
 			const payload = event.payload;
 			const data = payload.data;
 
-			if (event.status === "processed") {
+			if (event.status === "processed" && (payload.eventType === "project.sync" || payload.eventType === "task.sync")) {
 			const existing = await this.db.externalIdentity.findUnique({
-				where: { canonicalType_canonicalId_provider_externalType: { canonicalType: payload.canonicalType, canonicalId: payload.canonicalId, provider: "gauzy", externalType: payload.eventType } },
+				where: { canonicalType_canonicalId_provider_externalType: { canonicalType: payload.canonicalType, canonicalId: payload.canonicalId, provider: "gauzy", externalType: payload.eventType === "project.sync" ? "project" : "task" } },
 				select: { externalId: true },
 			});
 				if (existing) return { id: existing.externalId };
@@ -102,14 +102,16 @@ export class GauzyOperationService {
 		}
 
 		const now = new Date();
-		await this.db.$transaction([
-			this.db.externalIdentity.upsert({
+		const writes = [];
+		if (payload.eventType === "project.sync" || payload.eventType === "task.sync") {
+			const externalType = payload.eventType === "project.sync" ? "project" : "task";
+			writes.push(this.db.externalIdentity.upsert({
 				where: {
 					canonicalType_canonicalId_provider_externalType: {
 						canonicalType: payload.canonicalType,
 						canonicalId: payload.canonicalId,
 						provider: "gauzy",
-						externalType: payload.eventType,
+						externalType,
 					},
 				},
 				create: {
@@ -117,11 +119,13 @@ export class GauzyOperationService {
 					canonicalType: payload.canonicalType,
 					canonicalId: payload.canonicalId,
 					provider: "gauzy",
-					externalType: payload.eventType,
+					externalType,
 					externalId: result.id,
 				},
 				update: { externalId: result.id, updatedAt: now },
-			}),
+			}));
+		}
+		writes.push(
 			this.db.lumensOsEvent.update({
 				where: { id: eventId },
 				data: { status: "processed", processedAt: now, leasedUntil: null, lastError: null, updatedAt: now },
@@ -130,7 +134,8 @@ export class GauzyOperationService {
 				where: { kind: "gauzy_operation", subject: eventId, finishedAt: null },
 				data: { finishedAt: now, outcome: "completed" },
 			}),
-		]);
+		);
+		await this.db.$transaction(writes);
 		return result;
 		} catch (error) {
 			await this.recordFailure(eventId, error);
