@@ -66,6 +66,7 @@ export class GauzyPromotionService {
 					() => gauzy.findOrCreateContact({
 						canonicalPersonId: person.id,
 						customerId: customer,
+						organizationId: organization,
 						firstName: person.firstName,
 						lastName: person.lastName,
 						email: person.email,
