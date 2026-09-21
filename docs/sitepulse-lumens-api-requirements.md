@@ -1,5 +1,27 @@
 # Lumens API Requirements - Site Operations
 
+> **SUPERSEDED — 2026-09-21.** This document describes a plan in which Buzzy hosts the
+> operations dashboard as a production runtime. **That plan is cancelled.** Buzzy and
+> the SitePulse template are now a **design reference only**: no Buzzy production
+> runtime, no Buzzy-hosted database or application, no Buzzy Functions, no Buzzy API
+> dependency, no deployment subscription, and no production dependency on Buzzy
+> availability.
+>
+> The native implementation is draft PR #12. Read instead:
+> - `docs/site-operations-architecture.md` — ownership, the native runtime, the
+>   SourceRecord decision, and the observation-versus-monitoring-state rule.
+> - `docs/site-operations-ux-reference.md` — the SitePulse UX patterns we borrowed.
+>
+> Specifically, **every statement below is void** where it implies that Buzzy hosts
+> the dashboard, projects operational data in production, calls Lumens production
+> APIs from a Buzzy Function, needs an `external_identity` row with `provider='buzzy'`,
+> or that Buzzy permissions or availability matter to production authorization or
+> task status.
+>
+> This file is kept as research history: the freshness, provenance, idempotency and
+> authorization requirements it set out are still the requirements, and they are now
+> met natively.
+
 ## Status
 
 **Provisional. Not validated by a Buzzy implementation.**
