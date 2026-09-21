@@ -37,6 +37,18 @@ export function canManageTracking(role: WorkspaceRole | null): boolean {
 	return isWorkspaceAdmin(role);
 }
 
+export function canViewSiteOperations(role: WorkspaceRole | null): boolean {
+	return role !== null;
+}
+
+export function canAcknowledgeSiteAlert(role: WorkspaceRole | null): boolean {
+	return role !== null;
+}
+
+export function canCreateSiteTask(role: WorkspaceRole | null): boolean {
+	return isWorkspaceAdmin(role);
+}
+
 export async function ensureWorkspaceMembership(
 	userId: string,
 ): Promise<string | undefined> {

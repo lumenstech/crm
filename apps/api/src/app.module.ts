@@ -24,13 +24,14 @@ import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
 import { IngestModule } from "./ingest/ingest.module";
 import { LoggingModule } from "./logging/logging.module";
-import { LumensOsModule } from "./lumens-os/lumens-os.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
+import { LumensOsModule } from "./lumens-os/lumens-os.module";
 import { MailboxModule } from "./mailbox/mailbox.module";
 import { MicrosoftModule } from "./microsoft/microsoft.module";
 import { SavedViewsModule } from "./saved-views/saved-views.module";
 import { SearchModule } from "./search/search.module";
 import { SettingsModule } from "./settings/settings.module";
+import { SiteOpsModule } from "./site-ops/site-ops.module";
 import { SlackModule } from "./slack/slack.module";
 import { SsoModule } from "./sso/sso.module";
 import { SyncModule } from "./sync/sync.module";
@@ -78,6 +79,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		SlackModule,
 		BackfillModule,
 		IngestModule,
+		SiteOpsModule,
 		LumensOsModule,
 		TelemetryModule,
 		TrackingModule,

@@ -8,9 +8,33 @@ export const OPERATIONAL_EVENT_TYPES = [
 	"task.sync",
 	"task.assign",
 	"task.schedule",
+	"task.create",
 ] as const;
 
 export type OperationalEventType = (typeof OPERATIONAL_EVENT_TYPES)[number];
+
+const COMMAND_ID_REQUIRED = new Set<OperationalEventType>([
+	"task.assign",
+	"task.schedule",
+	"task.create",
+]);
+
+/**
+ * Event types the Gauzy adapter can execute today. An event outside this set is
+ * still written durably and still deduplicated, but no `gauzy_operation` task is
+ * queued for it, because nothing downstream can run it yet. `task.create` waits on
+ * the ServiceFixes work-order path.
+ */
+const GAUZY_EXECUTABLE: ReadonlySet<OperationalEventType> = new Set([
+	"project.sync",
+	"task.sync",
+	"task.assign",
+	"task.schedule",
+]);
+
+export function isGauzyExecutable(eventType: OperationalEventType): boolean {
+	return GAUZY_EXECUTABLE.has(eventType);
+}
 
 export type OperationalEventV1 = {
 	version: 1;
@@ -23,44 +47,81 @@ export type OperationalEventV1 = {
 	data: Prisma.InputJsonObject;
 };
 
+export type EmitOperationalEventResult = {
+	eventId: string;
+	created: boolean;
+};
+
 type TransactionDb = Prisma.TransactionClient;
 
-export async function emitOperationalEvent(tx: TransactionDb, input: OperationalEventV1) {
-	const mutable = input.eventType === "task.assign" || input.eventType === "task.schedule";
-	if (mutable && !input.commandId) throw new Error(`Lumens OS ${input.eventType} requires commandId.`);
-	const idempotencyKey = [input.eventType, input.canonicalType, input.canonicalId, input.commandId].filter(Boolean).join(":");
-	const existing = await tx.lumensOsEvent.findUnique({
-		where: { idempotencyKey },
-		select: { id: true },
-	});
-	if (existing) return { eventId: existing.id, created: false as const };
+export function operationalEventIdempotencyKey(
+	input: Pick<
+		OperationalEventV1,
+		"eventType" | "canonicalType" | "canonicalId" | "commandId"
+	>,
+): string {
+	return [
+		input.eventType,
+		input.canonicalType,
+		input.canonicalId,
+		input.commandId,
+	]
+		.filter(Boolean)
+		.join(":");
+}
 
-	const eventId = randomUUID();
+export async function emitOperationalEvent(
+	tx: TransactionDb,
+	input: OperationalEventV1,
+): Promise<EmitOperationalEventResult> {
+	if (COMMAND_ID_REQUIRED.has(input.eventType) && !input.commandId) {
+		throw new Error(`Lumens OS ${input.eventType} requires commandId.`);
+	}
+
+	const idempotencyKey = operationalEventIdempotencyKey(input);
+	const candidateId = randomUUID();
 	const now = new Date();
-	await tx.lumensOsEvent.create({
-		data: {
-			id: eventId,
-			eventType: input.eventType,
-			aggregateType: input.canonicalType,
-			aggregateId: input.canonicalId,
-			businessUnitId: input.businessUnitId,
-			payload: input as Prisma.InputJsonObject,
-			idempotencyKey,
-			createdAt: now,
-			updatedAt: now,
-		},
-	});
 
-	await tx.agentTask.create({
-		data: {
-			kind: GAUZY_OPERATION_TASK,
-			reason: `Execute Lumens OS ${input.eventType} in Gauzy.`,
-			subject: eventId,
-			businessUnitId: input.businessUnitId,
-			payload: { eventId, eventType: input.eventType },
-			dueAt: now,
-		},
-	});
+	const inserted = await tx.$queryRaw<Array<{ id: string }>>`
+		INSERT INTO lumens_os_event (
+			id, event_type, aggregate_type, aggregate_id, business_unit_id,
+			payload, idempotency_key, created_at, updated_at
+		)
+		VALUES (
+			${candidateId}, ${input.eventType}, ${input.canonicalType}, ${input.canonicalId},
+			${input.businessUnitId}, ${JSON.stringify(input)}::jsonb, ${idempotencyKey},
+			${now}, ${now}
+		)
+		ON CONFLICT (idempotency_key) DO NOTHING
+		RETURNING id
+	`;
 
-	return { eventId, created: true as const };
+	const createdId = inserted[0]?.id;
+	if (!createdId) {
+		const existing = await tx.lumensOsEvent.findUnique({
+			where: { idempotencyKey },
+			select: { id: true },
+		});
+		if (!existing) {
+			throw new Error(
+				`Lumens OS event ${idempotencyKey} was neither inserted nor found.`,
+			);
+		}
+		return { eventId: existing.id, created: false };
+	}
+
+	if (isGauzyExecutable(input.eventType)) {
+		await tx.agentTask.create({
+			data: {
+				kind: GAUZY_OPERATION_TASK,
+				reason: `Execute Lumens OS ${input.eventType} in Gauzy.`,
+				subject: createdId,
+				businessUnitId: input.businessUnitId,
+				payload: { eventId: createdId, eventType: input.eventType },
+				dueAt: now,
+			},
+		});
+	}
+
+	return { eventId: createdId, created: true };
 }
