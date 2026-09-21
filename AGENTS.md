@@ -16,6 +16,8 @@ context until you read them, and the rules in them are not optional.
 | The tracking script, the collector, form submissions | `docs/tracking.md` |
 | Running it locally, Google Cloud, DB commands, secrets | `docs/setup.md` |
 | Anything that sends a telemetry event, or a new property on one | `docs/telemetry.md` |
+| `apps/api/src/site-ops`, sites, assets, observations, alerts, freshness | `docs/site-operations-architecture.md` |
+| Site Operations screens, operator workflow, signal-state presentation | `docs/site-operations-ux-reference.md` |
 | `.github/workflows`, versions, changelog, how a change reaches `release` | `CONTRIBUTING.md` |
 
 Also check `.agents/skills/` for a relevant skill before starting — better-auth,

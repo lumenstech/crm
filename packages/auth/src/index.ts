@@ -14,11 +14,14 @@ export {
 	isSlackConfigured,
 } from "./env";
 export {
+	canAcknowledgeSiteAlert,
 	canChangeRole,
+	canCreateSiteTask,
 	canManageConnections,
 	canManageCurrency,
 	canManageTracking,
 	canRenameWorkspace,
+	canViewSiteOperations,
 	DEFAULT_WORKSPACE_NAME,
 	ensureWorkspaceMembership,
 	isWorkspaceAdmin,

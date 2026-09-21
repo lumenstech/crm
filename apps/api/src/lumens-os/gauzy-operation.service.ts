@@ -118,6 +118,10 @@ export class GauzyOperationService {
 					endAt: optionalDateField(data, "endAt"),
 				});
 				break;
+			case "task.create":
+				throw new Error(
+					"Lumens OS task.create has no Gauzy execution path yet. The event stays durable until ServiceFixes work-order execution lands.",
+				);
 		}
 
 		const now = new Date();

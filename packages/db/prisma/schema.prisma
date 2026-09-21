@@ -1614,6 +1614,7 @@ model BusinessUnit {
   campaigns      Campaign[]
   agentRuns      AgentRunContext[]
   sourceRecords  SourceRecord[]
+  siteOpsSites   SiteOpsSite[]
 
   @@index([enabled, key])
   @@map("business_unit")
@@ -1636,6 +1637,7 @@ model CanonicalCompany {
   people        CompanyPerson[]
   opportunities CanonicalOpportunity[]
   sources       SourceRecord[]
+  siteOpsSites  SiteOpsSite[]
 
   @@unique([businessUnitId, normalizedName])
   @@index([domain])
@@ -1898,3 +1900,160 @@ model GauzyPromotion {
   @@map("gauzy_promotion")
 }
 
+
+model SiteOpsSite {
+  id             String   @id @default(uuid())
+  businessUnitId String   @map("business_unit_id")
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  companyId      String?  @map("company_id")
+  company        CanonicalCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  name           String
+  code           String
+  addressLine    String?  @map("address_line")
+  locality       String?
+  region         String?
+  countryCode    String?  @map("country_code")
+  latitude       Float?
+  longitude      Float?
+  timezone       String
+  status         String   @default("normal")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  assets       SiteOpsAsset[]
+  observations SiteOpsObservation[]
+  alerts       SiteOpsAlert[]
+  sourceHealth SiteOpsSourceHealth[]
+
+  @@unique([businessUnitId, code])
+  @@index([companyId], map: "site_ops_site_company_idx")
+  @@map("site_ops_site")
+}
+
+model SiteOpsAsset {
+  id                String   @id @default(uuid())
+  siteId            String   @map("site_id")
+  site              SiteOpsSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  code              String
+  externalReference String?  @map("external_reference")
+  assetType         String   @map("asset_type")
+  name              String
+  manufacturer      String?
+  model             String?
+  serialNumber      String?  @map("serial_number")
+  operationalStatus String   @default("normal") @map("operational_status")
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  observations SiteOpsObservation[]
+  policies     SiteOpsMonitoringPolicy[]
+  alerts       SiteOpsAlert[]
+  sourceHealth SiteOpsSourceHealth[]
+
+  @@unique([siteId, code])
+  @@index([siteId, assetType], map: "site_ops_asset_site_type_idx")
+  @@map("site_ops_asset")
+}
+
+model SiteOpsObservation {
+  id            String   @id @default(uuid())
+  siteId        String   @map("site_id")
+  site          SiteOpsSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  assetId       String   @map("asset_id")
+  asset         SiteOpsAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  provider      String
+  sourceEventId String   @map("source_event_id")
+  metric        String
+  numericValue  Float?   @map("numeric_value")
+  textValue     String?  @map("text_value")
+  unit          String?
+  observedAt    DateTime @map("observed_at")
+  receivedAt    DateTime @map("received_at")
+  validation    String   @default("accepted")
+  rejectionCode String?  @map("rejection_code")
+  evidenceRef   String?  @map("evidence_ref")
+  rawPayload    Json     @default("{}") @map("raw_payload")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  alerts SiteOpsAlert[]
+
+  @@unique([provider, assetId, sourceEventId])
+  @@index([assetId, metric, observedAt(sort: Desc)], map: "site_ops_observation_asset_metric_idx")
+  @@index([siteId, observedAt(sort: Desc)], map: "site_ops_observation_site_time_idx")
+  @@map("site_ops_observation")
+}
+
+model SiteOpsMonitoringPolicy {
+  id                     String   @id @default(uuid())
+  assetId                String   @map("asset_id")
+  asset                  SiteOpsAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  metric                 String
+  unit                   String?
+  expectedIntervalSeconds Int     @map("expected_interval_seconds")
+  staleAfterSeconds      Int      @map("stale_after_seconds")
+  enabled                Boolean  @default(true)
+  minValue               Float?   @map("min_value")
+  maxValue               Float?   @map("max_value")
+  alertSeverity          String   @default("warning") @map("alert_severity")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@unique([assetId, metric])
+  @@map("site_ops_monitoring_policy")
+}
+
+model SiteOpsSourceHealth {
+  id                      String   @id @default(uuid())
+  provider                String
+  siteId                  String   @map("site_id")
+  site                    SiteOpsSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  assetId                 String?  @map("asset_id")
+  asset                   SiteOpsAsset? @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  status                  String   @default("unknown")
+  lastAttemptAt           DateTime? @map("last_attempt_at")
+  lastSuccessAt           DateTime? @map("last_success_at")
+  lastError               String?  @map("last_error")
+  expectedIntervalSeconds Int      @map("expected_interval_seconds")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, siteId], where: { assetId: null }, map: "site_ops_source_health_site_scope_key")
+  @@unique([provider, siteId, assetId], where: { assetId: { not: null } }, map: "site_ops_source_health_asset_scope_key")
+  @@index([status], map: "site_ops_source_health_status_idx")
+  @@map("site_ops_source_health")
+}
+
+model SiteOpsAlert {
+  id              String   @id @default(uuid())
+  siteId          String   @map("site_id")
+  site            SiteOpsSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  assetId         String   @map("asset_id")
+  asset           SiteOpsAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  observationId   String?  @map("observation_id")
+  observation     SiteOpsObservation? @relation(fields: [observationId], references: [id], onDelete: SetNull)
+  alertType       String   @map("alert_type")
+  severity        String   @default("warning")
+  state           String   @default("open")
+  reason          String
+  provider        String?
+  metric          String?
+  observedValue   Float?   @map("observed_value")
+  thresholdKind   String?  @map("threshold_kind")
+  thresholdValue  Float?   @map("threshold_value")
+  occurrenceKey   String   @unique @map("occurrence_key")
+  activeKey       String?  @unique @map("active_key")
+  openedAt        DateTime @default(now()) @map("opened_at")
+  acknowledgedAt  DateTime? @map("acknowledged_at")
+  acknowledgedBy  String?  @map("acknowledged_by")
+  closedAt        DateTime? @map("closed_at")
+  lumensOsEventId String?  @map("lumens_os_event_id")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([siteId, state, openedAt(sort: Desc)], map: "site_ops_alert_site_state_idx")
+  @@index([assetId, state], map: "site_ops_alert_asset_state_idx")
+  @@map("site_ops_alert")
+}

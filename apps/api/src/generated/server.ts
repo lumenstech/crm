@@ -27,8 +27,11 @@ import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
 import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
 import { ingestSignalInput, ingestSignalOutput, signalInboxInput, signalInboxOutput, signalSourceRecordInput, signalCompanyCandidatesOutput, resolveSignalCompanyInput, resolveSignalCompanyOutput, qualifySignalInput, qualifySignalOutput, promoteSignalInput, promoteSignalOutput } from "../ingest/ingest.contracts";
+import { ingestGuyanaOpportunityInput, ingestGuyanaOpportunityOutput } from "../ingest/guyana-opportunity.contracts";
+import { evaluateOpportunityInput, evaluateOpportunityOutput, decideOpportunityInput, decideOpportunityOutput, opportunityReviewQueueInput, opportunityReviewQueueOutput } from "../ingest/opportunity-ops.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
+import { operationsOverviewOutput, siteListInput, siteListOutput, siteOverviewInput, siteOverviewOutput, assetDetailInput, assetDetailOutput, acknowledgeAlertInput, acknowledgeAlertOutput, createTaskFromAlertInput, createTaskFromAlertOutput } from "../site-ops/site-ops.contracts";
 import { slackStatusOutput, slackMatchesOutput, slackChannelsInput, slackChannelsOutput, slackJoinChannelInput, slackJoinChannelOutput, slackRefreshPeopleOutput, slackCreateChannelInput, slackCreateChannelOutput, slackDisconnectOutput } from "../slack/slack.contracts";
 import { ssoSignInOptionsOutput, ssoSettingsOutput, ssoProviderListInput, ssoProviderListOutput, registerSsoProviderInput, ssoProviderOutput, deleteSsoProviderInput, deleteSsoProviderOutput } from "../sso/sso.contracts";
 import { trackingSettingsOutput, trackingFlagInput, cookieLifetimeInput, addDomainInput, trackedDomainOutput, removeDomainInput, rotateSiteIdOutput, verifyInput, verifyOutput, sourcesOutput, companyActivityInput, websiteActivityOutput, contactActivityInput } from "../tracking/tracking.contracts";
@@ -564,6 +567,10 @@ const appRouter = t.router({
       .input(ingestSignalInput)
       .output(ingestSignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    ingestGuyanaOpportunity: publicProcedure
+      .input(ingestGuyanaOpportunityInput)
+      .output(ingestGuyanaOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     inbox: publicProcedure
       .input(signalInboxInput)
       .output(signalInboxOutput)
@@ -580,6 +587,18 @@ const appRouter = t.router({
       .input(qualifySignalInput)
       .output(qualifySignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    evaluateOpportunity: publicProcedure
+      .input(evaluateOpportunityInput)
+      .output(evaluateOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    decideOpportunity: publicProcedure
+      .input(decideOpportunityInput)
+      .output(decideOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    opportunityReviewQueue: publicProcedure
+      .input(opportunityReviewQueueInput)
+      .output(opportunityReviewQueueOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     promote: publicProcedure
       .input(promoteSignalInput)
       .output(promoteSignalOutput)
@@ -660,6 +679,31 @@ const appRouter = t.router({
     setArchiveRetention: publicProcedure
       .input(setArchiveRetentionDaysInput)
       .output(archiveRetentionOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
+  siteOps: t.router({
+    overview: publicProcedure
+      .output(operationsOverviewOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    sites_: publicProcedure
+      .input(siteListInput)
+      .output(siteListOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    siteOverview: publicProcedure
+      .input(siteOverviewInput)
+      .output(siteOverviewOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    assetDetail: publicProcedure
+      .input(assetDetailInput)
+      .output(assetDetailOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    acknowledgeAlert: publicProcedure
+      .input(acknowledgeAlertInput)
+      .output(acknowledgeAlertOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    createTaskFromAlert: publicProcedure
+      .input(createTaskFromAlertInput)
+      .output(createTaskFromAlertOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
   slack: t.router({
