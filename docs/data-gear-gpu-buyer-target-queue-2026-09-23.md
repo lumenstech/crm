@@ -109,3 +109,46 @@ Treat as both a potential buyer and channel/referral partner. Ask whether they h
 - Sharon AI Q1 2026 results: https://sharonai.com/press-releases/sharon-ai-reports-first-quarter-2026-results/
 - QumulusAI B300 deployment: https://www.qumulusai.com/articles/qumulusai-completes-nvidia-blackwell-b300-deployment-activating-18-million-take-or-pay-agreement
 - QumulusAI contact: https://www.qumulusai.com/contact
+
+
+## Outbound dedupe status — 2026-09-23
+
+Checked the connected Gmail mailbox and the 200 most recent Resend transactional sends.
+
+Result:
+- No prior outbound messages found to the 20 target domains in this queue.
+- The Gmail search for together.ai returned unrelated messages containing the string in body content; no Together AI outreach was found.
+- Recent Data-Gear GPU outreach in Resend was sent to other infrastructure and AI targets including Lambda, CoreWeave, Crusoe, Vultr, Voltage Park, Fluidstack, Gcore, Stability AI, Cognition AI, Sana Labs, Adarga, and others. These should remain excluded from any immediate duplicate batch.
+- Therefore the 20-company queue above remains unsent based on the outbound systems currently accessible.
+
+Caveat:
+- This dedupe covers the connected Gmail mailbox and recent Resend history. It does not prove absence from any disconnected mailbox, manually sent email system, or inaccessible CRM event table.
+
+## Outreach-ready subset
+
+The following have both a strong compute-buying signal and a usable public commercial route:
+
+1. General Compute — jason@generalcompute.com
+2. Confidential AI — hello@confidential.ai
+3. XDT — sales@xdt.com
+4. InferX — team@inferx.net
+5. NeuronCluster — info@neuroncluster.com
+6. NimbleCore — contact@nimblecore.ai
+7. American Compute — hello@amcompute.com / deals@amcompute.com
+8. TAEON — gene@taeontechnologies.com
+
+Hold for better commercial contact:
+- DeepInfra
+- QumulusAI
+- Sharon AI
+- Together AI
+- Netris
+- Fluence
+- Arcline
+- Bare Metal AI
+- Dryad Tech
+- NUSAPOD
+
+Avoid first-touch sales email to:
+- Doubleword support@ address unless no better route is found.
+- Subconscious research-only address unless the contact is clearly appropriate for procurement/infrastructure.
