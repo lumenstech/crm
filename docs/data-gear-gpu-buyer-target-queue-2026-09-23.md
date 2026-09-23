@@ -152,3 +152,21 @@ Hold for better commercial contact:
 Avoid first-touch sales email to:
 - Doubleword support@ address unless no better route is found.
 - Subconscious research-only address unless the contact is clearly appropriate for procurement/infrastructure.
+
+
+## Outreach sent — 2026-09-23 08:10 ET
+
+Sent from Data-Gear <sales@data-gear.com> with subject "GPU server pricing and availability" to:
+
+- jason@generalcompute.com
+- hello@confidential.ai
+- sales@xdt.com
+- team@inferx.net
+- info@neuroncluster.com
+- contact@nimblecore.ai
+- hello@amcompute.com
+- gene@taeontechnologies.com
+
+All eight send actions returned successful send IDs from Resend.
+
+These eight addresses are now considered contacted and must be excluded from immediate duplicate outreach unless a reply or new buying trigger warrants follow-up.
