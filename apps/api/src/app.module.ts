@@ -24,6 +24,7 @@ import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
 import { IngestModule } from "./ingest/ingest.module";
 import { LoggingModule } from "./logging/logging.module";
+import { LumensOsModule } from "./lumens-os/lumens-os.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
 import { MailboxModule } from "./mailbox/mailbox.module";
 import { MicrosoftModule } from "./microsoft/microsoft.module";
@@ -77,6 +78,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		SlackModule,
 		BackfillModule,
 		IngestModule,
+		LumensOsModule,
 		TelemetryModule,
 		TrackingModule,
 		ArchiveModule,
