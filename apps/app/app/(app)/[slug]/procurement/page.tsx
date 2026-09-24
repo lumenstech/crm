@@ -115,7 +115,13 @@ export default function ProcurementPage({
 			</PageShellHeader>
 
 			<PageShellContent>
-				<Suspense fallback={<div className="py-12 text-sm text-muted-foreground">Loading procurement…</div>}>
+				<Suspense
+					fallback={
+						<div className="py-12 text-sm text-muted-foreground">
+							Loading procurement…
+						</div>
+					}
+				>
 					<ProcurementContent params={params} />
 				</Suspense>
 			</PageShellContent>
@@ -164,7 +170,7 @@ async function ProcurementContent({
 
 	return (
 		<>
-				<div className="grid gap-4 xl:grid-cols-2">
+			<div className="grid gap-4 xl:grid-cols-2">
 					<Card>
 						<CardHeader>
 							<CardTitle>Add supplier</CardTitle>
