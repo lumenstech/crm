@@ -155,6 +155,7 @@ export function ContactsTable() {
 		placeholderData: (previous) => previous,
 	});
 	const users = useQuery(trpc.users.list.queryOptions());
+	const businessUnits = useQuery(trpc.businessUnits.list.queryOptions());
 
 	const [companyQuery, setCompanyQuery] = useState("");
 	const [companyText, setCompanyText] = useSearchInput(
@@ -194,6 +195,15 @@ export function ContactsTable() {
 	const fieldFacets = useFieldFacets("CONTACT", facetCounts);
 
 	const facets: DataTableFacet[] = [
+		{
+			id: "businessUnit",
+			label: "Business unit",
+			options: (businessUnits.data ?? []).flatMap((unit) =>
+				(facetCounts?.businessUnit?.[unit.id] ?? 0) > 0
+					? [{ value: unit.id, label: unit.name }]
+					: [],
+			),
+		},
 		{
 			id: "owner",
 			label: "Owner",
