@@ -10,6 +10,8 @@ import { CompaniesService } from "../companies/companies.service";
 import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
 import type {
+	IngestSignalBatchInput,
+	IngestSignalBatchOutput,
 	IngestSignalInput,
 	IngestSignalOutput,
 	ResolveSignalCompanyInput,
@@ -125,6 +127,38 @@ export class IngestService {
 			project: input.project,
 			deduplicated: Boolean(existing),
 			promoted: false,
+		};
+	}
+
+	async batch(input: IngestSignalBatchInput): Promise<IngestSignalBatchOutput> {
+		const items: IngestSignalBatchOutput["items"] = [];
+		for (const signal of input.signals) {
+			try {
+				const accepted = await this.signal({ ...signal, project: input.project });
+				items.push({
+					sourceId: signal.sourceId,
+					status: "accepted",
+					sourceRecordId: accepted.sourceRecordId,
+					deduplicated: accepted.deduplicated,
+					error: null,
+				});
+			} catch (error) {
+				items.push({
+					sourceId: signal.sourceId,
+					status: "failed",
+					sourceRecordId: null,
+					deduplicated: false,
+					error: error instanceof Error ? error.message : "Signal ingest failed.",
+				});
+			}
+		}
+
+		return {
+			project: input.project,
+			accepted: items.filter((item) => item.status === "accepted").length,
+			deduplicated: items.filter((item) => item.deduplicated).length,
+			failed: items.filter((item) => item.status === "failed").length,
+			items,
 		};
 	}
 
