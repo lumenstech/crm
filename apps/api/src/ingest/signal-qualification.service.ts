@@ -218,16 +218,16 @@ export class SignalQualificationService {
 
 		await this.db.$queryRaw`
 			INSERT INTO record_mapping (
-				id, "sourceSystem", "sourceType", "sourceId", "canonicalType", "canonicalId",
+				id, "businessUnitId", "sourceSystem", "sourceType", "sourceId", "canonicalType", "canonicalId",
 				application, "applicationId", "matchMethod", status, "createdAt", "updatedAt"
 			)
 			VALUES (
-				${randomUUID()}, ${signal.sourceSystem}, ${signal.sourceType}, ${signal.sourceId},
+				${randomUUID()}, ${signal.businessUnitId}, ${signal.sourceSystem}, ${signal.sourceType}, ${signal.sourceId},
 				'opportunity', ${canonicalOpportunityId}, 'comp-ai-crm', ${dealId},
 				${isOpportunityOps ? "human-approved-opportunity-review" : "signal-score"},
 				'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 			)
-			ON CONFLICT ("sourceSystem", "sourceType", "sourceId", "canonicalType") DO UPDATE SET
+			ON CONFLICT ("businessUnitId", "sourceSystem", "sourceType", "sourceId", "canonicalType") DO UPDATE SET
 				"canonicalId" = EXCLUDED."canonicalId",
 				application = EXCLUDED.application,
 				"applicationId" = COALESCE(EXCLUDED."applicationId", record_mapping."applicationId"),
@@ -312,7 +312,8 @@ export class SignalQualificationService {
 		const [row] = await this.db.$queryRaw<CompanyMapping[]>`
 			SELECT "canonicalId" AS "canonicalId", "applicationId" AS "applicationId"
 			FROM record_mapping
-			WHERE "sourceSystem" = ${signal.sourceSystem} AND "sourceType" = ${signal.sourceType}
+			WHERE "businessUnitId" = ${signal.businessUnitId}
+				AND "sourceSystem" = ${signal.sourceSystem} AND "sourceType" = ${signal.sourceType}
 				AND "sourceId" = ${signal.sourceId} AND "canonicalType" = 'company'
 				AND status = 'active' LIMIT 1
 		`;
