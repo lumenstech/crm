@@ -2,6 +2,7 @@
 
 import { db } from "@crm/db";
 import { revalidatePath } from "next/cache";
+import { ensureDataGearBusinessUnit } from "@/lib/procurement";
 import { requireSession } from "@/lib/session";
 
 const text = (value: FormDataEntryValue | null) =>
@@ -22,11 +23,13 @@ function refresh(formData: FormData) {
 
 export async function createSupplier(formData: FormData) {
 	await requireSession();
+	const businessUnit = await ensureDataGearBusinessUnit();
 	const supplierName = text(formData.get("supplierName"));
 	if (!supplierName) throw new Error("Supplier name is required");
 
 	await db.procurementSupplier.create({
 		data: {
+			businessUnitId: businessUnit.id,
 			supplierName,
 			contactName: text(formData.get("contactName")) || null,
 			contactEmail: text(formData.get("contactEmail")) || null,
@@ -40,12 +43,14 @@ export async function createSupplier(formData: FormData) {
 
 export async function createProduct(formData: FormData) {
 	await requireSession();
+	const businessUnit = await ensureDataGearBusinessUnit();
 	const category = text(formData.get("category"));
 	const productName = text(formData.get("productName"));
 	if (!category || !productName) throw new Error("Category and product name are required");
 
 	await db.procurementProduct.create({
 		data: {
+			businessUnitId: businessUnit.id,
 			category,
 			productName,
 			manufacturer: text(formData.get("manufacturer")) || null,
@@ -58,12 +63,19 @@ export async function createProduct(formData: FormData) {
 
 export async function addSupplierQuote(formData: FormData) {
 	await requireSession();
+	const businessUnit = await ensureDataGearBusinessUnit();
 	const supplierId = text(formData.get("supplierId"));
 	const productId = text(formData.get("productId"));
 	const unitCost = money(formData.get("unitCost"));
 	if (!supplierId || !productId || unitCost === null) {
 		throw new Error("Supplier, product and unit cost are required");
 	}
+
+	const [supplier, product] = await Promise.all([
+		db.procurementSupplier.findFirst({ where: { id: supplierId, businessUnitId: businessUnit.id }, select: { id: true } }),
+		db.procurementProduct.findFirst({ where: { id: productId, businessUnitId: businessUnit.id }, select: { id: true } }),
+	]);
+	if (!supplier || !product) throw new Error("Supplier or product is outside Data-Gear procurement");
 
 	await db.procurementSupplierQuote.create({
 		data: {
@@ -91,12 +103,23 @@ export async function addSupplierQuote(formData: FormData) {
 
 export async function createCustomerRequest(formData: FormData) {
 	await requireSession();
+	const businessUnit = await ensureDataGearBusinessUnit();
 	const productType = text(formData.get("productType"));
 	const quantity = money(formData.get("quantity")) ?? 1;
 	if (!productType) throw new Error("Product type is required");
 
+	const selectedProductId = text(formData.get("productId")) || null;
+	if (selectedProductId) {
+		const selectedProduct = await db.procurementProduct.findFirst({
+			where: { id: selectedProductId, businessUnitId: businessUnit.id },
+			select: { id: true },
+		});
+		if (!selectedProduct) throw new Error("Selected product is outside Data-Gear procurement");
+	}
+
 	await db.procurementCustomerRequest.create({
 		data: {
+			businessUnitId: businessUnit.id,
 			customerName: text(formData.get("customerName")) || null,
 			contactName: text(formData.get("contactName")) || null,
 			contactEmail: text(formData.get("contactEmail")) || null,
@@ -108,7 +131,7 @@ export async function createCustomerRequest(formData: FormData) {
 			notes: text(formData.get("notes")) || null,
 			items: {
 				create: {
-					productId: text(formData.get("productId")) || null,
+					productId: selectedProductId,
 					productType,
 					manufacturer: text(formData.get("manufacturer")) || null,
 					model: text(formData.get("model")) || null,
