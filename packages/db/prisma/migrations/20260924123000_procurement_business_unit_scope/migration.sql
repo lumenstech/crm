@@ -53,7 +53,11 @@ CREATE UNIQUE INDEX "procurementPricingPolicy_one_default"
   ON "procurementPricingPolicy" ("businessUnitId")
   WHERE "isDefault" = true;
 
-CREATE OR REPLACE VIEW "procurementSupplierBuySellMatrix" AS
+DROP VIEW IF EXISTS "procurementRequestSupplierMatch";
+DROP VIEW IF EXISTS "procurementCustomerDemandSummary";
+DROP VIEW IF EXISTS "procurementSupplierBuySellMatrix";
+
+CREATE VIEW "procurementSupplierBuySellMatrix" AS
 SELECT
   COALESCE(p."businessUnitId", s."businessUnitId") AS "businessUnitId",
   q."id" AS "supplierQuoteId",
@@ -108,7 +112,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) pol ON true;
 
-CREATE OR REPLACE VIEW "procurementCustomerDemandSummary" AS
+CREATE VIEW "procurementCustomerDemandSummary" AS
 SELECT
   r."businessUnitId",
   i."productId",
@@ -126,7 +130,7 @@ JOIN "procurementCustomerRequest" r ON r."id" = i."requestId"
 WHERE r."status" IN ('NEW','SOURCING','QUOTED')
 GROUP BY r."businessUnitId", i."productId", i."productType", i."manufacturer", i."model", i."manufacturerSku", i."gpuModel";
 
-CREATE OR REPLACE VIEW "procurementRequestSupplierMatch" AS
+CREATE VIEW "procurementRequestSupplierMatch" AS
 SELECT
   r."businessUnitId",
   i."requestId",
