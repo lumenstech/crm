@@ -12,6 +12,7 @@ import {
 	PageShellHeading,
 	PageShellTitle,
 } from "@/components/page-shell";
+import { ensureDataGearBusinessUnit } from "@/lib/procurement";
 import { requireSession } from "@/lib/session";
 import {
 	addSupplierQuote,
@@ -23,6 +24,7 @@ import {
 export const metadata: Metadata = { title: "Procurement" };
 
 type MatrixRow = {
+	businessUnitId: string | null;
 	supplierQuoteId: string;
 	productId: string | null;
 	category: string | null;
@@ -43,6 +45,7 @@ type MatrixRow = {
 };
 
 type DemandRow = {
+	businessUnitId: string | null;
 	productId: string | null;
 	productType: string;
 	manufacturer: string | null;
@@ -62,17 +65,19 @@ const usd = (value: unknown) =>
 export default async function ProcurementPage({ params }: PageProps<"/[slug]/procurement">) {
 	await requireSession();
 	const { slug } = await params;
+	const businessUnit = await ensureDataGearBusinessUnit();
 
 	const [suppliers, products, requests, matrix, demand] = await Promise.all([
-		db.procurementSupplier.findMany({ where: { active: true }, orderBy: { supplierName: "asc" } }),
-		db.procurementProduct.findMany({ where: { active: true }, orderBy: [{ manufacturer: "asc" }, { productName: "asc" }] }),
+		db.procurementSupplier.findMany({ where: { businessUnitId: businessUnit.id, active: true }, orderBy: { supplierName: "asc" } }),
+		db.procurementProduct.findMany({ where: { businessUnitId: businessUnit.id, active: true }, orderBy: [{ manufacturer: "asc" }, { productName: "asc" }] }),
 		db.procurementCustomerRequest.findMany({
+			where: { businessUnitId: businessUnit.id },
 			orderBy: { requestedAt: "desc" },
 			take: 20,
 			include: { items: { take: 3 } },
 		}),
-		db.$queryRaw<MatrixRow[]>`SELECT * FROM "procurementSupplierBuySellMatrix" ORDER BY "pricingStatus", "targetSellPrice" ASC NULLS LAST LIMIT 100`,
-		db.$queryRaw<DemandRow[]>`SELECT * FROM "procurementCustomerDemandSummary" ORDER BY "openRequests" DESC, "openQuantity" DESC LIMIT 100`,
+		db.$queryRaw<MatrixRow[]>`SELECT * FROM "procurementSupplierBuySellMatrix" WHERE "businessUnitId" = ${businessUnit.id} ORDER BY "pricingStatus", "targetSellPrice" ASC NULLS LAST LIMIT 100`,
+		db.$queryRaw<DemandRow[]>`SELECT * FROM "procurementCustomerDemandSummary" WHERE "businessUnitId" = ${businessUnit.id} ORDER BY "openRequests" DESC, "openQuantity" DESC LIMIT 100`,
 	]);
 
 	return (
