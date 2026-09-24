@@ -22,6 +22,18 @@ const signalPayloadValue: z.ZodType<SignalPayloadValue> = z.lazy(() =>
 export const signalPayload = z.record(z.string(), signalPayloadValue);
 export type SignalPayload = z.infer<typeof signalPayload>;
 
+export const businessUnitsInput = z.object({});
+
+export const businessUnitsOutput = z.object({
+	rows: z.array(
+		z.object({
+			key: z.string(),
+			name: z.string(),
+			description: z.string().nullable(),
+		}),
+	),
+});
+
 export const ingestSignalInput = z.object({
 	project: z.string().trim().min(1).max(96),
 	source: z.string().trim().min(1).max(96),
