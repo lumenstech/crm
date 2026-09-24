@@ -1159,6 +1159,12 @@ enum GoogleSyncStatus {
   FAILED
 }
 
+enum MailboxBackfillStatus {
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
 enum EmailDirection {
   INBOUND
   OUTBOUND
@@ -1176,6 +1182,16 @@ model MailboxSync {
   lastError    String?
   retryAfter   DateTime?
   autoCreate   Boolean          @default(false)
+
+  backfillStatus          MailboxBackfillStatus?
+  backfillFrom            DateTime?
+  backfillCursor          DateTime?
+  backfillUntil           DateTime?
+  backfillStartedAt       DateTime?
+  backfillCompletedAt     DateTime?
+  backfillMessagesSeen    Int                    @default(0)
+  backfillMessagesWritten Int                    @default(0)
+  backfillLastError       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
