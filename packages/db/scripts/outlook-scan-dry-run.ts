@@ -48,19 +48,19 @@ type PromotionPolicy = {
 	dealReason?: string;
 };
 
-type UnitTarget = "data-gear" | "trustaccept" | "lumens-ny" | "lumens-guyana" | "unassigned";
+type UnitTarget = "data-gear" | "trustaccept" | "lumens-technology" | "lumens-guyana" | "unassigned";
 
 const DEFAULT_SCAN_ID = "outlook:danny@lumenstechnology.com:0-4799";
 
 const UNIT_ALIASES: Record<Exclude<UnitTarget, "unassigned">, string[]> = {
 	"data-gear": ["data-gear", "data gear", "datagear"],
 	trustaccept: ["trustaccept", "sequence now", "sequence-now", "sequencenow"],
-	"lumens-ny": [
+	"lumens-technology": [
+		"lumens technology",
+		"lumens technologies",
+		"lumens-technology",
 		"lumens ny",
 		"lumens new york",
-		"lumens-ny",
-		"lumens technologies",
-		"lumens technology",
 	],
 	"lumens-guyana": [
 		"lumens guyana",
@@ -71,10 +71,10 @@ const UNIT_ALIASES: Record<Exclude<UnitTarget, "unassigned">, string[]> = {
 };
 
 const POLICY: Record<number, PromotionPolicy> = {
-	0: { companyName: "Identiti", contactName: "Tristan Limbrunner", unitTarget: "lumens-ny", dealCandidate: true, dealReason: "Pep Boys / Identiti quote follow-up" },
-	1: { companyName: "Divisions Maintenance Group", contactName: "Alyssa Finke", unitTarget: "lumens-ny", dealCandidate: false },
-	2: { companyName: null, contactName: null, unitTarget: "lumens-ny", dealCandidate: false },
-	3: { companyName: "Sung Co", contactName: "Vera Sung", unitTarget: "lumens-ny", dealCandidate: false },
+	0: { companyName: "Identiti", contactName: "Tristan Limbrunner", unitTarget: "lumens-technology", dealCandidate: true, dealReason: "Pep Boys / Identiti quote follow-up" },
+	1: { companyName: "Divisions Maintenance Group", contactName: "Alyssa Finke", unitTarget: "lumens-technology", dealCandidate: false },
+	2: { companyName: null, contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	3: { companyName: "Sung Co", contactName: "Vera Sung", unitTarget: "lumens-technology", dealCandidate: false },
 	4: { companyName: "Ingram Micro", contactName: null, unitTarget: "data-gear", dealCandidate: false },
 	5: { companyName: "Ingram Micro", contactName: "James Noble", unitTarget: "data-gear", dealCandidate: false },
 	6: { companyName: "MA Labs", contactName: "Hope Tian", unitTarget: "data-gear", dealCandidate: false },
@@ -89,18 +89,18 @@ const POLICY: Record<number, PromotionPolicy> = {
 	15: { companyName: "Auth0", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
 	16: { companyName: "Okta", contactName: "Kenny Lee", unitTarget: "trustaccept", dealCandidate: false },
 	17: { companyName: "ElevenLabs", contactName: "Henry Kearing", unitTarget: "trustaccept", dealCandidate: false },
-	18: { companyName: "Linkup", contactName: "Sacha Uzan", unitTarget: "lumens-ny", dealCandidate: false },
-	19: { companyName: "WP Engine", contactName: "Michael McBride", unitTarget: "lumens-ny", dealCandidate: false },
+	18: { companyName: "Linkup", contactName: "Sacha Uzan", unitTarget: "lumens-technology", dealCandidate: false },
+	19: { companyName: "WP Engine", contactName: "Michael McBride", unitTarget: "lumens-technology", dealCandidate: false },
 	20: { companyName: "Stripe", contactName: "Thomas Garces", unitTarget: "unassigned", dealCandidate: false },
 	21: { companyName: "OneValley", contactName: "Laura Dawson", unitTarget: "trustaccept", dealCandidate: false },
 	22: { companyName: "IBM", contactName: "Shreya Sisodia", unitTarget: "trustaccept", dealCandidate: false },
 	23: { companyName: "Otis", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
-	24: { companyName: "F.W. Webb", contactName: null, unitTarget: "lumens-ny", dealCandidate: false },
-	25: { companyName: "Upper West Strategies", contactName: "Bill Hamersly", unitTarget: "lumens-ny", dealCandidate: false },
-	26: { companyName: "Grant Associates", contactName: null, unitTarget: "lumens-ny", dealCandidate: false },
-	27: { companyName: "JLL", contactName: "Emilie Goldman", unitTarget: "lumens-ny", dealCandidate: true, dealReason: "potential-client relationship; review before creating a Deal" },
-	28: { companyName: "T-Mobile", contactName: null, unitTarget: "lumens-ny", dealCandidate: false },
-	29: { companyName: "Dostmann Electronic", contactName: "Marcel Hahn", unitTarget: "lumens-ny", dealCandidate: false },
+	24: { companyName: "F.W. Webb", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	25: { companyName: "Upper West Strategies", contactName: "Bill Hamersly", unitTarget: "lumens-technology", dealCandidate: false },
+	26: { companyName: "Grant Associates", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	27: { companyName: "JLL", contactName: "Emilie Goldman", unitTarget: "lumens-technology", dealCandidate: true, dealReason: "potential-client relationship; review before creating a Deal" },
+	28: { companyName: "T-Mobile", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	29: { companyName: "Dostmann Electronic", contactName: "Marcel Hahn", unitTarget: "lumens-technology", dealCandidate: false },
 	30: { companyName: "SVB", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
 	31: { companyName: "GNBS", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
 	32: { companyName: "International Labour Organization (ILO)", contactName: "Ariel Pino", unitTarget: "lumens-guyana", dealCandidate: false },
