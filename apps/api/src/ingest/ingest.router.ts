@@ -9,6 +9,8 @@ import {
 } from "./guyana-opportunity.contracts";
 import { GuyanaOpportunityService } from "./guyana-opportunity.service";
 import {
+	businessUnitsInput,
+	businessUnitsOutput,
 	ingestSignalInput,
 	ingestSignalOutput,
 	promoteSignalInput,
@@ -46,6 +48,15 @@ export class IngestRouter {
 		@Inject(GuyanaOpportunityService)
 		private readonly guyanaOpportunity: GuyanaOpportunityService,
 	) {}
+
+	@Query({
+		input: businessUnitsInput,
+		output: businessUnitsOutput,
+		meta: restMeta("GET", "/ingest/business-units", ["Ingest"]),
+	})
+	async businessUnits() {
+		return this.ingest.businessUnits();
+	}
 
 	@Mutation({
 		input: ingestSignalInput,
