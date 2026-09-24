@@ -132,7 +132,7 @@ export async function createCustomerRequest(formData: FormData) {
 	await requireSession();
 	const businessUnit = await ensureDataGearBusinessUnit();
 	const productType = text(formData.get("productType"));
-	const quantity = money(formData.get("quantity")) ?? 1;
+	const quantity = money(formData.get("quantity"));
 
 	if (!productType) throw new Error("Product type is required");
 
@@ -151,6 +151,8 @@ export async function createCustomerRequest(formData: FormData) {
 	}
 
 	const requiredBy = text(formData.get("requiredBy"));
+	const followUpAt = text(formData.get("followUpAt"));
+	const demandType = text(formData.get("demandType"));
 	const gpuCount = money(formData.get("gpuCount"));
 	const ramGb = money(formData.get("ramGb"));
 
@@ -161,6 +163,14 @@ export async function createCustomerRequest(formData: FormData) {
 			contactName: text(formData.get("contactName")) || null,
 			contactEmail: text(formData.get("contactEmail")) || null,
 			contactPhone: text(formData.get("contactPhone")) || null,
+			demandType:
+				demandType === "LEASE"
+					? "LEASE"
+					: demandType === "CLOUD_CAPACITY"
+						? "CLOUD_CAPACITY"
+						: "PURCHASE",
+			nextAction: text(formData.get("nextAction")) || null,
+			followUpAt: followUpAt ? new Date(followUpAt) : null,
 			targetBudget: money(formData.get("targetBudget")),
 			destination: text(formData.get("destination")) || null,
 			requiredBy: requiredBy ? new Date(requiredBy) : null,
