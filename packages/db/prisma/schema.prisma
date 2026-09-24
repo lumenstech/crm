@@ -1867,6 +1867,12 @@ enum ProcurementAvailabilityStatus {
   UNAVAILABLE
 }
 
+enum ProcurementDemandType {
+  PURCHASE
+  LEASE
+  CLOUD_CAPACITY
+}
+
 model ProcurementPricingPolicy {
   id             String   @id @default(cuid())
   businessUnitId String?
@@ -1976,6 +1982,9 @@ model ProcurementCustomerRequest {
   requestedAt          DateTime                 @default(now())
   status               ProcurementRequestStatus @default(SOURCING)
   quoteStatus          ProcurementQuoteStatus   @default(NOT_QUOTED)
+  demandType           ProcurementDemandType    @default(PURCHASE)
+  nextAction           String?
+  followUpAt           DateTime?
   targetBudget         Decimal?                 @db.Decimal(16, 2)
   currency             String                   @default("USD")
   requiredBy           DateTime?
@@ -1988,6 +1997,8 @@ model ProcurementCustomerRequest {
   items ProcurementCustomerRequestItem[]
 
   @@index([businessUnitId, status, requestedAt])
+  @@index([businessUnitId, followUpAt])
+  @@index([businessUnitId, demandType, status])
   @@index([businessUnitId, crmAccountId])
   @@map("procurementCustomerRequest")
 }
@@ -2002,7 +2013,7 @@ model ProcurementCustomerRequestItem {
   manufacturer            String?
   model                   String?
   manufacturerSku         String?
-  quantity                Decimal                    @default(1) @db.Decimal(14, 3)
+  quantity                Decimal?                   @db.Decimal(14, 3)
   gpuModel                String?
   gpuCount                Int?
   cpu                     String?
