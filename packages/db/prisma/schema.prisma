@@ -1634,6 +1634,7 @@ model BusinessUnit {
   campaigns      Campaign[]
   agentRuns      AgentRunContext[]
   sourceRecords  SourceRecord[]
+  recordMappings RecordMapping[]
 
   @@index([enabled, key])
   @@map("business_unit")
@@ -1752,13 +1753,15 @@ model SourceRecord {
   opportunityId  String?
   opportunity    CanonicalOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
 
-  @@unique([sourceSystem, sourceType, sourceId])
+  @@unique([businessUnitId, sourceSystem, sourceType, sourceId])
   @@index([businessUnitId, sourceType])
   @@map("source_record")
 }
 
 model RecordMapping {
   id             String   @id @default(uuid())
+  businessUnitId String
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   sourceSystem   String
   sourceType     String
   sourceId       String
@@ -1771,7 +1774,8 @@ model RecordMapping {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([sourceSystem, sourceType, sourceId, canonicalType])
+  @@unique([businessUnitId, sourceSystem, sourceType, sourceId, canonicalType])
+  @@index([businessUnitId, canonicalType])
   @@index([canonicalType, canonicalId])
   @@map("record_mapping")
 }
