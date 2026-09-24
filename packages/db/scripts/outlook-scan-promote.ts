@@ -454,7 +454,7 @@ async function main() {
 
 			summary.sourceRecordsCreated += 1;
 		}
-	});
+	}, { maxWait: 10_000, timeout: 30_000 });
 
 	console.log(JSON.stringify(summary, null, 2));
 }
