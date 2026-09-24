@@ -81,13 +81,7 @@ const productLabel = (row: {
 	gpuModel?: string | null;
 	productType?: string;
 }) =>
-	[
-		row.manufacturer,
-		row.productName,
-		row.model,
-		row.gpuModel,
-		row.productType,
-	]
+	[row.manufacturer, row.productName, row.model, row.gpuModel, row.productType]
 		.filter(Boolean)
 		.join(" ");
 
@@ -165,7 +159,11 @@ export default async function ProcurementPage({
 								className="grid gap-3 md:grid-cols-2"
 							>
 								<input type="hidden" name="slug" value={slug} />
-								<Input name="supplierName" placeholder="Supplier name" required />
+								<Input
+									name="supplierName"
+									placeholder="Supplier name"
+									required
+								/>
 								<Input name="contactName" placeholder="Contact" />
 								<Input name="contactEmail" type="email" placeholder="Email" />
 								<Input name="contactPhone" placeholder="Phone" />
@@ -446,18 +444,12 @@ export default async function ProcurementPage({
 										<td className="pr-4">{row.supplierName}</td>
 										<td>{usd(row.unitCost)}</td>
 										<td>{usd(row.landedCost)}</td>
-										<td className="font-medium">
-											{usd(row.targetSellPrice)}
-										</td>
+										<td className="font-medium">{usd(row.targetSellPrice)}</td>
 										<td>{usd(row.grossProfitPerUnit)}</td>
-										<td>
-											{n(row.grossMarginPct)?.toFixed(2) ?? "—"}%
-										</td>
+										<td>{n(row.grossMarginPct)?.toFixed(2) ?? "—"}%</td>
 										<td>{n(row.availableQty) ?? "—"}</td>
 										<td>
-											{row.leadTimeDays == null
-												? "—"
-												: `${row.leadTimeDays}d`}
+											{row.leadTimeDays == null ? "—" : `${row.leadTimeDays}d`}
 										</td>
 										<td>{row.pricingStatus}</td>
 									</tr>
@@ -490,10 +482,7 @@ export default async function ProcurementPage({
 								</thead>
 								<tbody>
 									{demand.map((row) => (
-										<tr
-											key={demandKey(row)}
-											className="border-b last:border-0"
-										>
+										<tr key={demandKey(row)} className="border-b last:border-0">
 											<td className="py-2 pr-4">
 												<div className="font-medium">
 													{productLabel(row) || row.productType}
@@ -507,9 +496,7 @@ export default async function ProcurementPage({
 											<td>{usd(row.statedTargetValue)}</td>
 											<td>
 												{row.earliestRequiredBy
-													? row.earliestRequiredBy
-															.toISOString()
-															.slice(0, 10)
+													? row.earliestRequiredBy.toISOString().slice(0, 10)
 													: "—"}
 											</td>
 										</tr>
@@ -525,10 +512,7 @@ export default async function ProcurementPage({
 						</CardHeader>
 						<CardContent className="space-y-3">
 							{requests.map((request) => (
-								<div
-									key={request.id}
-									className="rounded-md border p-3 text-sm"
-								>
+								<div key={request.id} className="rounded-md border p-3 text-sm">
 									<div className="flex items-center justify-between gap-4">
 										<strong>
 											{request.customerName ||
