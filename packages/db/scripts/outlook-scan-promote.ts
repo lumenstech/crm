@@ -41,7 +41,7 @@ type BusinessUnitRow = {
 	name: string;
 };
 
-type UnitTarget = "data-gear" | "trustaccept" | "lumens-technology" | "lumens-guyana" | "unassigned";
+type UnitTarget = "data-gear" | "trustaccept" | "lumens-technology" | "lumens-guyana" | "general" | "unassigned";
 
 type PromotionPolicy = {
 	companyName: string | null;
@@ -69,6 +69,7 @@ const UNIT_ALIASES: Record<Exclude<UnitTarget, "unassigned">, string[]> = {
 		"lumens-guyana",
 		"lumens-guyana-contracting",
 	],
+	general: ["general"],
 };
 
 const POLICY: Record<number, PromotionPolicy> = {
@@ -92,7 +93,7 @@ const POLICY: Record<number, PromotionPolicy> = {
 	17: { companyName: "ElevenLabs", contactName: "Henry Kearing", unitTarget: "trustaccept", dealCandidate: false },
 	18: { companyName: "Linkup", contactName: "Sacha Uzan", unitTarget: "lumens-technology", dealCandidate: false },
 	19: { companyName: "WP Engine", contactName: "Michael McBride", unitTarget: "lumens-technology", dealCandidate: false },
-	20: { companyName: "Stripe", contactName: "Thomas Garces", unitTarget: "unassigned", dealCandidate: false },
+	20: { companyName: "Stripe", contactName: "Thomas Garces", unitTarget: "general", dealCandidate: false },
 	21: { companyName: "OneValley", contactName: "Laura Dawson", unitTarget: "trustaccept", dealCandidate: false },
 	22: { companyName: "IBM", contactName: "Shreya Sisodia", unitTarget: "trustaccept", dealCandidate: false },
 	23: { companyName: "Otis", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
