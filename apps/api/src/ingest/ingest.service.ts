@@ -22,6 +22,11 @@ import type {
 import { signalPayload } from "./ingest.contracts";
 
 type BusinessUnitRow = { id: string; enabled: boolean };
+type BusinessUnitListRow = {
+	key: string;
+	name: string;
+	description: string | null;
+};
 type SourceRecordRow = { id: string };
 type SignalRow = {
 	id: string;
@@ -64,6 +69,16 @@ export class IngestService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly companies: CompaniesService,
 	) {}
+
+	async businessUnits(): Promise<{ rows: BusinessUnitListRow[] }> {
+		const rows = await this.db.$queryRaw<BusinessUnitListRow[]>`
+			SELECT key, name, description
+			FROM business_unit
+			WHERE enabled = true
+			ORDER BY name ASC, key ASC
+		`;
+		return { rows };
+	}
 
 	async signal(input: IngestSignalInput): Promise<IngestSignalOutput> {
 		const [businessUnit] = await this.db.$queryRaw<BusinessUnitRow[]>`
