@@ -25,7 +25,7 @@ import { dealListInput, dealListOutput, dealIdInput, dealDetailOutput, dealCreat
 import { enrichmentQueueInput } from "@crm/validation/enrichment-queue";
 import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput, fieldEntityInput, fieldFiltersOutput, fieldIdInput, fieldCoverageOutput, fieldCreateInput, fieldUpdateArgs, fieldReorderInput, fieldReorderOutput, fieldDeleteOutput, fieldBackfillOutput } from "../fields/fields.contracts";
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
-import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
+import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput, startOutlookBackfillInput } from "../microsoft/microsoft.contracts";
 import { ingestSignalInput, ingestSignalOutput, signalInboxInput, signalInboxOutput, signalSourceRecordInput, signalCompanyCandidatesOutput, resolveSignalCompanyInput, resolveSignalCompanyOutput, qualifySignalInput, qualifySignalOutput, promoteSignalInput, promoteSignalOutput } from "../ingest/ingest.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
@@ -596,6 +596,10 @@ const appRouter = t.router({
       .output(revokeAccessOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     syncNow: publicProcedure
+      .output(microsoftConnectionStatusOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    startBackfill: publicProcedure
+      .input(startOutlookBackfillInput)
       .output(microsoftConnectionStatusOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     setAutoCreate: publicProcedure
