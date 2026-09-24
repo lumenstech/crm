@@ -1607,6 +1607,10 @@ model BusinessUnit {
   compCompanies  Company[]   @relation("CompCompanyBusinessUnit")
   compDeals      Deal[]      @relation("CompDealBusinessUnit")
   compAgentTasks AgentTask[] @relation("CompAgentTaskBusinessUnit")
+  procurementPolicies ProcurementPricingPolicy[] @relation("ProcurementPolicyBusinessUnit")
+  procurementProducts ProcurementProduct[] @relation("ProcurementProductBusinessUnit")
+  procurementSuppliers ProcurementSupplier[] @relation("ProcurementSupplierBusinessUnit")
+  procurementRequests ProcurementCustomerRequest[] @relation("ProcurementRequestBusinessUnit")
   companies      CanonicalCompany[]
   people         CanonicalPerson[]
   opportunities  CanonicalOpportunity[]
@@ -1865,18 +1869,24 @@ enum ProcurementAvailabilityStatus {
 
 model ProcurementPricingPolicy {
   id             String   @id @default(cuid())
-  name           String   @unique
+  businessUnitId String?
+  businessUnit   BusinessUnit? @relation("ProcurementPolicyBusinessUnit", fields: [businessUnitId], references: [id], onDelete: Cascade)
+  name           String
   markupRate     Decimal  @default(0.30) @db.Decimal(8, 6)
   freshnessHours Int      @default(48)
   isDefault      Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  @@unique([businessUnitId, name])
+  @@index([businessUnitId, isDefault])
   @@map("procurementPricingPolicy")
 }
 
 model ProcurementProduct {
   id              String   @id @default(cuid())
+  businessUnitId  String?
+  businessUnit    BusinessUnit? @relation("ProcurementProductBusinessUnit", fields: [businessUnitId], references: [id], onDelete: Cascade)
   category        String
   manufacturer    String?
   productName     String
@@ -1890,14 +1900,16 @@ model ProcurementProduct {
   supplierQuotes  ProcurementSupplierQuote[]
   requestItems    ProcurementCustomerRequestItem[]
 
-  @@index([category])
-  @@index([manufacturer, manufacturerSku])
+  @@index([businessUnitId, category])
+  @@index([businessUnitId, manufacturer, manufacturerSku])
   @@map("procurementProduct")
 }
 
 model ProcurementSupplier {
   id               String   @id @default(cuid())
-  supplierName     String   @unique
+  businessUnitId   String?
+  businessUnit     BusinessUnit? @relation("ProcurementSupplierBusinessUnit", fields: [businessUnitId], references: [id], onDelete: Cascade)
+  supplierName     String
   accountNumber    String?
   contactName      String?
   contactEmail     String?
@@ -1911,6 +1923,8 @@ model ProcurementSupplier {
 
   quotes ProcurementSupplierQuote[]
 
+  @@unique([businessUnitId, supplierName])
+  @@index([businessUnitId, active])
   @@map("procurementSupplier")
 }
 
@@ -1950,6 +1964,8 @@ model ProcurementSupplierQuote {
 
 model ProcurementCustomerRequest {
   id                   String                   @id @default(cuid())
+  businessUnitId       String?
+  businessUnit         BusinessUnit? @relation("ProcurementRequestBusinessUnit", fields: [businessUnitId], references: [id], onDelete: Cascade)
   crmAccountId         String?
   crmContactId         String?
   sourceQuoteReference String?
@@ -1971,8 +1987,8 @@ model ProcurementCustomerRequest {
 
   items ProcurementCustomerRequestItem[]
 
-  @@index([status, requestedAt])
-  @@index([crmAccountId])
+  @@index([businessUnitId, status, requestedAt])
+  @@index([businessUnitId, crmAccountId])
   @@map("procurementCustomerRequest")
 }
 
