@@ -27,8 +27,14 @@ WHERE rm."businessUnitId" IS NULL
   AND rm."sourceType" = sr."sourceType"
   AND rm."sourceId" = sr."sourceId";
 
-DELETE FROM "record_mapping"
-WHERE "businessUnitId" IS NULL;
+DO $
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "record_mapping" WHERE "businessUnitId" IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Business-unit migration found orphaned record mappings; no data was deleted.';
+  END IF;
+END $;
 
 ALTER TABLE "record_mapping" ALTER COLUMN "businessUnitId" SET NOT NULL;
 
