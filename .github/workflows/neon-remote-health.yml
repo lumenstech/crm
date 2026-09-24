@@ -1,0 +1,57 @@
+name: Remote Neon health check
+
+on:
+  push:
+    branches:
+      - ops/direct-neon-postgres
+    paths:
+      - .github/workflows/neon-remote-health.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      DB1: ${{ secrets.DATABASE_URL }}
+      DB2: ${{ secrets.DIRECT_DATABASE_URL }}
+      DB3: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+      DB4: ${{ secrets.NEON_DATABASE_URL }}
+    steps:
+      - name: Select configured database secret
+        id: select
+        shell: bash
+        run: |
+          set -euo pipefail
+          url=""
+          source_name=""
+          for name in DB1 DB2 DB3 DB4; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              url="$value"
+              source_name="$name"
+              break
+            fi
+          done
+          if [ -z "$url" ]; then
+            echo "No supported database secret is configured in this GitHub repository."
+            exit 2
+          fi
+          echo "::add-mask::$url"
+          printf 'db_url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+          echo "Using an existing repository database secret ($source_name)."
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Read-only production connectivity check
+        env:
+          DATABASE_URL: ${{ steps.select.outputs.db_url }}
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off             -c "SELECT current_database() AS database_name, current_user AS database_user, now() AS checked_at;"
