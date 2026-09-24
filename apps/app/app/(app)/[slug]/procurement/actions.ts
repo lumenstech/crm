@@ -11,8 +11,11 @@ const text = (value: FormDataEntryValue | null) =>
 const money = (value: FormDataEntryValue | null) => {
 	const raw = text(value);
 	if (!raw) return null;
+
 	const parsed = Number(raw);
-	if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Invalid numeric value");
+	if (!Number.isFinite(parsed) || parsed < 0)
+		throw new Error("Invalid numeric value");
+
 	return parsed;
 };
 
@@ -25,6 +28,7 @@ export async function createSupplier(formData: FormData) {
 	await requireSession();
 	const businessUnit = await ensureDataGearBusinessUnit();
 	const supplierName = text(formData.get("supplierName"));
+
 	if (!supplierName) throw new Error("Supplier name is required");
 
 	await db.procurementSupplier.create({
@@ -38,6 +42,7 @@ export async function createSupplier(formData: FormData) {
 			notes: text(formData.get("notes")) || null,
 		},
 	});
+
 	refresh(formData);
 }
 
@@ -46,7 +51,9 @@ export async function createProduct(formData: FormData) {
 	const businessUnit = await ensureDataGearBusinessUnit();
 	const category = text(formData.get("category"));
 	const productName = text(formData.get("productName"));
-	if (!category || !productName) throw new Error("Category and product name are required");
+
+	if (!category || !productName)
+		throw new Error("Category and product name are required");
 
 	await db.procurementProduct.create({
 		data: {
@@ -58,6 +65,7 @@ export async function createProduct(formData: FormData) {
 			manufacturerSku: text(formData.get("manufacturerSku")) || null,
 		},
 	});
+
 	refresh(formData);
 }
 
@@ -67,15 +75,27 @@ export async function addSupplierQuote(formData: FormData) {
 	const supplierId = text(formData.get("supplierId"));
 	const productId = text(formData.get("productId"));
 	const unitCost = money(formData.get("unitCost"));
+
 	if (!supplierId || !productId || unitCost === null) {
 		throw new Error("Supplier, product and unit cost are required");
 	}
 
 	const [supplier, product] = await Promise.all([
-		db.procurementSupplier.findFirst({ where: { id: supplierId, businessUnitId: businessUnit.id }, select: { id: true } }),
-		db.procurementProduct.findFirst({ where: { id: productId, businessUnitId: businessUnit.id }, select: { id: true } }),
+		db.procurementSupplier.findFirst({
+			where: { id: supplierId, businessUnitId: businessUnit.id },
+			select: { id: true },
+		}),
+		db.procurementProduct.findFirst({
+			where: { id: productId, businessUnitId: businessUnit.id },
+			select: { id: true },
+		}),
 	]);
-	if (!supplier || !product) throw new Error("Supplier or product is outside Data-Gear procurement");
+
+	if (!supplier || !product)
+		throw new Error("Supplier or product is outside Data-Gear procurement");
+
+	const leadTimeDays = money(formData.get("leadTimeDays"));
+	const availabilityStatus = text(formData.get("availabilityStatus"));
 
 	await db.procurementSupplierQuote.create({
 		data: {
@@ -86,11 +106,17 @@ export async function addSupplierQuote(formData: FormData) {
 			quoteQuantity: money(formData.get("quoteQuantity")) ?? 1,
 			shippingTotal: money(formData.get("shippingTotal")) ?? 0,
 			feesPerUnit: money(formData.get("feesPerUnit")) ?? 0,
-			otherDirectCostPerUnit: money(formData.get("otherDirectCostPerUnit")) ?? 0,
+			otherDirectCostPerUnit:
+				money(formData.get("otherDirectCostPerUnit")) ?? 0,
 			availableQty: money(formData.get("availableQty")),
 			moq: money(formData.get("moq")),
-			leadTimeDays: money(formData.get("leadTimeDays")) === null ? null : Number(money(formData.get("leadTimeDays"))),
-			availabilityStatus: text(formData.get("availabilityStatus")) === "UNAVAILABLE" ? "UNAVAILABLE" : text(formData.get("availabilityStatus")) === "LIVE" ? "LIVE" : "RFQ",
+			leadTimeDays: leadTimeDays === null ? null : Number(leadTimeDays),
+			availabilityStatus:
+				availabilityStatus === "UNAVAILABLE"
+					? "UNAVAILABLE"
+					: availabilityStatus === "LIVE"
+						? "LIVE"
+						: "RFQ",
 			availabilityCheckedAt: new Date(),
 			paymentTerms: text(formData.get("paymentTerms")) || null,
 			warranty: text(formData.get("warranty")) || null,
@@ -98,6 +124,7 @@ export async function addSupplierQuote(formData: FormData) {
 			notes: text(formData.get("notes")) || null,
 		},
 	});
+
 	refresh(formData);
 }
 
@@ -106,16 +133,26 @@ export async function createCustomerRequest(formData: FormData) {
 	const businessUnit = await ensureDataGearBusinessUnit();
 	const productType = text(formData.get("productType"));
 	const quantity = money(formData.get("quantity")) ?? 1;
+
 	if (!productType) throw new Error("Product type is required");
 
 	const selectedProductId = text(formData.get("productId")) || null;
 	if (selectedProductId) {
 		const selectedProduct = await db.procurementProduct.findFirst({
-			where: { id: selectedProductId, businessUnitId: businessUnit.id },
+			where: {
+				id: selectedProductId,
+				businessUnitId: businessUnit.id,
+			},
 			select: { id: true },
 		});
-		if (!selectedProduct) throw new Error("Selected product is outside Data-Gear procurement");
+
+		if (!selectedProduct)
+			throw new Error("Selected product is outside Data-Gear procurement");
 	}
+
+	const requiredBy = text(formData.get("requiredBy"));
+	const gpuCount = money(formData.get("gpuCount"));
+	const ramGb = money(formData.get("ramGb"));
 
 	await db.procurementCustomerRequest.create({
 		data: {
@@ -126,7 +163,7 @@ export async function createCustomerRequest(formData: FormData) {
 			contactPhone: text(formData.get("contactPhone")) || null,
 			targetBudget: money(formData.get("targetBudget")),
 			destination: text(formData.get("destination")) || null,
-			requiredBy: text(formData.get("requiredBy")) ? new Date(text(formData.get("requiredBy"))) : null,
+			requiredBy: requiredBy ? new Date(requiredBy) : null,
 			originalRequest: text(formData.get("originalRequest")) || null,
 			notes: text(formData.get("notes")) || null,
 			items: {
@@ -138,17 +175,21 @@ export async function createCustomerRequest(formData: FormData) {
 					manufacturerSku: text(formData.get("manufacturerSku")) || null,
 					quantity,
 					gpuModel: text(formData.get("gpuModel")) || null,
-					gpuCount: money(formData.get("gpuCount")) === null ? null : Number(money(formData.get("gpuCount"))),
+					gpuCount: gpuCount === null ? null : Number(gpuCount),
 					cpu: text(formData.get("cpu")) || null,
-					ramGb: money(formData.get("ramGb")) === null ? null : Number(money(formData.get("ramGb"))),
+					ramGb: ramGb === null ? null : Number(ramGb),
 					storageTb: money(formData.get("storageTb")),
 					network: text(formData.get("network")) || null,
 					formFactor: text(formData.get("formFactor")) || null,
-					preferredManufacturer: text(formData.get("preferredManufacturer")) || null,
-					customerTargetUnitPrice: money(formData.get("customerTargetUnitPrice")),
+					preferredManufacturer:
+						text(formData.get("preferredManufacturer")) || null,
+					customerTargetUnitPrice: money(
+						formData.get("customerTargetUnitPrice"),
+					),
 				},
 			},
 		},
 	});
+
 	refresh(formData);
 }
