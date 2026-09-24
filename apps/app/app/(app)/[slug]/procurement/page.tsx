@@ -170,22 +170,15 @@ async function ProcurementContent({
 
 	return (
 		<>
-		<div className="grid gap-4 xl:grid-cols-2">
+			<div className="grid gap-4 xl:grid-cols-2">
 				<Card>
 					<CardHeader>
 						<CardTitle>Add supplier</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<form
-							action={createSupplier}
-							className="grid gap-3 md:grid-cols-2"
-						>
+						<form action={createSupplier} className="grid gap-3 md:grid-cols-2">
 							<input type="hidden" name="slug" value={slug} />
-							<Input
-								name="supplierName"
-								placeholder="Supplier name"
-								required
-							/>
+							<Input name="supplierName" placeholder="Supplier name" required />
 							<Input name="contactName" placeholder="Contact" />
 							<Input name="contactEmail" type="email" placeholder="Email" />
 							<Input name="contactPhone" placeholder="Phone" />
@@ -203,10 +196,7 @@ async function ProcurementContent({
 						<CardTitle>Add product / SKU</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<form
-							action={createProduct}
-							className="grid gap-3 md:grid-cols-2"
-						>
+						<form action={createProduct} className="grid gap-3 md:grid-cols-2">
 							<input type="hidden" name="slug" value={slug} />
 							<Input
 								name="category"
