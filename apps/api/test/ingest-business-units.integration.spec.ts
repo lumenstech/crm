@@ -21,6 +21,7 @@ describe("project-scoped lead ingestion", () => {
 			sourceType: "lead",
 			sourceId: "same-external-id",
 			entity: "Example Buyer",
+			tags: [],
 			payload: { company: "Example Buyer" },
 		};
 
