@@ -135,6 +135,19 @@ export class AgentTriggerService {
 		);
 	}
 
+	async projectExperienceRequested(dealId: string): Promise<boolean> {
+		return this.enqueue(
+			{
+				dealId,
+				kind: "project-experience-match",
+				reason: "Match project experience to this opportunity",
+				priority: PRIORITY.projectExperience,
+				budget: 1,
+			},
+			true,
+		);
+	}
+
 	async slackChannelJoinRequested(
 		channelId: string,
 		channelName: string,
@@ -447,6 +460,7 @@ export class AgentTriggerService {
 		task: {
 			contactId?: string;
 			companyId?: string;
+			dealId?: string;
 			kind: string;
 			reason: string;
 			priority: number;
@@ -461,7 +475,7 @@ export class AgentTriggerService {
 			const write = async (tx: Prisma.TransactionClient) => {
 				await lockIdempotencyKey(
 					tx,
-					`agent-task:${task.kind}:${task.contactId ?? ""}:${task.companyId ?? ""}:${task.subject?.value ?? ""}`,
+					`agent-task:${task.kind}:${task.contactId ?? ""}:${task.companyId ?? ""}:${task.dealId ?? ""}:${task.subject?.value ?? ""}`,
 				);
 				const pending = await tx.agentTask.findFirst({
 					where: {
@@ -469,6 +483,7 @@ export class AgentTriggerService {
 						finishedAt: null,
 						contactId: task.contactId ?? undefined,
 						companyId: task.companyId ?? undefined,
+						dealId: task.dealId ?? undefined,
 						payload: task.subject
 							? { path: task.subject.path, equals: task.subject.value }
 							: undefined,
@@ -481,6 +496,7 @@ export class AgentTriggerService {
 					data: {
 						contactId: task.contactId ?? null,
 						companyId: task.companyId ?? null,
+						dealId: task.dealId ?? null,
 						kind: task.kind,
 						reason: task.reason,
 						priority: task.priority,
@@ -502,6 +518,7 @@ export class AgentTriggerService {
 				kind: task.kind,
 				contactId: task.contactId,
 				companyId: task.companyId,
+				dealId: task.dealId,
 			});
 
 			if (!client) this.poke();

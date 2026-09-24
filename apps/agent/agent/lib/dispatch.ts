@@ -8,6 +8,7 @@ import { DISPATCH } from "./dispatch-config";
 import { markRunning, settle } from "./enrichment";
 import { collapsing, runLimited } from "./pool";
 import { runPortrait } from "./portrait";
+import { runProjectExperienceMatch } from "./project-experience-match";
 import { runSlackChannelJoin } from "./slack-join-task";
 import { runSlackPeopleMatch } from "./slack-people";
 import { staleTaskSweep } from "./stale-tasks";
@@ -124,6 +125,15 @@ async function handleDirect(task: LeasedTask): Promise<void> {
 			queued === 1
 				? "Queued 1 matching agent run."
 				: `Queued ${queued} matching agent runs.`,
+		);
+		return;
+	}
+
+	if (task.kind === "project-experience-match" && task.dealId) {
+		const result = await runProjectExperienceMatch(task.dealId);
+		await completeTask(
+			task.id,
+			result.reason ?? `Stored ${result.stored} project experience matches.`,
 		);
 		return;
 	}

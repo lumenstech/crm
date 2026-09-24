@@ -58,6 +58,7 @@ import { savingField } from "@/lib/pending-field";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
+import { ProjectExperienceMatches } from "./project-experience-matches";
 import { AttachDealContact } from "./quick-add";
 import { RecordActions } from "./record-actions";
 import { AddRow, RecordSheetFrame } from "./record-parts";
@@ -157,6 +158,11 @@ export function DealSheet({ dealId }: { dealId: string }) {
 					value: "activity",
 					label: "Activity",
 					content: <Timeline anchor={{ dealId: deal.id }} />,
+				},
+				{
+					value: "experience",
+					label: "Experience",
+					content: <ProjectExperienceMatches dealId={deal.id} />,
 				},
 				{
 					value: "agent",

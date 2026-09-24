@@ -73,7 +73,8 @@ export const ingestGuyanaOpportunityInput = z
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
 				path: ["electrical", "licenseEvidenceRef"],
-				message: "Verified electrical-license status requires an evidence reference.",
+				message:
+					"Verified electrical-license status requires an evidence reference.",
 			});
 		}
 	});
