@@ -902,10 +902,7 @@ export class ContactsService {
 				businessUnits.map((unit) =>
 					this.db.contact.count({
 						where: {
-							AND: [
-								where,
-								{ company: { is: { businessUnitId: unit.id } } },
-							],
+							AND: [where, { company: { is: { businessUnitId: unit.id } } }],
 						},
 					}),
 				),
@@ -920,7 +917,10 @@ export class ContactsService {
 			seniority: countsByKey(seniorities, "seniority"),
 			persona: countsByKey(personas, "function"),
 			businessUnit: Object.fromEntries(
-				businessUnits.map((unit, index) => [unit.id, businessUnitCounts[index] ?? 0]),
+				businessUnits.map((unit, index) => [
+					unit.id,
+					businessUnitCounts[index] ?? 0,
+				]),
 			),
 			activity,
 			...Object.fromEntries(

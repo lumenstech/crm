@@ -26,8 +26,10 @@ import { dealListInput, dealListOutput, dealIdInput, dealDetailOutput, dealCreat
 import { enrichmentQueueInput } from "@crm/validation/enrichment-queue";
 import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput, fieldEntityInput, fieldFiltersOutput, fieldIdInput, fieldCoverageOutput, fieldCreateInput, fieldUpdateArgs, fieldReorderInput, fieldReorderOutput, fieldDeleteOutput, fieldBackfillOutput } from "../fields/fields.contracts";
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
-import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput, startOutlookBackfillInput } from "../microsoft/microsoft.contracts";
+import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, startOutlookBackfillInput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
 import { ingestSignalInput, ingestSignalOutput, ingestSignalBatchInput, ingestSignalBatchOutput, signalInboxInput, signalInboxOutput, signalSourceRecordInput, signalCompanyCandidatesOutput, resolveSignalCompanyInput, resolveSignalCompanyOutput, qualifySignalInput, qualifySignalOutput, promoteSignalInput, promoteSignalOutput } from "../ingest/ingest.contracts";
+import { ingestGuyanaOpportunityInput, ingestGuyanaOpportunityOutput } from "../ingest/guyana-opportunity.contracts";
+import { evaluateOpportunityInput, evaluateOpportunityOutput, decideOpportunityInput, decideOpportunityOutput, opportunityReviewQueueInput, opportunityReviewQueueOutput } from "../ingest/opportunity-ops.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
 import { slackStatusOutput, slackMatchesOutput, slackChannelsInput, slackChannelsOutput, slackJoinChannelInput, slackJoinChannelOutput, slackRefreshPeopleOutput, slackCreateChannelInput, slackCreateChannelOutput, slackDisconnectOutput } from "../slack/slack.contracts";
@@ -574,6 +576,10 @@ const appRouter = t.router({
       .input(ingestSignalBatchInput)
       .output(ingestSignalBatchOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    ingestGuyanaOpportunity: publicProcedure
+      .input(ingestGuyanaOpportunityInput)
+      .output(ingestGuyanaOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     inbox: publicProcedure
       .input(signalInboxInput)
       .output(signalInboxOutput)
@@ -590,6 +596,18 @@ const appRouter = t.router({
       .input(qualifySignalInput)
       .output(qualifySignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    evaluateOpportunity: publicProcedure
+      .input(evaluateOpportunityInput)
+      .output(evaluateOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    decideOpportunity: publicProcedure
+      .input(decideOpportunityInput)
+      .output(decideOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    opportunityReviewQueue: publicProcedure
+      .input(opportunityReviewQueueInput)
+      .output(opportunityReviewQueueOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     promote: publicProcedure
       .input(promoteSignalInput)
       .output(promoteSignalOutput)
