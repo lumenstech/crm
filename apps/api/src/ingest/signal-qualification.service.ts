@@ -326,7 +326,8 @@ export class SignalQualificationService {
 		const [row] = await this.db.$queryRaw<OpportunityMapping[]>`
 			SELECT "canonicalId" AS "canonicalId", "applicationId" AS "applicationId"
 			FROM record_mapping
-			WHERE "sourceSystem" = ${signal.sourceSystem} AND "sourceType" = ${signal.sourceType}
+			WHERE "businessUnitId" = ${signal.businessUnitId}
+				AND "sourceSystem" = ${signal.sourceSystem} AND "sourceType" = ${signal.sourceType}
 				AND "sourceId" = ${signal.sourceId} AND "canonicalType" = 'opportunity'
 				AND status = 'active' LIMIT 1
 		`;
