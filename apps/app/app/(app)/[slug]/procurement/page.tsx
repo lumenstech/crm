@@ -9,6 +9,8 @@ import {
 import { Input } from "@crm/ui/components/input";
 import { Textarea } from "@crm/ui/components/textarea";
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { Suspense } from "react";
 import {
 	PageShell,
 	PageShellContent,
@@ -97,9 +99,34 @@ const demandKey = (row: DemandRow) =>
 		.map((part) => part ?? "")
 		.join("|");
 
-export default async function ProcurementPage({
+export default function ProcurementPage({
 	params,
 }: PageProps<"/[slug]/procurement">) {
+	return (
+		<PageShell>
+			<PageShellHeader>
+				<PageShellHeading>
+					<PageShellTitle>Procurement</PageShellTitle>
+					<PageShellDescription>
+						Supplier pricing, GPU/server demand, availability and buy/sell
+						decisions.
+					</PageShellDescription>
+				</PageShellHeading>
+			</PageShellHeader>
+
+			<PageShellContent>
+				<Suspense fallback={<div className="py-12 text-sm text-muted-foreground">Loading procurement…</div>}>
+					<ProcurementContent params={params} />
+				</Suspense>
+			</PageShellContent>
+		</PageShell>
+	);
+}
+
+async function ProcurementContent({
+	params,
+}: Pick<PageProps<"/[slug]/procurement">, "params">) {
+	await connection();
 	await requireSession();
 	const { slug } = await params;
 	const businessUnit = await ensureDataGearBusinessUnit();
@@ -136,18 +163,7 @@ export default async function ProcurementPage({
 	]);
 
 	return (
-		<PageShell>
-			<PageShellHeader>
-				<PageShellHeading>
-					<PageShellTitle>Procurement</PageShellTitle>
-					<PageShellDescription>
-						Supplier pricing, GPU/server demand, availability and buy/sell
-						decisions.
-					</PageShellDescription>
-				</PageShellHeading>
-			</PageShellHeader>
-
-			<PageShellContent>
+		<>
 				<div className="grid gap-4 xl:grid-cols-2">
 					<Card>
 						<CardHeader>
@@ -548,7 +564,6 @@ export default async function ProcurementPage({
 						</CardContent>
 					</Card>
 				</div>
-			</PageShellContent>
-		</PageShell>
+		</>
 	);
 }
