@@ -1,8 +1,9 @@
 "use client";
 
-import { signIn, authClient } from "@crm/auth/client";
+import { authClient, signIn } from "@crm/auth/client";
 import { Button } from "@crm/ui/components/button";
 import { Input } from "@crm/ui/components/input";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -79,6 +80,16 @@ export function EmailPasswordSignIn() {
 					minLength={8}
 					required
 				/>
+				{mode === "sign-in" ? (
+					<div className="flex justify-end">
+						<Link
+							href="/forgot-password"
+							className="text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+						>
+							Forgot password?
+						</Link>
+					</div>
+				) : null}
 				<Button type="submit" className="w-full" disabled={pending}>
 					{pending
 						? "Please wait…"
