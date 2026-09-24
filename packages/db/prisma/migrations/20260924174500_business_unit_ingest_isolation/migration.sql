@@ -27,15 +27,9 @@ WHERE rm."businessUnitId" IS NULL
   AND rm."sourceType" = sr."sourceType"
   AND rm."sourceId" = sr."sourceId";
 
-DO $
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM "record_mapping" WHERE "businessUnitId" IS NULL
-  ) THEN
-    RAISE EXCEPTION 'Business-unit migration found orphaned record mappings; no data was deleted.';
-  END IF;
-END $;
-
+-- SET NOT NULL is intentionally the safety check: if any legacy mapping could
+-- not be associated with a source record, PostgreSQL aborts the migration and
+-- preserves the row rather than deleting or guessing its business unit.
 ALTER TABLE "record_mapping" ALTER COLUMN "businessUnitId" SET NOT NULL;
 
 DROP INDEX IF EXISTS "record_mapping_sourceSystem_sourceType_sourceId_canonicalTy_key";
