@@ -78,7 +78,8 @@ export class IngestService {
 
 		const [existing] = await this.db.$queryRaw<SourceRecordRow[]>`
 			SELECT id FROM source_record
-			WHERE "sourceSystem" = ${input.source}
+			WHERE "businessUnitId" = ${businessUnit.id}
+				AND "sourceSystem" = ${input.source}
 				AND "sourceType" = ${input.sourceType}
 				AND "sourceId" = ${input.sourceId}
 			LIMIT 1
@@ -110,8 +111,7 @@ export class IngestService {
 				${input.sourceId}, ${input.sourceUrl ?? null}, ${observedAt}, ${payload}::jsonb,
 				CURRENT_TIMESTAMP
 			)
-			ON CONFLICT ("sourceSystem", "sourceType", "sourceId") DO UPDATE SET
-				"businessUnitId" = EXCLUDED."businessUnitId",
+			ON CONFLICT ("businessUnitId", "sourceSystem", "sourceType", "sourceId") DO UPDATE SET
 				"sourceUrl" = EXCLUDED."sourceUrl",
 				"observedAt" = EXCLUDED."observedAt",
 				payload = EXCLUDED.payload
@@ -146,7 +146,8 @@ export class IngestService {
 				sr.payload->>'next_action' AS "nextAction",
 				EXISTS (
 					SELECT 1 FROM record_mapping rm
-					WHERE rm."sourceSystem" = sr."sourceSystem"
+					WHERE rm."businessUnitId" = sr."businessUnitId"
+						AND rm."sourceSystem" = sr."sourceSystem"
 						AND rm."sourceType" = sr."sourceType"
 						AND rm."sourceId" = sr."sourceId"
 						AND rm."canonicalType" = 'company' AND rm.status = 'active'
@@ -162,11 +163,13 @@ export class IngestService {
 				AND (
 					${input.status} = 'all'
 					OR (${input.status} = 'mapped' AND EXISTS (
-						SELECT 1 FROM record_mapping rm WHERE rm."sourceSystem" = sr."sourceSystem"
+						SELECT 1 FROM record_mapping rm WHERE rm."businessUnitId" = sr."businessUnitId"
+							AND rm."sourceSystem" = sr."sourceSystem"
 							AND rm."sourceType" = sr."sourceType" AND rm."sourceId" = sr."sourceId"
 							AND rm."canonicalType" = 'company' AND rm.status = 'active'))
 					OR (${input.status} = 'unresolved' AND NOT EXISTS (
-						SELECT 1 FROM record_mapping rm WHERE rm."sourceSystem" = sr."sourceSystem"
+						SELECT 1 FROM record_mapping rm WHERE rm."businessUnitId" = sr."businessUnitId"
+							AND rm."sourceSystem" = sr."sourceSystem"
 							AND rm."sourceType" = sr."sourceType" AND rm."sourceId" = sr."sourceId"
 							AND rm."canonicalType" = 'company' AND rm.status = 'active'))
 				)
@@ -194,7 +197,8 @@ export class IngestService {
 			Array<{ applicationId: string | null }>
 		>`
 			SELECT "applicationId" FROM record_mapping
-			WHERE "sourceSystem" = ${signal.sourceSystem}
+			WHERE "businessUnitId" = ${signal.businessUnitId}
+				AND "sourceSystem" = ${signal.sourceSystem}
 				AND "sourceType" = ${signal.sourceType}
 				AND "sourceId" = ${signal.sourceId}
 				AND "canonicalType" = 'company' AND status = 'active' LIMIT 1
@@ -310,15 +314,15 @@ export class IngestService {
 
 		await this.db.$queryRaw`
 			INSERT INTO record_mapping (
-				id, "sourceSystem", "sourceType", "sourceId", "canonicalType", "canonicalId",
+				id, "businessUnitId", "sourceSystem", "sourceType", "sourceId", "canonicalType", "canonicalId",
 				application, "applicationId", "matchMethod", status, "createdAt", "updatedAt"
 			)
 			VALUES (
-				${randomUUID()}, ${signal.sourceSystem}, ${signal.sourceType}, ${signal.sourceId},
+				${randomUUID()}, ${signal.businessUnitId}, ${signal.sourceSystem}, ${signal.sourceType}, ${signal.sourceId},
 				'company', ${canonical.id}, 'comp-ai-core', ${company.id}, ${matchMethod}, 'active',
 				CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 			)
-			ON CONFLICT ("sourceSystem", "sourceType", "sourceId", "canonicalType") DO UPDATE SET
+			ON CONFLICT ("businessUnitId", "sourceSystem", "sourceType", "sourceId", "canonicalType") DO UPDATE SET
 				"canonicalId" = EXCLUDED."canonicalId",
 				application = EXCLUDED.application,
 				"applicationId" = EXCLUDED."applicationId",
