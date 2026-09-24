@@ -53,8 +53,7 @@ export function calculateProcurementPricing(
 		otherDirectCostPerUnit;
 	const sellPrice = landedCost * (1 + markupRate);
 	const grossProfit = sellPrice - landedCost;
-	const grossMarginPct =
-		sellPrice === 0 ? 0 : (grossProfit / sellPrice) * 100;
+	const grossMarginPct = sellPrice === 0 ? 0 : (grossProfit / sellPrice) * 100;
 
 	return {
 		landedCost: roundMoney(landedCost),
