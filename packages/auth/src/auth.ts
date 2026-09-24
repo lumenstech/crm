@@ -79,42 +79,6 @@ export const auth = betterAuth({
 
 	emailAndPassword: {
 		enabled: true,
-		revokeSessionsOnPasswordReset: true,
-		sendResetPassword: async ({ user, url }) => {
-			const apiKey = process.env.RESEND_API_KEY;
-			const from = process.env.PASSWORD_RESET_FROM;
-
-			if (!apiKey || !from) {
-				console.error(
-					"Password reset email is not configured: set RESEND_API_KEY and PASSWORD_RESET_FROM.",
-				);
-				return;
-			}
-
-			void fetch("https://api.resend.com/emails", {
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
-					from,
-					to: [user.email],
-					subject: "Reset your CRM password",
-					text: `Reset your CRM password: ${url}\n\nThis link expires automatically. If you did not request this, you can ignore this email.`,
-				}),
-			}).then(async (response) => {
-				if (!response.ok) {
-					console.error(
-						"Password reset email failed:",
-						response.status,
-						await response.text(),
-					);
-				}
-			}).catch((error) => {
-				console.error("Password reset email failed:", error);
-			});
-		},
 	},
 
 	socialProviders,
