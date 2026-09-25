@@ -99,32 +99,44 @@ export class BusinessUnitsService {
 		companyId: string;
 		contactId?: string | null;
 		targetBusinessUnit: string;
-		ownerId: string;
+		ownerId?: string | null;
 		name: string;
 		useCase?: string | null;
 		notes?: string | null;
 	}) {
 		const company = await this.db.company.findUnique({
 			where: { id: input.companyId },
-			select: { id: true, businessUnitId: true },
+			select: { id: true, businessUnitId: true, ownerId: true },
 		});
 		if (!company) throw new NotFoundException(`No company with id ${input.companyId}.`);
 
-		const owner = await this.db.user.findUnique({
-			where: { id: input.ownerId },
-			select: { id: true },
-		});
-		if (!owner) throw new NotFoundException(`No user with id ${input.ownerId}.`);
-
+		let contactOwnerId: string | null = null;
 		if (input.contactId) {
 			const contact = await this.db.contact.findUnique({
 				where: { id: input.contactId },
-				select: { id: true, companyId: true },
+				select: { id: true, companyId: true, ownerId: true },
 			});
 			if (!contact) throw new NotFoundException(`No contact with id ${input.contactId}.`);
 			if (contact.companyId !== company.id) {
-				throw new BadRequestException("The selected contact does not belong to the selected company.");
+				throw new BadRequestException(
+					"The selected contact does not belong to the selected company.",
+				);
 			}
+			contactOwnerId = contact.ownerId;
+		}
+
+		const resolvedOwnerId = input.ownerId ?? company.ownerId ?? contactOwnerId;
+		if (!resolvedOwnerId) {
+			throw new BadRequestException(
+				"No owner could be inferred. Provide ownerId or assign an owner to the company/contact first.",
+			);
+		}
+		const owner = await this.db.user.findUnique({
+			where: { id: resolvedOwnerId },
+			select: { id: true },
+		});
+		if (!owner) {
+			throw new NotFoundException(`No user with id ${resolvedOwnerId}.`);
 		}
 
 		const association = await this.associateRecord({
