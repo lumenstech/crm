@@ -6,8 +6,8 @@ import {
 	ingestLeadsInput,
 	jsonObject,
 	listRecordBusinessUnitsInput,
-	searchCrmInput,
 	type SignalPayloadValue,
+	searchCrmInput,
 } from "./schemas";
 
 function result(value: SignalPayloadValue) {
