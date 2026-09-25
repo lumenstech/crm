@@ -1,6 +1,6 @@
 import { Inject } from "@nestjs/common";
-import type { z } from "zod";
 import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
+import type { z } from "zod";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
 import {
@@ -47,7 +47,10 @@ export class BusinessUnitsRouter {
 	async recordAssociations(
 		@Input() input: z.infer<typeof recordAssociationsInput>,
 	) {
-		return this.businessUnits.recordAssociations(input.recordType, input.recordId);
+		return this.businessUnits.recordAssociations(
+			input.recordType,
+			input.recordId,
+		);
 	}
 
 	@Mutation({

@@ -37,7 +37,6 @@ export const ingestLeadsInput = z.object({
 
 export type IngestLeadsInput = z.infer<typeof ingestLeadsInput>;
 
-
 export const reusableRecordType = z.enum(["company", "contact"]);
 
 export const associateRecordWithBusinessUnitInput = z.object({

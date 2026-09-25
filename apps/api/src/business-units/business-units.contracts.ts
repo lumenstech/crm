@@ -10,7 +10,6 @@ export const businessUnitOutput = z.object({
 
 export const businessUnitListOutput = z.array(businessUnitOutput);
 
-
 export const reusableRecordType = z.enum(["company", "contact"]);
 
 export const associateRecordInput = z.object({

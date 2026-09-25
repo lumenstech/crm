@@ -143,7 +143,8 @@ export class SearchService {
 						iconTone: company.iconTone,
 						imageUrl: null,
 						sourceBusinessUnit: company.businessUnit,
-						associatedBusinessUnits: byRecord.get(`company:${company.id}`) ?? [],
+						associatedBusinessUnits:
+							byRecord.get(`company:${company.id}`) ?? [],
 					}),
 				),
 				...contacts.map(
@@ -159,7 +160,8 @@ export class SearchService {
 						iconTone: null,
 						imageUrl: contact.imageUrl,
 						sourceBusinessUnit: contact.company?.businessUnit ?? null,
-						associatedBusinessUnits: byRecord.get(`contact:${contact.id}`) ?? [],
+						associatedBusinessUnits:
+							byRecord.get(`contact:${contact.id}`) ?? [],
 					}),
 				),
 				...deals.map(

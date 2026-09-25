@@ -1,5 +1,9 @@
 import type { Db } from "@crm/db";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+	BadRequestException,
+	Injectable,
+	NotFoundException,
+} from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
 type AssociationRecordType = "company" | "contact";
@@ -33,7 +37,7 @@ export class BusinessUnitsService {
 			where: { key: input.targetBusinessUnit },
 			select: { id: true, key: true, name: true, enabled: true },
 		});
-		if (!target || !target.enabled) {
+		if (!target?.enabled) {
 			throw new BadRequestException(
 				`Unknown or disabled business unit: ${input.targetBusinessUnit}.`,
 			);
@@ -78,7 +82,10 @@ export class BusinessUnitsService {
 		};
 	}
 
-	async recordAssociations(recordType: AssociationRecordType, recordId: string) {
+	async recordAssociations(
+		recordType: AssociationRecordType,
+		recordId: string,
+	) {
 		await this.sourceBusinessUnitId(recordType, recordId);
 		const rows = await this.db.businessUnitRecordAssociation.findMany({
 			where: { recordType, recordId },
@@ -108,7 +115,8 @@ export class BusinessUnitsService {
 			where: { id: input.companyId },
 			select: { id: true, businessUnitId: true, ownerId: true },
 		});
-		if (!company) throw new NotFoundException(`No company with id ${input.companyId}.`);
+		if (!company)
+			throw new NotFoundException(`No company with id ${input.companyId}.`);
 
 		let contactOwnerId: string | null = null;
 		if (input.contactId) {
@@ -116,7 +124,8 @@ export class BusinessUnitsService {
 				where: { id: input.contactId },
 				select: { id: true, companyId: true, ownerId: true },
 			});
-			if (!contact) throw new NotFoundException(`No contact with id ${input.contactId}.`);
+			if (!contact)
+				throw new NotFoundException(`No contact with id ${input.contactId}.`);
 			if (contact.companyId !== company.id) {
 				throw new BadRequestException(
 					"The selected contact does not belong to the selected company.",
@@ -197,7 +206,8 @@ export class BusinessUnitsService {
 				where: { id: recordId },
 				select: { businessUnitId: true },
 			});
-			if (!company) throw new NotFoundException(`No company with id ${recordId}.`);
+			if (!company)
+				throw new NotFoundException(`No company with id ${recordId}.`);
 			return company.businessUnitId;
 		}
 
@@ -205,8 +215,8 @@ export class BusinessUnitsService {
 			where: { id: recordId },
 			select: { company: { select: { businessUnitId: true } } },
 		});
-		if (!contact) throw new NotFoundException(`No contact with id ${recordId}.`);
+		if (!contact)
+			throw new NotFoundException(`No contact with id ${recordId}.`);
 		return contact.company?.businessUnitId ?? null;
 	}
-
 }

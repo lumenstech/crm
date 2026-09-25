@@ -1,18 +1,20 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
 import { BusinessUnitsService } from "../src/business-units/business-units.service";
+import { SearchService } from "../src/search/search.service";
 
 const SOURCE_KEY = "test-source-reuse";
-const TARGET_KEY = "test-target-reuse";
+const TARGET_KEY = "energybms";
 const USER_ID = "test-cross-unit-user";
 const COMPANY_NAME = "Cross Unit Property Management";
 const CONTACT_EMAIL = "cross-unit-manager@example.invalid";
 
 const service = new BusinessUnitsService(db);
+const search = new SearchService(db);
 
 async function cleanup() {
 	const units = await db.businessUnit.findMany({
-		where: { key: { in: [SOURCE_KEY, TARGET_KEY] } },
+		where: { key: SOURCE_KEY },
 		select: { id: true },
 	});
 	const unitIds = units.map((row) => row.id);
@@ -49,16 +51,20 @@ async function cleanup() {
 	await db.contact.deleteMany({ where: { id: { in: contactIds } } });
 	await db.company.deleteMany({
 		where: {
-			OR: [
-				{ id: { in: companyIds } },
-				{ name: COMPANY_NAME },
-			],
+			OR: [{ id: { in: companyIds } }, { name: COMPANY_NAME }],
 		},
 	});
 	await db.user.deleteMany({ where: { id: USER_ID } });
 	await db.businessUnit.deleteMany({
-		where: { key: { in: [SOURCE_KEY, TARGET_KEY] } },
+		where: { key: SOURCE_KEY },
 	});
+}
+
+async function contactSearch(q: string, contactId: string) {
+	const result = await search.quick(q);
+	return result.hits.find(
+		(hit) => hit.kind === "contact" && hit.id === contactId,
+	);
 }
 
 beforeEach(cleanup);
@@ -70,10 +76,11 @@ describe("cross-business-unit relationship reuse", () => {
 			db.businessUnit.create({
 				data: { key: SOURCE_KEY, name: "Source Unit", enabled: true },
 			}),
-			db.businessUnit.create({
-				data: { key: TARGET_KEY, name: "Target Unit", enabled: true },
+			db.businessUnit.findUniqueOrThrow({
+				where: { key: TARGET_KEY },
 			}),
 		]);
+		expect(target.enabled).toBe(true);
 		const owner = await db.user.create({
 			data: {
 				id: USER_ID,
@@ -100,9 +107,20 @@ describe("cross-business-unit relationship reuse", () => {
 		});
 
 		const before = {
-			companies: await db.company.count({ where: { id: company.id } }),
-			contacts: await db.contact.count({ where: { id: contact.id } }),
+			companies: await db.company.count({ where: { name: COMPANY_NAME } }),
+			contacts: await db.contact.count({ where: { email: CONTACT_EMAIL } }),
 		};
+
+		for (const term of [
+			"Building",
+			CONTACT_EMAIL,
+			"Building Manager",
+			COMPANY_NAME,
+		]) {
+			const hit = await contactSearch(term, contact.id);
+			expect(hit?.sourceBusinessUnit?.id).toBe(source.id);
+			expect(hit?.associatedBusinessUnits).toEqual([]);
+		}
 
 		const association = await service.associateRecord({
 			recordType: "contact",
@@ -143,14 +161,25 @@ describe("cross-business-unit relationship reuse", () => {
 		expect(deal.companyId).toBe(company.id);
 		expect(deal.contacts.map((row) => row.contactId)).toContain(contact.id);
 
-		expect(await db.company.count({ where: { id: company.id } })).toBe(
+		expect(await db.company.count({ where: { name: COMPANY_NAME } })).toBe(
 			before.companies,
 		);
-		expect(await db.contact.count({ where: { id: contact.id } })).toBe(
+		expect(await db.contact.count({ where: { email: CONTACT_EMAIL } })).toBe(
 			before.contacts,
 		);
 
-		const associations = await service.recordAssociations("contact", contact.id);
+		const reusedHit = await contactSearch("Building Manager", contact.id);
+		expect(reusedHit?.sourceBusinessUnit?.id).toBe(source.id);
+		expect(reusedHit?.associatedBusinessUnits).toContainEqual({
+			id: target.id,
+			key: TARGET_KEY,
+			name: "EnergyBMS",
+		});
+
+		const associations = await service.recordAssociations(
+			"contact",
+			contact.id,
+		);
 		expect(associations).toHaveLength(1);
 		expect(associations[0]?.targetBusinessUnit.id).toBe(target.id);
 	});

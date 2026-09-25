@@ -16,7 +16,7 @@ const publicProcedure = t.procedure;
 import { timelineInput, timelineOutput, timelineCountsInput, timelineCountsOutput, myTasksInput, myTasksOutput, activityCreateInput, activityCreateOutput, completeInput, completeOutput } from "../activities/activities.contracts";
 import { agentListOutput, agentReviseInput, agentReviseOutput, agentIdInput, agentFilesOutput, agentSaveFileInput, agentSaveFileOutput, agentByIdOutput, agentHistoryInput, agentHistoryOutput, agentActivityOutput, agentUpdateInput, agentUpdateOutput, agentDeployInput, agentDeployOutput, agentPauseOutput, agentResumeOutput, agentArchiveOutput, agentRestoreOutput, agentRemoveOutput, agentRunNowInput, agentRunNowOutput, agentRetryRunInput, agentRetryRunOutput, agentCancelRunInput, agentCancelRunOutput } from "../agent/agents.contracts";
 import { apiKeyListInput, apiKeyListOutput, createApiKeyInput, createApiKeyOutput, revokeApiKeyInput, revokeApiKeyOutput } from "../api-keys/api-keys.contracts";
-import { businessUnitListOutput } from "../business-units/business-units.contracts";
+import { businessUnitListOutput, associateRecordInput, recordAssociationOutput, recordAssociationsInput, recordAssociationsOutput, createBusinessUnitOpportunityInput, createBusinessUnitOpportunityOutput } from "../business-units/business-units.contracts";
 import { companyListInput, companyListOutput, companyIdInput, companyDetailOutput, companyOptionsInput, companyOptionOutput, companyCreateInput, companySummaryOutput, companyUpdateArgs, companyArchiveResultOutput, companyBulkOwnerInput, companyBulkResultOutput, companyBulkInput, companyEnrichOutput, companyResearchOutput, setPrimaryContactInput, companySetPrimaryContactOutput } from "../companies/companies.contracts";
 import { contactListInput, contactListOutput, contactIdInput, contactByIdOutput, contactCreateInput, contactBasicOutput, contactUpdateArgs, contactNameOutput, contactEnrichOutput, contactBulkOwnerInput, bulkResultOutput, contactBulkCompanyInput, contactBulkInput, factDecisionInput, decideFactOutput } from "../contacts/contacts.contracts";
 import { conversationListInput, conversationListOutput, builderListOutput, builderResourceSearchInput, builderResourcesOutput, conversationIdInput, builderConversationDetailOutput, conversationEventsInput, conversationEventsOutput, conversationSaveInput, conversationIdOutput, builderConversationCreateInput, builderConversationSubmitInput, builderQuestionResponseInput, builderResponseRatingInput, builderResponseRatingOutput, conversationShareStatusOutput, conversationShareTokenOutput, sharedConversationInput, sharedConversationOutput } from "../conversations/conversations.contracts";
@@ -26,8 +26,10 @@ import { dealListInput, dealListOutput, dealIdInput, dealDetailOutput, dealCreat
 import { enrichmentQueueInput } from "@crm/validation/enrichment-queue";
 import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput, fieldEntityInput, fieldFiltersOutput, fieldIdInput, fieldCoverageOutput, fieldCreateInput, fieldUpdateArgs, fieldReorderInput, fieldReorderOutput, fieldDeleteOutput, fieldBackfillOutput } from "../fields/fields.contracts";
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
-import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput, startOutlookBackfillInput } from "../microsoft/microsoft.contracts";
+import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, startOutlookBackfillInput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
 import { ingestSignalInput, ingestSignalOutput, ingestSignalBatchInput, ingestSignalBatchOutput, signalInboxInput, signalInboxOutput, signalSourceRecordInput, signalCompanyCandidatesOutput, resolveSignalCompanyInput, resolveSignalCompanyOutput, qualifySignalInput, qualifySignalOutput, promoteSignalInput, promoteSignalOutput } from "../ingest/ingest.contracts";
+import { ingestGuyanaOpportunityInput, ingestGuyanaOpportunityOutput } from "../ingest/guyana-opportunity.contracts";
+import { evaluateOpportunityInput, evaluateOpportunityOutput, decideOpportunityInput, decideOpportunityOutput, opportunityReviewQueueInput, opportunityReviewQueueOutput } from "../ingest/opportunity-ops.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
 import { slackStatusOutput, slackMatchesOutput, slackChannelsInput, slackChannelsOutput, slackJoinChannelInput, slackJoinChannelOutput, slackRefreshPeopleOutput, slackCreateChannelInput, slackCreateChannelOutput, slackDisconnectOutput } from "../slack/slack.contracts";
@@ -145,7 +147,19 @@ const appRouter = t.router({
   businessUnits: t.router({
     list: publicProcedure
       .output(businessUnitListOutput)
-      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    associateRecord: publicProcedure
+      .input(associateRecordInput)
+      .output(recordAssociationOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    recordAssociations: publicProcedure
+      .input(recordAssociationsInput)
+      .output(recordAssociationsOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    createBusinessUnitOpportunity: publicProcedure
+      .input(createBusinessUnitOpportunityInput)
+      .output(createBusinessUnitOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
   companies: t.router({
     list: publicProcedure
@@ -574,6 +588,10 @@ const appRouter = t.router({
       .input(ingestSignalBatchInput)
       .output(ingestSignalBatchOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    ingestGuyanaOpportunity: publicProcedure
+      .input(ingestGuyanaOpportunityInput)
+      .output(ingestGuyanaOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     inbox: publicProcedure
       .input(signalInboxInput)
       .output(signalInboxOutput)
@@ -590,6 +608,18 @@ const appRouter = t.router({
       .input(qualifySignalInput)
       .output(qualifySignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    evaluateOpportunity: publicProcedure
+      .input(evaluateOpportunityInput)
+      .output(evaluateOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    decideOpportunity: publicProcedure
+      .input(decideOpportunityInput)
+      .output(decideOpportunityOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    opportunityReviewQueue: publicProcedure
+      .input(opportunityReviewQueueInput)
+      .output(opportunityReviewQueueOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
     promote: publicProcedure
       .input(promoteSignalInput)
       .output(promoteSignalOutput)
@@ -647,6 +677,16 @@ const appRouter = t.router({
 	iconDarkUrl: z.string().nullable(),
 	iconTone: z.string().nullable(),
 	imageUrl: z.string().nullable(),
+	sourceBusinessUnit: z.object({
+	id: z.string(),
+	key: z.string(),
+	name: z.string(),
+}).nullable(),
+	associatedBusinessUnits: z.array(z.object({
+	id: z.string(),
+	key: z.string(),
+	name: z.string(),
+})),
 })) }))
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
