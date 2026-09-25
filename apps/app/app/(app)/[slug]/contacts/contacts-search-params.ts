@@ -4,6 +4,7 @@ export const contactsSearchParams = createListSearchParams({
 	defaultSort: "createdAt",
 	defaultDir: "desc",
 	facetIds: [
+		"businessUnit",
 		"owner",
 		"company",
 		"title",

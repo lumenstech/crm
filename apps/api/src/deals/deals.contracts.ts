@@ -29,6 +29,7 @@ export type ClosingWindow = (typeof CLOSING_WINDOWS)[number];
 export const dealListInput = listInput.extend({
 	status: z.string().default("all"),
 	owner: z.array(z.string()).default([]),
+	businessUnit: z.array(z.string()).default([]),
 	stage: z.array(z.string()).default([]),
 	closing: z.array(z.string()).default([]),
 	fields: z.record(z.string(), z.array(z.string())).default({}),
