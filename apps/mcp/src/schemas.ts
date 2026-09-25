@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { BUSINESS_UNIT_KEYS } from "./businessUnits";
-
-export const businessUnitKey = z.enum(BUSINESS_UNIT_KEYS);
+export const businessUnitKey = z.string().trim().min(1).max(96);
 
 export const searchCrmInput = z.object({
 	q: z.string().trim().min(1).max(320),
