@@ -1,5 +1,10 @@
 import { redactSecrets } from "./redact";
-import type { IngestLeadsInput } from "./schemas";
+import type {
+	AssociateRecordWithBusinessUnitInput,
+	CreateBusinessUnitOpportunityInput,
+	IngestLeadsInput,
+	ListRecordBusinessUnitsInput,
+} from "./schemas";
 
 type RequestOptions = {
 	method?: "GET" | "POST";
@@ -30,10 +35,33 @@ export class CrmClient {
 		return this.request("/rest/search", { query: { q } });
 	}
 
+	recordBusinessUnits(input: ListRecordBusinessUnitsInput) {
+		return this.request("/rest/business-units/associations", {
+			query: {
+				recordType: input.recordType,
+				recordId: input.recordId,
+			},
+		});
+	}
+
+	associateRecord(input: AssociateRecordWithBusinessUnitInput) {
+		return this.request("/rest/business-units/associations", {
+			method: "POST",
+			body: input,
+		});
+	}
+
 	ingestLeads(input: IngestLeadsInput) {
 		return this.request("/rest/ingest/signals/batch", {
 			method: "POST",
 			body: { project: input.businessUnit, signals: input.signals },
+		});
+	}
+
+	createBusinessUnitOpportunity(input: CreateBusinessUnitOpportunityInput) {
+		return this.request("/rest/business-units/opportunities", {
+			method: "POST",
+			body: input,
 		});
 	}
 
