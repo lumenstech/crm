@@ -21,7 +21,8 @@
 		"test": "CRM_TELEMETRY_DISABLED=1 bun test --preload ./test/setup.ts",
 		"test:watch": "CRM_TELEMETRY_DISABLED=1 bun test --watch --preload ./test/setup.ts",
 		"trpc:generate": "nestjs-trpc generate -e src/app.module.ts -r \"**/*.router.ts\" -o src/generated",
-		"clean": "rm -rf .turbo dist node_modules src/generated"
+		"clean": "rm -rf .turbo dist node_modules src/generated",
+		"mcp:key": "bun scripts/create-mcp-api-key.ts"
 	},
 	"dependencies": {
 		"@crm/auth": "workspace:*",

@@ -9,6 +9,7 @@ import { ArchiveModule } from "./archive/archive.module";
 import { AuthModule } from "./auth/auth.module";
 import { BackfillModule } from "./backfill/backfill.module";
 import { AppCacheModule } from "./cache/cache.module";
+import { BusinessUnitsModule } from "./business-units/business-units.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { validateEnv } from "./config/env.validation";
 import { ContactsModule } from "./contacts/contacts.module";
@@ -19,6 +20,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { DatabaseModule } from "./database/database.module";
 import { DealsModule } from "./deals/deals.module";
 import { EnrichmentModule } from "./enrichment/enrichment.module";
+import { EmailIngestModule } from "./email-ingest/email-ingest.module";
 import { FieldsModule } from "./fields/fields.module";
 import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
@@ -56,6 +58,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		TrpcModule,
 		UsersModule,
 		ApiKeysModule,
+		BusinessUnitsModule,
 		CompaniesModule,
 		ContactsModule,
 		ConversationsModule,
@@ -65,6 +68,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		ActivitiesModule,
 		AgentModule,
 		EnrichmentModule,
+		EmailIngestModule,
 		DashboardModule,
 		SearchModule,
 		MailboxModule,

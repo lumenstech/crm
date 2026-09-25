@@ -7,6 +7,7 @@ import { activityFacetInput, listInput } from "../trpc/list-input";
 
 export const companyListInput = listInput.extend({
 	owner: z.array(z.string()).default([]),
+	businessUnit: z.array(z.string()).default([]),
 	industry: z.array(z.string()).default([]),
 	enrichment: z.array(z.string()).default([]),
 	source: z.array(z.string()).default([]),

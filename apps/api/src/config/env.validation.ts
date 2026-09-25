@@ -82,6 +82,22 @@ export class EnvironmentVariables {
 
 	@IsOptional()
 	@IsString()
+	RESEND_WEBHOOK_SECRET?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_ALLOWED_SENDERS?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_RECEIPT_FROM?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_RECEIPT_TO?: string;
+
+	@IsOptional()
+	@IsString()
 	PASSWORD_RESET_FROM?: string;
 
 	@IsOptional()
