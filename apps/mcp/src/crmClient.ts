@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { redactSecrets } from "./redact";
 import {
-	signalPayloadValue,
 	type AssociateRecordWithBusinessUnitInput,
 	type CreateBusinessUnitOpportunityInput,
 	type IngestLeadsInput,
 	type ListRecordBusinessUnitsInput,
 	type SignalPayloadValue,
+	signalPayloadValue,
 } from "./schemas";
 
 type RequestOptions<TBody = never> = {
@@ -159,9 +159,7 @@ export class CrmClient {
 			method: options?.method ?? "GET",
 			headers,
 			body:
-				options?.body === undefined
-					? undefined
-					: JSON.stringify(options.body),
+				options?.body === undefined ? undefined : JSON.stringify(options.body),
 			signal: AbortSignal.timeout(30_000),
 		});
 
