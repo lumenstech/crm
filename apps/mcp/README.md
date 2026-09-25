@@ -1,14 +1,19 @@
 # Comp CRM MCP
 
-Phase 1 remote MCP facade for Comp CRM.
+Remote MCP facade for Comp CRM.
 
 ## Tools
 
 - `list_business_units`
 - `search_crm`
+- `list_record_business_units`
+- `associate_record_with_business_unit`
 - `ingest_leads`
+- `create_business_unit_opportunity`
 
-No direct database access is used. The MCP service calls the existing Comp CRM REST API with a dedicated Better Auth API key.
+The required workflow is global search first, reuse and associate existing records, ingest only genuinely new records, then create qualified opportunities after association.
+
+No direct database access is used by the MCP process. The MCP service calls the existing Comp CRM REST API with a dedicated Better Auth API key.
 
 ## Runtime
 
