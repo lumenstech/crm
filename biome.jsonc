@@ -116,6 +116,32 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": [
+				"apps/api/scripts/guyana-opportunity-collector.ts",
+				"apps/api/src/app.module.ts",
+				"apps/api/src/companies/companies.service.ts",
+				"apps/api/src/contacts/contacts.service.ts",
+				"apps/api/src/deals/deals.service.ts",
+				"apps/api/src/email-ingest/email-ingest.contracts.ts",
+				"apps/api/src/email-ingest/email-ingest.controller.ts",
+				"apps/api/src/email-ingest/email-ingest.service.ts",
+				"apps/api/src/email-ingest/mailbox-email-ingest.service.ts",
+				"apps/api/src/ingest/guyana-opportunity.contracts.ts",
+				"apps/api/src/ingest/guyana-opportunity.sources.ts",
+				"apps/api/src/ingest/ingest.contracts.ts"
+			],
+			"formatter": {
+				"enabled": false
+			},
+			"assist": {
+				"actions": {
+					"source": {
+						"organizeImports": "off"
+					}
+				}
+			}
 		}
 	]
 }
