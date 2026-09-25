@@ -76,7 +76,7 @@ export class CrmClient {
 			}),
 		);
 
-		const resolutions = [];
+		const resolutions: SignalPayloadValue[] = [];
 		for (const item of batch.items) {
 			if (item.status !== "accepted" || !item.sourceRecordId) continue;
 			const signal = input.signals.find(
