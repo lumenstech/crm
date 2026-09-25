@@ -1,10 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
-import {
-	BadRequestException,
-	Injectable,
-	NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import type {
 	DecideOpportunityInput,
@@ -125,9 +121,7 @@ export class OpportunityOpsService {
 			SELECT id FROM "user" WHERE id = ${input.reviewerUserId} LIMIT 1
 		`;
 		if (!userExists[0]) {
-			throw new BadRequestException(
-				"reviewerUserId does not identify a CRM user.",
-			);
+			throw new BadRequestException("reviewerUserId does not identify a CRM user.");
 		}
 		const latest = await this.latestReview(source.id);
 		if (!latest) {
