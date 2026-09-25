@@ -326,6 +326,23 @@ export class IngestService {
 			created = true;
 		}
 
+		// Persist cross-business-unit reuse without overwriting another unit's legacy owner.
+		await this.db.$queryRaw`
+			INSERT INTO company_business_unit (
+				"companyId", "businessUnitId", "useCase", notes, "createdAt"
+			)
+			VALUES (
+				${company.id}, ${signal.businessUnitId}, 'lead-ingest',
+				'Associated through source-signal company resolution', CURRENT_TIMESTAMP
+			)
+			ON CONFLICT ("companyId", "businessUnitId") DO NOTHING
+		`;
+		await this.db.$queryRaw`
+			UPDATE company
+			SET "businessUnitId" = ${signal.businessUnitId}
+			WHERE id = ${company.id} AND "businessUnitId" IS NULL
+		`;
+
 		const normalizedName = company.name.trim().toLowerCase();
 		const [canonical] = await this.db.$queryRaw<Array<{ id: string }>>`
 			INSERT INTO canonical_company (
