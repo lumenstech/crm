@@ -111,9 +111,7 @@ export type OpportunityScoreComponents = z.infer<
 	typeof opportunityScoreComponents
 >;
 export type EvaluateOpportunityInput = z.infer<typeof evaluateOpportunityInput>;
-export type EvaluateOpportunityOutput = z.infer<
-	typeof evaluateOpportunityOutput
->;
+export type EvaluateOpportunityOutput = z.infer<typeof evaluateOpportunityOutput>;
 export type DecideOpportunityInput = z.infer<typeof decideOpportunityInput>;
 export type DecideOpportunityOutput = z.infer<typeof decideOpportunityOutput>;
 export type OpportunityReviewQueueInput = z.infer<
