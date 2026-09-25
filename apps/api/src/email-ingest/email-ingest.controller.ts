@@ -213,7 +213,7 @@ async function fetchReceivedEmail(
 		| ReceivedEmail
 		| { data?: ReceivedEmail };
 	if ("data" in body) return body.data ?? {};
-	return body;
+	return body as ReceivedEmail;
 }
 
 function extractEmail(value: string): string | null {
