@@ -1,16 +1,33 @@
+import { z } from "zod";
 import { redactSecrets } from "./redact";
-import type {
-	AssociateRecordWithBusinessUnitInput,
-	CreateBusinessUnitOpportunityInput,
-	IngestLeadsInput,
-	ListRecordBusinessUnitsInput,
+import {
+	signalPayloadValue,
+	type AssociateRecordWithBusinessUnitInput,
+	type CreateBusinessUnitOpportunityInput,
+	type IngestLeadsInput,
+	type ListRecordBusinessUnitsInput,
+	type SignalPayloadValue,
 } from "./schemas";
 
-type RequestOptions = {
+type RequestOptions<TBody = never> = {
 	method?: "GET" | "POST";
 	query?: Record<string, string | undefined>;
-	body?: unknown;
+	body?: TBody;
 };
+
+const ingestBatchResponse = z
+	.object({
+		items: z.array(
+			z.object({
+				sourceId: z.string(),
+				status: z.string(),
+				sourceRecordId: z.string().nullable(),
+			}),
+		),
+	})
+	.catchall(signalPayloadValue);
+
+const optionalText = z.string().trim().min(1);
 
 export class CrmClient {
 	private readonly baseUrl: string;
@@ -52,32 +69,29 @@ export class CrmClient {
 	}
 
 	async ingestLeads(input: IngestLeadsInput) {
-		const batch = await this.request("/rest/ingest/signals/batch", {
-			method: "POST",
-			body: { project: input.businessUnit, signals: input.signals },
-		});
-		const items =
-			batch &&
-			typeof batch === "object" &&
-			Array.isArray((batch as { items?: unknown }).items)
-				? (
-						batch as {
-							items: Array<{
-								sourceId: string;
-								status: string;
-								sourceRecordId: string | null;
-							}>;
-						}
-					).items
-				: [];
+		const batch = ingestBatchResponse.parse(
+			await this.request("/rest/ingest/signals/batch", {
+				method: "POST",
+				body: { project: input.businessUnit, signals: input.signals },
+			}),
+		);
 
-		const resolutions: Array<Record<string, unknown>> = [];
-		for (const item of items) {
+		const resolutions = [];
+		for (const item of batch.items) {
 			if (item.status !== "accepted" || !item.sourceRecordId) continue;
 			const signal = input.signals.find(
 				(candidate) => candidate.sourceId === item.sourceId,
 			);
 			if (!signal) continue;
+
+			const payloadDomain = optionalText.safeParse(signal.payload.domain);
+			const payloadWebsite = optionalText.safeParse(signal.payload.website);
+			const domain = payloadDomain.success
+				? payloadDomain.data
+				: payloadWebsite.success
+					? payloadWebsite.data
+					: null;
+
 			try {
 				const resolved = await this.request(
 					`/rest/ingest/signals/${encodeURIComponent(item.sourceRecordId)}/resolve-company`,
@@ -86,12 +100,7 @@ export class CrmClient {
 						body: {
 							sourceRecordId: item.sourceRecordId,
 							companyName: signal.entity ?? null,
-							domain:
-								typeof signal.payload.domain === "string"
-									? signal.payload.domain
-									: typeof signal.payload.website === "string"
-										? signal.payload.website
-										: null,
+							domain,
 							createIfMissing: true,
 							queueResearch: false,
 						},
@@ -101,9 +110,7 @@ export class CrmClient {
 					sourceId: item.sourceId,
 					sourceRecordId: item.sourceRecordId,
 					status: "resolved",
-					...(resolved && typeof resolved === "object"
-						? (resolved as Record<string, unknown>)
-						: { result: resolved }),
+					result: resolved,
 				});
 			} catch (error) {
 				resolutions.push({
@@ -119,9 +126,7 @@ export class CrmClient {
 		}
 
 		return {
-			...(batch && typeof batch === "object"
-				? (batch as Record<string, unknown>)
-				: { batch }),
+			...batch,
 			resolutions,
 		};
 	}
@@ -133,42 +138,47 @@ export class CrmClient {
 		});
 	}
 
-	private async request(path: string, options: RequestOptions = {}) {
+	private async request<TBody = never>(
+		path: string,
+		options?: RequestOptions<TBody>,
+	): Promise<SignalPayloadValue> {
 		const url = new URL(`${this.baseUrl}${path}`);
-		for (const [key, value] of Object.entries(options.query ?? {})) {
+		for (const [key, value] of Object.entries(options?.query ?? {})) {
 			if (value !== undefined) url.searchParams.set(key, value);
 		}
 
+		const headers = new Headers({
+			accept: "application/json",
+			"x-api-key": this.apiKey,
+		});
+		if (options?.body !== undefined) {
+			headers.set("content-type", "application/json");
+		}
+
 		const response = await fetch(url, {
-			method: options.method ?? "GET",
-			headers: {
-				accept: "application/json",
-				"x-api-key": this.apiKey,
-				...(options.body === undefined
-					? {}
-					: { "content-type": "application/json" }),
-			},
+			method: options?.method ?? "GET",
+			headers,
 			body:
-				options.body === undefined ? undefined : JSON.stringify(options.body),
+				options?.body === undefined
+					? undefined
+					: JSON.stringify(options.body),
 			signal: AbortSignal.timeout(30_000),
 		});
 
 		const text = await response.text();
-		let parsed: unknown = null;
+		let parsed: SignalPayloadValue = null;
 		if (text) {
 			try {
-				parsed = JSON.parse(text) as unknown;
+				parsed = signalPayloadValue.parse(JSON.parse(text));
 			} catch {
 				parsed = text;
 			}
 		}
 
 		if (!response.ok) {
-			const detail =
-				typeof parsed === "string" ? parsed : JSON.stringify(parsed ?? {});
 			throw new Error(
 				redactSecrets(
-					`Comp CRM API ${response.status} ${response.statusText} at ${path}: ${detail.slice(0, 2000)}`,
+					`Comp CRM API ${response.status} ${response.statusText} at ${path}: ${text.slice(0, 2000)}`,
 					[this.apiKey],
 				),
 			);
