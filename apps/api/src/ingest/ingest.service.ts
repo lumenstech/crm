@@ -331,16 +331,28 @@ export class IngestService {
 		}
 
 		// Persist cross-business-unit reuse without overwriting another unit's legacy owner.
-		await this.db.$queryRaw`
-			INSERT INTO company_business_unit (
-				"companyId", "businessUnitId", "useCase", notes, "createdAt"
-			)
-			VALUES (
-				${company.id}, ${signal.businessUnitId}, 'lead-ingest',
-				'Associated through source-signal company resolution', CURRENT_TIMESTAMP
-			)
-			ON CONFLICT ("companyId", "businessUnitId") DO NOTHING
-		`;
+		await this.db.businessUnitRecordAssociation.upsert({
+			where: {
+				recordType_recordId_targetBusinessUnitId: {
+					recordType: "company",
+					recordId: company.id,
+					targetBusinessUnitId: signal.businessUnitId,
+				},
+			},
+			create: {
+				recordType: "company",
+				recordId: company.id,
+				sourceBusinessUnitId: company.businessUnitId,
+				targetBusinessUnitId: signal.businessUnitId,
+				useCase: "lead-ingest",
+				notes: "Associated through source-signal company resolution",
+			},
+			update: {
+				sourceBusinessUnitId: company.businessUnitId,
+				useCase: "lead-ingest",
+				notes: "Associated through source-signal company resolution",
+			},
+		});
 		await this.db.$queryRaw`
 			UPDATE company
 			SET "businessUnitId" = ${signal.businessUnitId}
