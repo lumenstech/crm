@@ -1635,6 +1635,8 @@ model BusinessUnit {
   agentRuns      AgentRunContext[]
   sourceRecords  SourceRecord[]
   recordMappings RecordMapping[]
+  sourcedRecordAssociations BusinessUnitRecordAssociation[] @relation("RecordAssociationSourceBusinessUnit")
+  targetRecordAssociations  BusinessUnitRecordAssociation[] @relation("RecordAssociationTargetBusinessUnit")
 
   @@index([enabled, key])
   @@map("business_unit")
@@ -1778,6 +1780,25 @@ model RecordMapping {
   @@index([businessUnitId, canonicalType])
   @@index([canonicalType, canonicalId])
   @@map("record_mapping")
+}
+
+model BusinessUnitRecordAssociation {
+  id                   String   @id @default(uuid())
+  recordType           String
+  recordId             String
+  sourceBusinessUnitId String?
+  sourceBusinessUnit   BusinessUnit? @relation("RecordAssociationSourceBusinessUnit", fields: [sourceBusinessUnitId], references: [id], onDelete: SetNull)
+  targetBusinessUnitId String
+  targetBusinessUnit   BusinessUnit @relation("RecordAssociationTargetBusinessUnit", fields: [targetBusinessUnitId], references: [id], onDelete: Cascade)
+  useCase              String?
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([recordType, recordId, targetBusinessUnitId])
+  @@index([recordType, recordId])
+  @@index([targetBusinessUnitId, recordType])
+  @@map("business_unit_record_association")
 }
 
 model Campaign {
