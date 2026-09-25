@@ -64,7 +64,7 @@ export class ThreadWriterService {
 		parsed: IncomingMessage,
 		context: MatchContext,
 	): Promise<boolean> {
-		if (await this.emailIngest.handle(parsed)) return false;
+		if (await this.emailIngest.handle(parsed, options.mailbox)) return false;
 
 		const existing = await this.db.emailMessage.findUnique({
 			where: { rfcMessageId: parsed.rfcMessageId },
