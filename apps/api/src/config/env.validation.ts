@@ -90,6 +90,10 @@ export class EnvironmentVariables {
 
 	@IsOptional()
 	@IsString()
+	CRM_EMAIL_INGEST_ADDRESS?: string;
+
+	@IsOptional()
+	@IsString()
 	CRM_EMAIL_INGEST_RECEIPT_FROM?: string;
 
 	@IsOptional()

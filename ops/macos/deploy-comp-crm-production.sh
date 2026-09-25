@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_REF="${1:-feature/cross-business-unit-reuse}"
+SOURCE_REF="${1:-release}"
 PROD_DIR="${COMP_CRM_PROD_DIR:-/Users/danny/Documents/Codex/comp-ai-crm-release-migration}"
 EXPECTED_HEAD="${EXPECTED_HEAD:-}"
 

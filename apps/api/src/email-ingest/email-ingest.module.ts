@@ -5,11 +5,12 @@ import { ContactsModule } from "../contacts/contacts.module";
 import { IngestModule } from "../ingest/ingest.module";
 import { EmailIngestController } from "./email-ingest.controller";
 import { EmailIngestService } from "./email-ingest.service";
+import { MailboxEmailIngestService } from "./mailbox-email-ingest.service";
 
 @Module({
 	imports: [BusinessUnitsModule, CompaniesModule, ContactsModule, IngestModule],
 	controllers: [EmailIngestController],
-	providers: [EmailIngestService],
-	exports: [EmailIngestService],
+	providers: [EmailIngestService, MailboxEmailIngestService],
+	exports: [EmailIngestService, MailboxEmailIngestService],
 })
 export class EmailIngestModule {}
