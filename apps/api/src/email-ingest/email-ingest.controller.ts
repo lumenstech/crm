@@ -212,7 +212,8 @@ async function fetchReceivedEmail(
 	const body = (await response.json()) as
 		| ReceivedEmail
 		| { data?: ReceivedEmail };
-	return "data" in body && body.data ? body.data : body;
+	if ("data" in body) return body.data ?? {};
+	return body as ReceivedEmail;
 }
 
 function extractEmail(value: string): string | null {
