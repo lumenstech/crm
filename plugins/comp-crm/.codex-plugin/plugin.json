@@ -1,0 +1,23 @@
+{
+  "interface": {
+    "displayName": "COMP CRM",
+    "shortDescription": "Live COMP CRM search, reuse, ingest, and opportunities",
+    "longDescription": "Uses the live COMP CRM MCP service to search globally, reuse and associate existing records, ingest only net-new leads, and create qualified business-unit opportunities without direct Neon access.",
+    "developerName": "Danny Ramroop",
+    "category": "Productivity",
+    "capabilities": ["Interactive"],
+    "defaultPrompt": [
+      "Search COMP CRM globally before creating anything.",
+      "Ingest these leads into COMP CRM using the approved search-first and reuse-first flow.",
+      "Associate existing records to the target business unit rather than duplicating them.",
+      "Create opportunities only for qualified records after business-unit association is correct."
+    ]
+  },
+  "name": "comp-crm",
+  "version": "0.3.0",
+  "description": "Execute the approved COMP CRM search, association, ingestion, and opportunity workflow through the live COMP CRM MCP service.",
+  "author": {"name": "Danny Ramroop"},
+  "keywords": ["crm", "mcp", "lead-ingestion", "business-units"],
+  "skills": "./skills",
+  "mcpServers": "./mcp.json"
+}
