@@ -50,7 +50,9 @@ export function ChangePassword() {
 				toast.error(error.message || "Could not change password.");
 				return;
 			}
-			(document.getElementById("change-password") as HTMLFormElement | null)?.reset();
+			(
+				document.getElementById("change-password") as HTMLFormElement | null
+			)?.reset();
 			toast.success("Password changed. Other sessions were signed out.");
 		} catch {
 			toast.error("Could not reach the authentication service.");
@@ -68,22 +70,52 @@ export function ChangePassword() {
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<form id="change-password" action={(formData) => { void submit(formData); }}>
+				<form
+					id="change-password"
+					action={(formData) => {
+						void submit(formData);
+					}}
+				>
 					<FieldGroup>
 						<Field>
 							<FieldLabel htmlFor={currentId}>Current password</FieldLabel>
-							<Input id={currentId} name="currentPassword" type="password" autoComplete="current-password" required disabled={pending} />
+							<Input
+								id={currentId}
+								name="currentPassword"
+								type="password"
+								autoComplete="current-password"
+								required
+								disabled={pending}
+							/>
 						</Field>
 						<Field>
 							<FieldLabel htmlFor={nextId}>New password</FieldLabel>
-							<Input id={nextId} name="newPassword" type="password" autoComplete="new-password" minLength={8} required disabled={pending} />
+							<Input
+								id={nextId}
+								name="newPassword"
+								type="password"
+								autoComplete="new-password"
+								minLength={8}
+								required
+								disabled={pending}
+							/>
 							<FieldDescription>At least 8 characters.</FieldDescription>
 						</Field>
 						<Field>
 							<FieldLabel htmlFor={confirmId}>Confirm new password</FieldLabel>
-							<Input id={confirmId} name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required disabled={pending} />
+							<Input
+								id={confirmId}
+								name="confirmPassword"
+								type="password"
+								autoComplete="new-password"
+								minLength={8}
+								required
+								disabled={pending}
+							/>
 						</Field>
-						<Button type="submit" disabled={pending}>{pending ? "Changing password…" : "Change password"}</Button>
+						<Button type="submit" disabled={pending}>
+							{pending ? "Changing password…" : "Change password"}
+						</Button>
 					</FieldGroup>
 				</form>
 			</CardContent>
