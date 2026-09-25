@@ -57,6 +57,8 @@ export class SearchService {
 						{ firstName: { contains: term, mode: "insensitive" } },
 						{ lastName: { contains: term, mode: "insensitive" } },
 						{ email: { contains: term, mode: "insensitive" } },
+						{ title: { contains: term, mode: "insensitive" } },
+						{ company: { name: { contains: term, mode: "insensitive" } } },
 					],
 				},
 				take: PER_KIND,
