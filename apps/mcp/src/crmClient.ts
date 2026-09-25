@@ -68,11 +68,7 @@ export class CrmClient {
 			);
 			if (!signal) continue;
 
-			const domain = z
-				.string()
-				.trim()
-				.min(1)
-				.safeParse(signal.payload.domain);
+			const domain = z.string().trim().min(1).safeParse(signal.payload.domain);
 			const website = z
 				.string()
 				.trim()
