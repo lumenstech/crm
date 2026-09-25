@@ -65,6 +65,7 @@ export class EmailIngestService {
 						batch,
 						lead,
 						sourceId,
+						unit.id,
 					),
 				);
 			} catch (error) {
@@ -98,6 +99,7 @@ export class EmailIngestService {
 		batch: CrmEmailBatch,
 		lead: CrmEmailLead,
 		sourceId: string,
+		businessUnitId: string,
 	): Promise<EmailIngestItemResult> {
 		const existingCompany = await this.findCompany(lead);
 		const existingContact = await this.findContact(lead);
@@ -125,8 +127,8 @@ export class EmailIngestService {
 			company = { id: made.id, name: made.name, domain: made.domain };
 			await this.db.company.update({
 				where: { id: made.id },
-				data: { businessUnitId: batch.businessUnit ? undefined : undefined },
-			}).catch(() => undefined);
+				data: { businessUnitId },
+			});
 			created = true;
 		}
 
