@@ -95,6 +95,27 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": [
+				"packages/db/scripts/outlook-scan-dry-run.ts",
+				"packages/db/scripts/outlook-scan-promote.ts",
+				"packages/db/scripts/promote-identiti-pepboys-opportunity.ts",
+				"packages/db/scripts/verify-outlook-scan-promotion.ts"
+			],
+			"formatter": {
+				"enabled": false
+			}
+		},
+		{
+			"includes": ["packages/db/scripts/outlook-scan-dry-run.ts"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noExcessiveCognitiveComplexity": "off"
+					}
+				}
+			}
 		}
 	]
 }
