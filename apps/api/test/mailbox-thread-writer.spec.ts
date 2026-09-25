@@ -3,6 +3,7 @@ import { db, type MailboxSyncModel as MailboxSync } from "@crm/db";
 import type { AgentTriggerService } from "../src/agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../src/companies/company-directory.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
+import type { MailboxEmailIngestService } from "../src/email-ingest/mailbox-email-ingest.service";
 import { EnrichmentLogService } from "../src/crm/enrichment-log.service";
 import { MailboxMatchService } from "../src/mailbox/mailbox-match.service";
 import {
@@ -30,7 +31,10 @@ const stamp = new ActivityStampService(db);
 const directory = new CompanyDirectoryService(agent);
 const log = new EnrichmentLogService(db, stamp);
 const match = new MailboxMatchService(db, directory, agent, log);
-const threads = new ThreadWriterService(db, match, stamp);
+const emailIngest = {
+	handle: async () => false,
+} as unknown as MailboxEmailIngestService;
+const threads = new ThreadWriterService(db, match, stamp, emailIngest);
 
 let row: MailboxSync;
 
