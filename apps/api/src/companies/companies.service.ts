@@ -653,11 +653,7 @@ export class CompaniesService {
 		if (owner) and.push(owner);
 
 		if (input.businessUnit.length > 0) {
-			and.push({
-				businessUnitAssociations: {
-					some: { businessUnitId: { in: input.businessUnit } },
-				},
-			});
+			and.push({ businessUnitId: { in: input.businessUnit } });
 		}
 
 		if (input.industry.length > 0)
@@ -684,73 +680,53 @@ export class CompaniesService {
 		const where = {
 			AND: [this.searchFilter(input.q), archivedFilter(input.archived)],
 		};
-		const enabledBusinessUnits = await this.db.businessUnit.findMany({
-			where: { enabled: true },
-			select: { id: true },
-		});
 
 		const [
 			owners,
 			industries,
 			enrichment,
 			sources,
-			businessUnitCounts,
+			businessUnits,
 			activity,
 			fieldFacets,
 		] = await Promise.all([
-			this.db.company.groupBy({
-				by: ["ownerId"],
-				where,
-				_count: { _all: true },
-			}),
-			this.db.company.groupBy({
-				by: ["industry"],
-				where,
-				_count: { _all: true },
-			}),
-			this.db.company.groupBy({
-				by: ["enrichmentStatus"],
-				where,
-				_count: { _all: true },
-			}),
-			this.db.company.groupBy({
-				by: ["source"],
-				where,
-				_count: { _all: true },
-			}),
-			Promise.all(
-				enabledBusinessUnits.map((unit) =>
-					this.db.company.count({
-						where: {
-							AND: [
-								where,
-								{
-									businessUnitAssociations: {
-										some: { businessUnitId: unit.id },
-									},
-								},
-							],
-						},
-					}),
+				this.db.company.groupBy({
+					by: ["ownerId"],
+					where,
+					_count: { _all: true },
+				}),
+				this.db.company.groupBy({
+					by: ["industry"],
+					where,
+					_count: { _all: true },
+				}),
+				this.db.company.groupBy({
+					by: ["enrichmentStatus"],
+					where,
+					_count: { _all: true },
+				}),
+				this.db.company.groupBy({
+					by: ["source"],
+					where,
+					_count: { _all: true },
+				}),
+				this.db.company.groupBy({
+					by: ["businessUnitId"],
+					where,
+					_count: { _all: true },
+				}),
+				activityFacetCounts((activityWhere) =>
+					this.db.company.count({ where: { AND: [where, activityWhere] } }),
 				),
-			),
-			activityFacetCounts((activityWhere) =>
-				this.db.company.count({ where: { AND: [where, activityWhere] } }),
-			),
-			this.fields.filterFacetCounts("COMPANY", where, filterableFields),
-		]);
+				this.fields.filterFacetCounts("COMPANY", where, filterableFields),
+			]);
 
 		return {
 			owner: countsByKey(owners, "ownerId", FACET_UNASSIGNED),
 			industry: countsByKey(industries, "industry"),
 			enrichment: countsByKey(enrichment, "enrichmentStatus"),
 			source: countsByKey(sources, "source"),
-			businessUnit: Object.fromEntries(
-				enabledBusinessUnits.map((unit, index) => [
-					unit.id,
-					businessUnitCounts[index] ?? 0,
-				]),
-			),
+			businessUnit: countsByKey(businessUnits, "businessUnitId", FACET_UNASSIGNED),
 			activity,
 			...Object.fromEntries(
 				Object.entries(fieldFacets).map(([key, counts]) => [
