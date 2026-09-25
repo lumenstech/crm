@@ -819,7 +819,22 @@ export class ContactsService {
 
 		if (input.businessUnit.length > 0) {
 			and.push({
-				company: { is: { businessUnitId: { in: input.businessUnit } } },
+				OR: [
+					{
+						businessUnitAssociations: {
+							some: { businessUnitId: { in: input.businessUnit } },
+						},
+					},
+					{
+						company: {
+							is: {
+								businessUnitAssociations: {
+									some: { businessUnitId: { in: input.businessUnit } },
+								},
+							},
+						},
+					},
+				],
 			});
 		}
 
@@ -904,7 +919,24 @@ export class ContactsService {
 						where: {
 							AND: [
 								where,
-								{ company: { is: { businessUnitId: unit.id } } },
+								{
+									OR: [
+										{
+											businessUnitAssociations: {
+												some: { businessUnitId: unit.id },
+											},
+										},
+										{
+											company: {
+												is: {
+													businessUnitAssociations: {
+														some: { businessUnitId: unit.id },
+													},
+												},
+											},
+										},
+									],
+								},
 							],
 						},
 					}),
