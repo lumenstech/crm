@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   repair:
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crm_test?schema=public
     if: github.head_ref == 'fix/comp-crm-complete-ingest-flow'
     runs-on: ubuntu-24.04
     steps:
