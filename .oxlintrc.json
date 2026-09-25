@@ -4,9 +4,7 @@
 	"categories": {
 		"correctness": "off"
 	},
-	"jsPlugins": [
-		"./tools/oxlint/anti-slop/index.ts"
-	],
+	"jsPlugins": ["./tools/oxlint/anti-slop/index.ts"],
 	"ignorePatterns": [
 		"**/node_modules/**",
 		"**/dist/**",
@@ -47,9 +45,7 @@
 			}
 		},
 		{
-			"files": [
-				"packages/validation/src/**"
-			],
+			"files": ["packages/validation/src/**"],
 			"rules": {
 				"anti-slop/no-unknown-parameters": "off"
 			}
@@ -67,36 +63,6 @@
 				"anti-slop/no-unsafe-dictionary-type": "off",
 				"anti-slop/no-unknown-parameters": "off",
 				"anti-slop/no-runtime-typeof": "off"
-			}
-		},
-		{
-			"files": [
-				"apps/api/src/ingest/opportunity-ops.service.ts",
-				"apps/api/src/ingest/guyana-opportunity.service.ts",
-				"deploy/mac-mini/service-runner.ts",
-				"apps/app/app/**/procurement/actions.ts",
-				"apps/app/app/**/procurement/page.tsx",
-				"apps/app/app/**/reset-password/page.tsx",
-				"apps/mcp/src/redact.ts",
-				"apps/mcp/src/index.ts",
-				"apps/mcp/src/auth.ts",
-				"apps/api/scripts/guyana-opportunity-collector.ts",
-				"packages/db/scripts/outlook-scan-promote.ts",
-				"packages/db/scripts/outlook-scan-dry-run.ts",
-				"packages/db/scripts/verify-outlook-scan-promotion.ts",
-				"packages/db/scripts/promote-identiti-pepboys-opportunity.ts",
-				"packages/auth/src/password-reset-email.ts"
-			],
-			"rules": {
-				"anti-slop/no-chained-type-assertions": "off",
-				"anti-slop/no-conditional-empty-object-spread": "off",
-				"anti-slop/no-known-value-widening": "off",
-				"anti-slop/no-object-parameters": "off",
-				"anti-slop/no-runtime-typeof": "off",
-				"anti-slop/no-unknown-parameters": "off",
-				"anti-slop/no-unknown-type-aliases": "off",
-				"anti-slop/no-unsafe-dictionary-type": "off",
-				"anti-slop/no-widen-then-assert": "off"
 			}
 		}
 	]
