@@ -1,6 +1,9 @@
 name: Deploy COMP CRM Production
 
 on:
+  push:
+    branches:
+      - release
   workflow_dispatch:
     inputs:
       source_ref:
