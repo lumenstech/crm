@@ -16,7 +16,8 @@ export class MailboxEmailIngestService {
 		private readonly ingest: EmailIngestService,
 	) {
 		this.address = normalizeEmail(
-			config.get("CRM_EMAIL_INGEST_ADDRESS", { infer: true }) ?? "",
+			config.get("CRM_EMAIL_INGEST_ADDRESS", { infer: true }) ??
+				"leads@516labs.com",
 		);
 		this.allowedSenders = new Set(
 			(config.get("CRM_EMAIL_INGEST_ALLOWED_SENDERS", { infer: true }) ?? "")
@@ -26,7 +27,7 @@ export class MailboxEmailIngestService {
 		);
 	}
 
-	async handle(message: IncomingMessage): Promise<boolean> {
+	async handle(message: IncomingMessage, mailbox?: string): Promise<boolean> {
 		if (!this.address) return false;
 
 		const addressedToGateway = message.recipients.some(
@@ -35,7 +36,11 @@ export class MailboxEmailIngestService {
 		if (!addressedToGateway) return false;
 
 		const sender = normalizeEmail(message.from.email);
-		if (!sender || !this.allowedSenders.has(sender)) {
+		const authenticatedMailbox = normalizeEmail(mailbox ?? "");
+		const trusted =
+			Boolean(sender && authenticatedMailbox && sender === authenticatedMailbox) ||
+			Boolean(sender && this.allowedSenders.has(sender));
+		if (!trusted) {
 			this.logger.warn({
 				message: "Rejected CRM ingest mailbox message from unauthorized sender",
 				sender: sender ?? "unknown",
