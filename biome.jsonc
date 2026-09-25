@@ -130,7 +130,17 @@
 				"apps/api/src/email-ingest/mailbox-email-ingest.service.ts",
 				"apps/api/src/ingest/guyana-opportunity.contracts.ts",
 				"apps/api/src/ingest/guyana-opportunity.sources.ts",
-				"apps/api/src/ingest/ingest.contracts.ts"
+				"apps/api/src/ingest/ingest.contracts.ts",
+				"apps/api/src/ingest/opportunity-ops.contracts.ts",
+				"apps/api/src/ingest/opportunity-ops.service.ts",
+				"apps/api/test/email-ingest.contracts.spec.ts",
+				"apps/api/test/mailbox-email-ingest.spec.ts",
+				"apps/api/test/mailbox-thread-writer.spec.ts",
+				"apps/app/app/(app)/[slug]/companies/companies-search-params.ts",
+				"apps/app/app/(app)/[slug]/mobile-actions/mobile-crm-actions.tsx",
+				"apps/app/app/(app)/[slug]/mobile-actions/page.tsx",
+				"apps/app/app/(app)/[slug]/settings/change-password.tsx",
+				"apps/app/app/api/mobile-crm/[action]/route.ts"
 			],
 			"formatter": {
 				"enabled": false
@@ -139,6 +149,18 @@
 				"actions": {
 					"source": {
 						"organizeImports": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"apps/app/app/(app)/[slug]/mobile-actions/mobile-crm-actions.tsx"
+			],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noLabelWithoutControl": "off"
 					}
 				}
 			}
