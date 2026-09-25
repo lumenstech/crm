@@ -8,12 +8,6 @@ const UNITS = [
 			"Lumens Technology systems, MEP, controls, security, and New York operations.",
 	},
 	{
-		key: "energybms",
-		name: "EnergyBMS",
-		description:
-			"EnergyBMS building energy management, controls, metering, optimization, and LL97-related opportunities.",
-	},
-	{
 		key: "data-gear",
 		name: "Data-Gear",
 		description:
