@@ -4,27 +4,32 @@ const UNITS = [
 	{
 		key: "lumens-technology",
 		name: "Lumens Technology",
-		description: "Lumens Technology systems, MEP, controls, security, and New York operations.",
+		description:
+			"Lumens Technology systems, MEP, controls, security, and New York operations.",
 	},
 	{
 		key: "data-gear",
 		name: "Data-Gear",
-		description: "Data-Gear GPU, server, data center, infrastructure, and hardware opportunities.",
+		description:
+			"Data-Gear GPU, server, data center, infrastructure, and hardware opportunities.",
 	},
 	{
 		key: "trustaccept",
 		name: "TrustAccept",
-		description: "TrustAccept identity, authorization, orchestration, and software partnerships.",
+		description:
+			"TrustAccept identity, authorization, orchestration, and software partnerships.",
 	},
 	{
 		key: "516labs",
 		name: "516Labs",
-		description: "516Labs testing, compliance, and laboratory-service opportunities.",
+		description:
+			"516Labs testing, compliance, and laboratory-service opportunities.",
 	},
 	{
 		key: "partwall",
 		name: "PartWall",
-		description: "PartWall trade show, display, wall, fabrication, and installation opportunities.",
+		description:
+			"PartWall trade show, display, wall, fabrication, and installation opportunities.",
 	},
 ] as const;
 

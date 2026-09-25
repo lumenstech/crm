@@ -66,9 +66,7 @@ async function main() {
 			: {};
 
 	const compCompanyId =
-		payload?.promotion?.compCompanyId ??
-		payload?.promotion?.companyId ??
-		null;
+		payload?.promotion?.compCompanyId ?? payload?.promotion?.companyId ?? null;
 
 	if (!compCompanyId) {
 		throw new Error("Source record does not contain promotion.compCompanyId.");
@@ -83,7 +81,8 @@ async function main() {
 	`;
 
 	const compCompany = compCompanyRows[0];
-	if (!compCompany) throw new Error(`Comp CRM company not found: ${compCompanyId}`);
+	if (!compCompany)
+		throw new Error(`Comp CRM company not found: ${compCompanyId}`);
 
 	const normalizedCompany = normalizeName(compCompany.name);
 	const canonicalCompanyId = stableId(
@@ -151,13 +150,7 @@ async function main() {
 					id: pipelineId,
 					businessUnitId: unit.id,
 					name: PIPELINE_NAME,
-					stages: [
-						"qualified",
-						"proposal",
-						"contract",
-						"won",
-						"lost",
-					],
+					stages: ["qualified", "proposal", "contract", "won", "lost"],
 				},
 				update: {},
 				select: {
