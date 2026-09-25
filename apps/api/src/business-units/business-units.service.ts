@@ -2,6 +2,8 @@ import type { Db } from "@crm/db";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
+type AssociationRecordType = "company" | "contact";
+
 @Injectable()
 export class BusinessUnitsService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
@@ -19,10 +21,6 @@ export class BusinessUnitsService {
 			orderBy: { name: "asc" },
 		});
 	}
-}
-
-
-	type AssociationRecordType = "company" | "contact";
 
 	async associateRecord(input: {
 		recordType: AssociationRecordType;
@@ -190,3 +188,5 @@ export class BusinessUnitsService {
 		if (!contact) throw new NotFoundException(`No contact with id ${recordId}.`);
 		return contact.company?.businessUnitId ?? null;
 	}
+
+}
