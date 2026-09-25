@@ -165,6 +165,27 @@ export class BusinessUnitsService {
 			});
 		}
 
+		const existingDeal = await this.db.deal.findFirst({
+			where: {
+				companyId: company.id,
+				businessUnitId: association.targetBusinessUnit.id,
+				name: { equals: input.name.trim(), mode: "insensitive" },
+				stage: { notIn: ["CLOSED_WON", "CLOSED_LOST"] },
+			},
+			select: { id: true },
+			orderBy: { createdAt: "desc" },
+		});
+		if (existingDeal) {
+			return {
+				dealId: existingDeal.id,
+				companyId: company.id,
+				contactId: input.contactId ?? null,
+				businessUnit: association.targetBusinessUnit,
+				associationId: association.id,
+				created: false,
+			};
+		}
+
 		const deal = await this.db.deal.create({
 			data: {
 				name: input.name.trim(),
@@ -193,7 +214,7 @@ export class BusinessUnitsService {
 			contactId: input.contactId ?? null,
 			businessUnit: association.targetBusinessUnit,
 			associationId: association.id,
-			created: true as const,
+			created: true,
 		};
 	}
 

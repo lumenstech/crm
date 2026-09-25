@@ -134,7 +134,10 @@ export class IngestService {
 		const items: IngestSignalBatchOutput["items"] = [];
 		for (const signal of input.signals) {
 			try {
-				const accepted = await this.signal({ ...signal, project: input.project });
+				const accepted = await this.signal({
+					...signal,
+					project: input.project,
+				});
 				items.push({
 					sourceId: signal.sourceId,
 					status: "accepted",
@@ -148,7 +151,8 @@ export class IngestService {
 					status: "failed",
 					sourceRecordId: null,
 					deduplicated: false,
-					error: error instanceof Error ? error.message : "Signal ingest failed.",
+					error:
+						error instanceof Error ? error.message : "Signal ingest failed.",
 				});
 			}
 		}
@@ -325,6 +329,35 @@ export class IngestService {
 			matchMethod = "created";
 			created = true;
 		}
+
+		// Persist cross-business-unit reuse without overwriting another unit's legacy owner.
+		await this.db.businessUnitRecordAssociation.upsert({
+			where: {
+				recordType_recordId_targetBusinessUnitId: {
+					recordType: "company",
+					recordId: company.id,
+					targetBusinessUnitId: signal.businessUnitId,
+				},
+			},
+			create: {
+				recordType: "company",
+				recordId: company.id,
+				sourceBusinessUnitId: company.businessUnitId,
+				targetBusinessUnitId: signal.businessUnitId,
+				useCase: "lead-ingest",
+				notes: "Associated through source-signal company resolution",
+			},
+			update: {
+				sourceBusinessUnitId: company.businessUnitId,
+				useCase: "lead-ingest",
+				notes: "Associated through source-signal company resolution",
+			},
+		});
+		await this.db.$queryRaw`
+			UPDATE company
+			SET "businessUnitId" = ${signal.businessUnitId}
+			WHERE id = ${company.id} AND "businessUnitId" IS NULL
+		`;
 
 		const normalizedName = company.name.trim().toLowerCase();
 		const [canonical] = await this.db.$queryRaw<Array<{ id: string }>>`

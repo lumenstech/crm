@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { redactSecrets } from "./redact";
 import type {
 	AssociateRecordWithBusinessUnitInput,
@@ -35,11 +36,83 @@ export class CrmClient {
 		return this.request("/rest/search", { query: { q } });
 	}
 
-	ingestLeads(input: IngestLeadsInput) {
-		return this.request("/rest/ingest/signals/batch", {
-			method: "POST",
-			body: { project: input.businessUnit, signals: input.signals },
-		});
+	async ingestLeads(input: IngestLeadsInput) {
+		const batch = z
+			.object({
+				project: z.string(),
+				accepted: z.number(),
+				deduplicated: z.number(),
+				failed: z.number(),
+				items: z.array(
+					z.object({
+						sourceId: z.string(),
+						status: z.enum(["accepted", "failed"]),
+						sourceRecordId: z.string().nullable(),
+						deduplicated: z.boolean(),
+						error: z.string().nullable(),
+					}),
+				),
+			})
+			.parse(
+				await this.request("/rest/ingest/signals/batch", {
+					method: "POST",
+					body: { project: input.businessUnit, signals: input.signals },
+				}),
+			);
+
+		const resolutions = [];
+		for (const item of batch.items) {
+			if (item.status !== "accepted" || !item.sourceRecordId) continue;
+			const signal = input.signals.find(
+				(candidate) => candidate.sourceId === item.sourceId,
+			);
+			if (!signal) continue;
+
+			const domain = z.string().trim().min(1).safeParse(signal.payload.domain);
+			const website = z
+				.string()
+				.trim()
+				.min(1)
+				.safeParse(signal.payload.website);
+
+			try {
+				const resolved = await this.request(
+					`/rest/ingest/signals/${encodeURIComponent(item.sourceRecordId)}/resolve-company`,
+					{
+						method: "POST",
+						body: {
+							sourceRecordId: item.sourceRecordId,
+							companyName: signal.entity ?? null,
+							domain: domain.success
+								? domain.data
+								: website.success
+									? website.data
+									: null,
+							createIfMissing: true,
+							queueResearch: false,
+						},
+					},
+				);
+				resolutions.push({
+					sourceId: item.sourceId,
+					sourceRecordId: item.sourceRecordId,
+					status: "resolved",
+					result: resolved,
+				});
+			} catch (error) {
+				resolutions.push({
+					sourceId: item.sourceId,
+					sourceRecordId: item.sourceRecordId,
+					status: "resolution_failed",
+					error:
+						error instanceof Error
+							? error.message
+							: "Company resolution failed.",
+				});
+			}
+		}
+
+		return { ...batch, resolutions };
 	}
 
 	associateRecord(input: AssociateRecordWithBusinessUnitInput) {
