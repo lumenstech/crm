@@ -51,7 +51,7 @@ const baseMessage = {
 describe("mailbox CRM lead ingestion", () => {
 	test("consumes a valid structured email to the leads address", async () => {
 		const { gateway, calls } = service();
-		expect(await gateway.handle(baseMessage)).toBe(true);
+		expect(await gateway.handle(baseMessage, "trusted@example.com")).toBe(true);
 		expect(calls).toHaveLength(1);
 	});
 
@@ -61,9 +61,15 @@ describe("mailbox CRM lead ingestion", () => {
 			await gateway.handle({
 				...baseMessage,
 				recipients: [{ email: "sales@516labs.com", name: null, kind: "to" as const }],
-			}),
+			}, "trusted@example.com"),
 		).toBe(false);
 		expect(calls).toHaveLength(0);
+	});
+
+	test("trusts the authenticated mailbox even without an explicit allowlist", async () => {
+		const { gateway, calls } = service({ senders: "" });
+		expect(await gateway.handle(baseMessage, "trusted@example.com")).toBe(true);
+		expect(calls).toHaveLength(1);
 	});
 
 	test("consumes but rejects messages from non-allowlisted senders", async () => {
@@ -72,7 +78,7 @@ describe("mailbox CRM lead ingestion", () => {
 			await gateway.handle({
 				...baseMessage,
 				from: { email: "attacker@example.net", name: null },
-			}),
+			}, "trusted@example.com"),
 		).toBe(true);
 		expect(calls).toHaveLength(0);
 	});
