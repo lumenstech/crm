@@ -66,7 +66,8 @@ export function ChangePassword() {
 			<CardHeader>
 				<CardTitle>Password</CardTitle>
 				<CardDescription>
-					Change your CRM login password. This does not change any environment secret.
+					Change your CRM login password. This does not change any environment
+					secret.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>

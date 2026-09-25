@@ -1,10 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { Db } from "@crm/db";
 import {
 	BadRequestException,
 	Injectable,
 	NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import { InjectDatabase } from "../database/database.constants";
 import type {
 	AssociateRecordBusinessUnitInput,
@@ -161,7 +161,8 @@ export class BusinessUnitsService {
 				`;
 
 		const association = rows[0];
-		if (!association) throw new Error("Business-unit association did not return a row.");
+		if (!association)
+			throw new Error("Business-unit association did not return a row.");
 
 		if (input.recordType === "company") {
 			await this.db.$queryRaw`
@@ -188,7 +189,8 @@ export class BusinessUnitsService {
 			WHERE id = ${input.companyId} AND "archivedAt" IS NULL
 			LIMIT 1
 		`;
-		if (!company) throw new NotFoundException(`No company with id ${input.companyId}.`);
+		if (!company)
+			throw new NotFoundException(`No company with id ${input.companyId}.`);
 
 		const [association] = await this.db.$queryRaw<Array<{ exists: boolean }>>`
 			SELECT EXISTS(
@@ -203,13 +205,18 @@ export class BusinessUnitsService {
 		}
 
 		if (input.contactId) {
-			const [contact] = await this.db.$queryRaw<Array<{ companyId: string | null }>>`
+			const [contact] = await this.db.$queryRaw<
+				Array<{ companyId: string | null }>
+			>`
 				SELECT "companyId" FROM contact
 				WHERE id = ${input.contactId} AND "archivedAt" IS NULL LIMIT 1
 			`;
-			if (!contact) throw new NotFoundException(`No contact with id ${input.contactId}.`);
+			if (!contact)
+				throw new NotFoundException(`No contact with id ${input.contactId}.`);
 			if (contact.companyId !== company.id) {
-				throw new BadRequestException("The requested contact does not belong to the company.");
+				throw new BadRequestException(
+					"The requested contact does not belong to the company.",
+				);
 			}
 		}
 
@@ -234,7 +241,9 @@ export class BusinessUnitsService {
 		`;
 		if (!canonicalCompany) throw new Error("Canonical company upsert failed.");
 
-		const [existing] = await this.db.$queryRaw<Array<{ id: string; stage: string }>>`
+		const [existing] = await this.db.$queryRaw<
+			Array<{ id: string; stage: string }>
+		>`
 			SELECT id, stage
 			FROM canonical_opportunity
 			WHERE "businessUnitId" = ${unit.id}

@@ -54,10 +54,9 @@ describe("multi-business-unit CRM records", () => {
 			recordType: "company",
 			recordId: company.id,
 		});
-		expect(listed.associations.map((row) => row.businessUnitKey).sort()).toEqual([
-			"data-gear",
-			"partwall",
-		]);
+		expect(
+			listed.associations.map((row) => row.businessUnitKey).sort(),
+		).toEqual(["data-gear", "partwall"]);
 		expect(await db.company.count({ where: { domain: DOMAIN } })).toBe(1);
 	});
 

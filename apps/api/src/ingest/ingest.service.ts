@@ -134,7 +134,10 @@ export class IngestService {
 		const items: IngestSignalBatchOutput["items"] = [];
 		for (const signal of input.signals) {
 			try {
-				const accepted = await this.signal({ ...signal, project: input.project });
+				const accepted = await this.signal({
+					...signal,
+					project: input.project,
+				});
 				items.push({
 					sourceId: signal.sourceId,
 					status: "accepted",
@@ -148,7 +151,8 @@ export class IngestService {
 					status: "failed",
 					sourceRecordId: null,
 					deduplicated: false,
-					error: error instanceof Error ? error.message : "Signal ingest failed.",
+					error:
+						error instanceof Error ? error.message : "Signal ingest failed.",
 				});
 			}
 		}
