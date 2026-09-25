@@ -34,3 +34,20 @@ FOREIGN KEY ("sourceBusinessUnitId") REFERENCES "business_unit"("id") ON DELETE 
 ALTER TABLE "business_unit_record_association"
 ADD CONSTRAINT "business_unit_record_association_targetBusinessUnitId_fkey"
 FOREIGN KEY ("targetBusinessUnitId") REFERENCES "business_unit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+
+-- Ensure EnergyBMS is available as a first-class business unit for cross-unit reuse.
+INSERT INTO "business_unit" (
+    "id", "key", "name", "description", "enabled", "createdAt", "updatedAt"
+)
+SELECT
+    gen_random_uuid()::text,
+    'energybms',
+    'EnergyBMS',
+    'EnergyBMS building energy management, controls, metering, optimization, and LL97-related opportunities.',
+    true,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (
+    SELECT 1 FROM "business_unit" WHERE "key" = 'energybms'
+);
