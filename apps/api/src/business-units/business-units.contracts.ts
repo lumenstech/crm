@@ -50,7 +50,7 @@ export const createBusinessUnitOpportunityInput = z.object({
 	companyId: z.string().trim().min(1),
 	contactId: z.string().trim().min(1).nullable().optional(),
 	targetBusinessUnit: z.string().trim().min(1).max(96),
-	ownerId: z.string().trim().min(1),
+	ownerId: z.string().trim().min(1).nullable().optional(),
 	name: z.string().trim().min(1).max(240),
 	useCase: z.string().trim().min(1).max(240).nullable().optional(),
 	notes: z.string().trim().max(4000).nullable().optional(),
