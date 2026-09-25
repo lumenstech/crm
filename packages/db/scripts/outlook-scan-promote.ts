@@ -41,13 +41,7 @@ type BusinessUnitRow = {
 	name: string;
 };
 
-type UnitTarget =
-	| "data-gear"
-	| "trustaccept"
-	| "lumens-technology"
-	| "lumens-guyana"
-	| "general"
-	| "unassigned";
+type UnitTarget = "data-gear" | "trustaccept" | "lumens-technology" | "lumens-guyana" | "general" | "unassigned";
 
 type PromotionPolicy = {
 	companyName: string | null;
@@ -79,213 +73,44 @@ const UNIT_ALIASES: Record<Exclude<UnitTarget, "unassigned">, string[]> = {
 };
 
 const POLICY: Record<number, PromotionPolicy> = {
-	0: {
-		companyName: "Identiti",
-		contactName: "Tristan Limbrunner",
-		unitTarget: "lumens-technology",
-		dealCandidate: true,
-		dealReason: "Pep Boys / Identiti quote follow-up",
-	},
-	1: {
-		companyName: "Divisions Maintenance Group",
-		contactName: "Alyssa Finke",
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	2: {
-		companyName: null,
-		contactName: null,
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	3: {
-		companyName: "Sung Co",
-		contactName: "Vera Sung",
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	4: {
-		companyName: "Ingram Micro",
-		contactName: null,
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	5: {
-		companyName: "Ingram Micro",
-		contactName: "James Noble",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	6: {
-		companyName: "MA Labs",
-		contactName: "Hope Tian",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	7: {
-		companyName: "MA Labs",
-		contactName: "Sopher Zhan",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	8: {
-		companyName: "Supermicro",
-		contactName: "Jimmy Liu",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	9: {
-		companyName: "Object First",
-		contactName: "Michelle Medlock",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	10: {
-		companyName: "TP-Link",
-		contactName: "Dave Markwell",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	11: {
-		companyName: "GridVest",
-		contactName: "Josh Rhoades",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	12: {
-		companyName: "UNIX CCTV",
-		contactName: "Nicolas Rizo",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	13: {
-		companyName: "IDS Imaging",
-		contactName: "Nicole Ertel",
-		unitTarget: "data-gear",
-		dealCandidate: false,
-	},
-	14: {
-		companyName: "Auth0",
-		contactName: null,
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	15: {
-		companyName: "Auth0",
-		contactName: null,
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	16: {
-		companyName: "Okta",
-		contactName: "Kenny Lee",
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	17: {
-		companyName: "ElevenLabs",
-		contactName: "Henry Kearing",
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	18: {
-		companyName: "Linkup",
-		contactName: "Sacha Uzan",
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	19: {
-		companyName: "WP Engine",
-		contactName: "Michael McBride",
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	20: {
-		companyName: "Stripe",
-		contactName: "Thomas Garces",
-		unitTarget: "general",
-		dealCandidate: false,
-	},
-	21: {
-		companyName: "OneValley",
-		contactName: "Laura Dawson",
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	22: {
-		companyName: "IBM",
-		contactName: "Shreya Sisodia",
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	23: {
-		companyName: "Otis",
-		contactName: null,
-		unitTarget: "lumens-guyana",
-		dealCandidate: false,
-	},
-	24: {
-		companyName: "F.W. Webb",
-		contactName: null,
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	25: {
-		companyName: "Upper West Strategies",
-		contactName: "Bill Hamersly",
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	26: {
-		companyName: "Grant Associates",
-		contactName: null,
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	27: {
-		companyName: "JLL",
-		contactName: "Emilie Goldman",
-		unitTarget: "lumens-technology",
-		dealCandidate: true,
-		dealReason: "potential-client relationship; review before creating a Deal",
-	},
-	28: {
-		companyName: "T-Mobile",
-		contactName: null,
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	29: {
-		companyName: "Dostmann Electronic",
-		contactName: "Marcel Hahn",
-		unitTarget: "lumens-technology",
-		dealCandidate: false,
-	},
-	30: {
-		companyName: "SVB",
-		contactName: null,
-		unitTarget: "trustaccept",
-		dealCandidate: false,
-	},
-	31: {
-		companyName: "GNBS",
-		contactName: null,
-		unitTarget: "lumens-guyana",
-		dealCandidate: false,
-	},
-	32: {
-		companyName: "International Labour Organization (ILO)",
-		contactName: "Ariel Pino",
-		unitTarget: "lumens-guyana",
-		dealCandidate: false,
-	},
+	0: { companyName: "Identiti", contactName: "Tristan Limbrunner", unitTarget: "lumens-technology", dealCandidate: true, dealReason: "Pep Boys / Identiti quote follow-up" },
+	1: { companyName: "Divisions Maintenance Group", contactName: "Alyssa Finke", unitTarget: "lumens-technology", dealCandidate: false },
+	2: { companyName: null, contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	3: { companyName: "Sung Co", contactName: "Vera Sung", unitTarget: "lumens-technology", dealCandidate: false },
+	4: { companyName: "Ingram Micro", contactName: null, unitTarget: "data-gear", dealCandidate: false },
+	5: { companyName: "Ingram Micro", contactName: "James Noble", unitTarget: "data-gear", dealCandidate: false },
+	6: { companyName: "MA Labs", contactName: "Hope Tian", unitTarget: "data-gear", dealCandidate: false },
+	7: { companyName: "MA Labs", contactName: "Sopher Zhan", unitTarget: "data-gear", dealCandidate: false },
+	8: { companyName: "Supermicro", contactName: "Jimmy Liu", unitTarget: "data-gear", dealCandidate: false },
+	9: { companyName: "Object First", contactName: "Michelle Medlock", unitTarget: "data-gear", dealCandidate: false },
+	10: { companyName: "TP-Link", contactName: "Dave Markwell", unitTarget: "data-gear", dealCandidate: false },
+	11: { companyName: "GridVest", contactName: "Josh Rhoades", unitTarget: "data-gear", dealCandidate: false },
+	12: { companyName: "UNIX CCTV", contactName: "Nicolas Rizo", unitTarget: "data-gear", dealCandidate: false },
+	13: { companyName: "IDS Imaging", contactName: "Nicole Ertel", unitTarget: "data-gear", dealCandidate: false },
+	14: { companyName: "Auth0", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
+	15: { companyName: "Auth0", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
+	16: { companyName: "Okta", contactName: "Kenny Lee", unitTarget: "trustaccept", dealCandidate: false },
+	17: { companyName: "ElevenLabs", contactName: "Henry Kearing", unitTarget: "trustaccept", dealCandidate: false },
+	18: { companyName: "Linkup", contactName: "Sacha Uzan", unitTarget: "lumens-technology", dealCandidate: false },
+	19: { companyName: "WP Engine", contactName: "Michael McBride", unitTarget: "lumens-technology", dealCandidate: false },
+	20: { companyName: "Stripe", contactName: "Thomas Garces", unitTarget: "general", dealCandidate: false },
+	21: { companyName: "OneValley", contactName: "Laura Dawson", unitTarget: "trustaccept", dealCandidate: false },
+	22: { companyName: "IBM", contactName: "Shreya Sisodia", unitTarget: "trustaccept", dealCandidate: false },
+	23: { companyName: "Otis", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
+	24: { companyName: "F.W. Webb", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	25: { companyName: "Upper West Strategies", contactName: "Bill Hamersly", unitTarget: "lumens-technology", dealCandidate: false },
+	26: { companyName: "Grant Associates", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	27: { companyName: "JLL", contactName: "Emilie Goldman", unitTarget: "lumens-technology", dealCandidate: true, dealReason: "potential-client relationship; review before creating a Deal" },
+	28: { companyName: "T-Mobile", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
+	29: { companyName: "Dostmann Electronic", contactName: "Marcel Hahn", unitTarget: "lumens-technology", dealCandidate: false },
+	30: { companyName: "SVB", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
+	31: { companyName: "GNBS", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
+	32: { companyName: "International Labour Organization (ILO)", contactName: "Ariel Pino", unitTarget: "lumens-guyana", dealCandidate: false },
 };
 
 function arg(name: string): string | undefined {
 	const prefix = `--${name}=`;
-	return process.argv
-		.find((value) => value.startsWith(prefix))
-		?.slice(prefix.length);
+	return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length);
 }
 
 function normalize(value: string | null | undefined): string {
@@ -304,34 +129,14 @@ function emailDomain(email: string | null | undefined): string | null {
 }
 
 const RELAY_DOMAINS = new Set([
-	"gmail.com",
-	"googlemail.com",
-	"yahoo.com",
-	"outlook.com",
-	"hotmail.com",
-	"icloud.com",
-	"me.com",
-	"live.com",
-	"msn.com",
-	"atlassian.net",
+	"gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com",
+	"icloud.com", "me.com", "live.com", "msn.com", "atlassian.net",
 ]);
 
 const ROLE_LOCALS = [
-	"info",
-	"sales",
-	"support",
-	"hello",
-	"contact",
-	"admin",
-	"office",
-	"generalinquiry",
-	"standards",
-	"connectwithsvb",
-	"partnershipsisp",
-	"accountchangerequest",
-	"cloudsi-clouddeployments",
-	"jira",
-	"auth0startups",
+	"info", "sales", "support", "hello", "contact", "admin", "office",
+	"generalinquiry", "standards", "connectwithsvb", "partnershipsisp",
+	"accountchangerequest", "cloudsi-clouddeployments", "jira", "auth0startups",
 ];
 
 function isRoleAddress(email: string | null | undefined): boolean {
@@ -339,9 +144,7 @@ function isRoleAddress(email: string | null | undefined): boolean {
 	const at = value.indexOf("@");
 	if (at < 1) return false;
 	const local = value.slice(0, at);
-	return ROLE_LOCALS.some(
-		(prefix) => local === prefix || local.startsWith(`${prefix}+`),
-	);
+	return ROLE_LOCALS.some((prefix) => local === prefix || local.startsWith(`${prefix}+`));
 }
 
 function domainForCompany(email: string | null | undefined): string | null {
@@ -368,13 +171,10 @@ function resolveBusinessUnit(
 			wanted.some((alias) => value.includes(alias) || alias.includes(value)),
 		);
 	});
-	return partial.length === 1 ? (partial[0] ?? null) : null;
+	return partial.length === 1 ? partial[0] ?? null : null;
 }
 
-function splitName(value: string): {
-	firstName: string;
-	lastName: string | null;
-} {
+function splitName(value: string): { firstName: string; lastName: string | null } {
 	const parts = value.trim().split(/\s+/).filter(Boolean);
 	return {
 		firstName: parts[0] ?? value,
@@ -439,90 +239,80 @@ async function main() {
 		skippedUnresolvedBusinessUnit: 0,
 		skippedAmbiguousCompany: 0,
 		skippedRoleOrUncleanContact: 0,
-		dealCandidates: [] as Array<{
-			index: number;
-			company: string | null;
-			reason: string | null;
-		}>,
+		dealCandidates: [] as Array<{ index: number; company: string | null; reason: string | null }>,
 		skipped: [] as Array<{ index: number; reason: string }>,
 	};
 
-	await db.$transaction(
-		async (tx) => {
-			const companies = [...initialCompanies];
-			const contacts = [...initialContacts];
+	await db.$transaction(async (tx) => {
+		const companies = [...initialCompanies];
+		const contacts = [...initialContacts];
 
-			const findCompany = (
-				companyName: string | null,
-				email: string | null,
-			) => {
-				if (!companyName)
-					return { match: null as CompanyRow | null, ambiguous: false };
+		const findCompany = (companyName: string | null, email: string | null) => {
+			if (!companyName) return { match: null as CompanyRow | null, ambiguous: false };
 
-				const domain = domainForCompany(email);
-				const byDomain = domain
-					? companies.filter((company) => company.domain === domain)
-					: [];
-				const byName = companies.filter(
-					(company) => normalize(company.name) === normalize(companyName),
-				);
+			const domain = domainForCompany(email);
+			const byDomain = domain
+				? companies.filter((company) => company.domain === domain)
+				: [];
+			const byName = companies.filter(
+				(company) => normalize(company.name) === normalize(companyName),
+			);
 
-				const matches = new Map<string, CompanyRow>();
-				for (const company of [...byDomain, ...byName])
-					matches.set(company.id, company);
+			const matches = new Map<string, CompanyRow>();
+			for (const company of [...byDomain, ...byName]) matches.set(company.id, company);
 
-				return {
-					match: matches.size === 1 ? ([...matches.values()][0] ?? null) : null,
-					ambiguous: matches.size > 1,
-				};
+			return {
+				match: matches.size === 1 ? [...matches.values()][0] ?? null : null,
+				ambiguous: matches.size > 1,
+			};
+		};
+
+		for (const [index, finding] of findings.entries()) {
+			const policy = POLICY[index] ?? {
+				companyName: finding.company ?? null,
+				contactName: finding.contact ?? null,
+				unitTarget: "unassigned" as const,
+				dealCandidate: false,
 			};
 
-			for (const [index, finding] of findings.entries()) {
-				const policy = POLICY[index] ?? {
-					companyName: finding.company ?? null,
-					contactName: finding.contact ?? null,
-					unitTarget: "unassigned" as const,
-					dealCandidate: false,
-				};
+			if (policy.dealCandidate) {
+				summary.dealCandidates.push({
+					index,
+					company: policy.companyName,
+					reason: policy.dealReason ?? null,
+				});
+			}
 
-				if (policy.dealCandidate) {
-					summary.dealCandidates.push({
-						index,
-						company: policy.companyName,
-						reason: policy.dealReason ?? null,
-					});
-				}
+			const unit = resolveBusinessUnit(policy.unitTarget, businessUnits);
+			if (!unit) {
+				summary.skippedUnresolvedBusinessUnit += 1;
+				summary.skipped.push({
+					index,
+					reason: `business unit not resolved for target ${policy.unitTarget}`,
+				});
+				continue;
+			}
 
-				const unit = resolveBusinessUnit(policy.unitTarget, businessUnits);
-				if (!unit) {
-					summary.skippedUnresolvedBusinessUnit += 1;
-					summary.skipped.push({
-						index,
-						reason: `business unit not resolved for target ${policy.unitTarget}`,
-					});
+			const email = finding.email?.trim().toLowerCase() || null;
+
+			let companyId: string | null = null;
+			if (policy.companyName) {
+				const found = findCompany(policy.companyName, email);
+				if (found.ambiguous) {
+					summary.skippedAmbiguousCompany += 1;
+					summary.skipped.push({ index, reason: "ambiguous company match" });
 					continue;
 				}
 
-				const email = finding.email?.trim().toLowerCase() || null;
+				if (found.match) {
+					companyId = found.match.id;
+					summary.companiesMatched += 1;
+				} else {
+					const domain = domainForCompany(email);
+					const companyKey = domain ?? normalize(policy.companyName);
+					const id = stableId("outlook-company", companyKey);
 
-				let companyId: string | null = null;
-				if (policy.companyName) {
-					const found = findCompany(policy.companyName, email);
-					if (found.ambiguous) {
-						summary.skippedAmbiguousCompany += 1;
-						summary.skipped.push({ index, reason: "ambiguous company match" });
-						continue;
-					}
-
-					if (found.match) {
-						companyId = found.match.id;
-						summary.companiesMatched += 1;
-					} else {
-						const domain = domainForCompany(email);
-						const companyKey = domain ?? normalize(policy.companyName);
-						const id = stableId("outlook-company", companyKey);
-
-						await tx.$executeRaw`
+					await tx.$executeRaw`
 						INSERT INTO company
 							(id, name, domain, website, source, "businessUnitId", "createdAt", "updatedAt")
 						VALUES
@@ -539,37 +329,37 @@ async function main() {
 						ON CONFLICT (id) DO NOTHING
 					`;
 
-						companyId = id;
-						companies.push({
-							id,
-							name: policy.companyName,
-							domain,
-							businessUnitId: unit.id,
-						});
-						summary.companiesCreated += 1;
-					}
+					companyId = id;
+					companies.push({
+						id,
+						name: policy.companyName,
+						domain,
+						businessUnitId: unit.id,
+					});
+					summary.companiesCreated += 1;
 				}
+			}
 
-				let contactId: string | null = null;
-				const existingContact = email
-					? (contacts.find((contact) => contact.email === email) ?? null)
-					: null;
+			let contactId: string | null = null;
+			const existingContact = email
+				? contacts.find((contact) => contact.email === email) ?? null
+				: null;
 
-				if (existingContact) {
-					contactId = existingContact.id;
-					summary.contactsMatched += 1;
-				} else if (
-					email &&
-					policy.contactName &&
-					companyId &&
-					!isRoleAddress(email) &&
-					!policy.contactName.includes("/") &&
-					!policy.contactName.toLowerCase().includes("and others")
-				) {
-					const parsed = splitName(policy.contactName);
-					const id = stableId("outlook-contact", email);
+			if (existingContact) {
+				contactId = existingContact.id;
+				summary.contactsMatched += 1;
+			} else if (
+				email &&
+				policy.contactName &&
+				companyId &&
+				!isRoleAddress(email) &&
+				!policy.contactName.includes("/") &&
+				!policy.contactName.toLowerCase().includes("and others")
+			) {
+				const parsed = splitName(policy.contactName);
+				const id = stableId("outlook-contact", email);
 
-					await tx.$executeRaw`
+				await tx.$executeRaw`
 					INSERT INTO contact
 						(
 							id, "firstName", "lastName", email, "companyId",
@@ -589,21 +379,21 @@ async function main() {
 					ON CONFLICT (id) DO NOTHING
 				`;
 
-					contactId = id;
-					contacts.push({
-						id,
-						firstName: parsed.firstName,
-						lastName: parsed.lastName,
-						email,
-						companyId,
-					});
-					summary.contactsCreated += 1;
-				} else if (email) {
-					summary.skippedRoleOrUncleanContact += 1;
-				}
+				contactId = id;
+				contacts.push({
+					id,
+					firstName: parsed.firstName,
+					lastName: parsed.lastName,
+					email,
+					companyId,
+				});
+				summary.contactsCreated += 1;
+			} else if (email) {
+				summary.skippedRoleOrUncleanContact += 1;
+			}
 
-				const sid = sourceId(scanId, index);
-				const existing = await tx.$queryRaw<{ sourceId: string }[]>`
+			const sid = sourceId(scanId, index);
+			const existing = await tx.$queryRaw<{ sourceId: string }[]>`
 				SELECT "sourceId"
 				FROM source_record
 				WHERE "sourceSystem" = 'outlook-scan'
@@ -612,37 +402,37 @@ async function main() {
 				LIMIT 1
 			`;
 
-				if (existing.length > 0) {
-					summary.sourceRecordsExisting += 1;
-					continue;
-				}
+			if (existing.length > 0) {
+				summary.sourceRecordsExisting += 1;
+				continue;
+			}
 
-				const sourcePayload = JSON.stringify({
-					scan: {
-						scanId: archive.scan_id,
-						mailbox: archive.mailbox,
-						messagesScanned: archive.messages_scanned,
-						nextScanIndex: archive.next_scan_index,
-						payloadHash: archive.payload_hash,
-						findingIndex: index,
-					},
-					finding,
-					promotion: {
-						companyName: policy.companyName,
-						contactName: policy.contactName,
-						businessUnitTarget: policy.unitTarget,
-						businessUnitId: unit.id,
-						businessUnitKey: unit.key,
-						compCompanyId: companyId,
-						compContactId: contactId,
-						dealCandidate: policy.dealCandidate,
-						dealReason: policy.dealReason ?? null,
-					},
-				});
+			const sourcePayload = JSON.stringify({
+				scan: {
+					scanId: archive.scan_id,
+					mailbox: archive.mailbox,
+					messagesScanned: archive.messages_scanned,
+					nextScanIndex: archive.next_scan_index,
+					payloadHash: archive.payload_hash,
+					findingIndex: index,
+				},
+				finding,
+				promotion: {
+					companyName: policy.companyName,
+					contactName: policy.contactName,
+					businessUnitTarget: policy.unitTarget,
+					businessUnitId: unit.id,
+					businessUnitKey: unit.key,
+					compCompanyId: companyId,
+					compContactId: contactId,
+					dealCandidate: policy.dealCandidate,
+					dealReason: policy.dealReason ?? null,
+				},
+			});
 
-				const rowId = stableId("outlook-source", sid);
+			const rowId = stableId("outlook-source", sid);
 
-				await tx.$executeRaw`
+			await tx.$executeRaw`
 				INSERT INTO source_record
 					(
 						id, "businessUnitId", "sourceSystem", "sourceType",
@@ -663,11 +453,9 @@ async function main() {
 				ON CONFLICT ("sourceSystem", "sourceType", "sourceId") DO NOTHING
 			`;
 
-				summary.sourceRecordsCreated += 1;
-			}
-		},
-		{ maxWait: 10_000, timeout: 30_000 },
-	);
+			summary.sourceRecordsCreated += 1;
+		}
+	}, { maxWait: 10_000, timeout: 30_000 });
 
 	console.log(JSON.stringify(summary, null, 2));
 }
