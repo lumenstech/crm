@@ -43,9 +43,7 @@ export const ingestSignalOutput = z.object({
 	promoted: z.literal(false),
 });
 
-export const ingestSignalBatchItemInput = ingestSignalInput.omit({
-	project: true,
-});
+export const ingestSignalBatchItemInput = ingestSignalInput.omit({ project: true });
 
 export const ingestSignalBatchInput = z.object({
 	project: z.string().trim().min(1).max(96),
