@@ -37,8 +37,13 @@ export type CrmEmailBatch = z.infer<typeof crmEmailBatch>;
 
 export function parseCrmEmailBatch(text: string): CrmEmailBatch {
 	const trimmed = text.trim();
-	const jsonText = trimmed.startsWith(CRM_EMAIL_VERSION)
+	const hasHeader = trimmed.startsWith(CRM_EMAIL_VERSION);
+	const jsonText = hasHeader
 		? trimmed.slice(CRM_EMAIL_VERSION.length).trimStart()
 		: trimmed;
-	return crmEmailBatch.parse(JSON.parse(jsonText) as unknown);
+	const parsed = JSON.parse(jsonText) as unknown;
+	if (hasHeader && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+		return crmEmailBatch.parse({ version: CRM_EMAIL_VERSION, ...parsed });
+	}
+	return crmEmailBatch.parse(parsed);
 }
