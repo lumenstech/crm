@@ -48,7 +48,12 @@ type PromotionPolicy = {
 	dealReason?: string;
 };
 
-type UnitTarget = "data-gear" | "trustaccept" | "lumens-technology" | "lumens-guyana" | "unassigned";
+type UnitTarget =
+	| "data-gear"
+	| "trustaccept"
+	| "lumens-technology"
+	| "lumens-guyana"
+	| "unassigned";
 
 const DEFAULT_SCAN_ID = "outlook:danny@lumenstechnology.com:0-4799";
 
@@ -71,44 +76,213 @@ const UNIT_ALIASES: Record<Exclude<UnitTarget, "unassigned">, string[]> = {
 };
 
 const POLICY: Record<number, PromotionPolicy> = {
-	0: { companyName: "Identiti", contactName: "Tristan Limbrunner", unitTarget: "lumens-technology", dealCandidate: true, dealReason: "Pep Boys / Identiti quote follow-up" },
-	1: { companyName: "Divisions Maintenance Group", contactName: "Alyssa Finke", unitTarget: "lumens-technology", dealCandidate: false },
-	2: { companyName: null, contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
-	3: { companyName: "Sung Co", contactName: "Vera Sung", unitTarget: "lumens-technology", dealCandidate: false },
-	4: { companyName: "Ingram Micro", contactName: null, unitTarget: "data-gear", dealCandidate: false },
-	5: { companyName: "Ingram Micro", contactName: "James Noble", unitTarget: "data-gear", dealCandidate: false },
-	6: { companyName: "MA Labs", contactName: "Hope Tian", unitTarget: "data-gear", dealCandidate: false },
-	7: { companyName: "MA Labs", contactName: "Sopher Zhan", unitTarget: "data-gear", dealCandidate: false },
-	8: { companyName: "Supermicro", contactName: "Jimmy Liu", unitTarget: "data-gear", dealCandidate: false },
-	9: { companyName: "Object First", contactName: "Michelle Medlock", unitTarget: "data-gear", dealCandidate: false },
-	10: { companyName: "TP-Link", contactName: "Dave Markwell", unitTarget: "data-gear", dealCandidate: false },
-	11: { companyName: "GridVest", contactName: "Josh Rhoades", unitTarget: "data-gear", dealCandidate: false },
-	12: { companyName: "UNIX CCTV", contactName: "Nicolas Rizo", unitTarget: "data-gear", dealCandidate: false },
-	13: { companyName: "IDS Imaging", contactName: "Nicole Ertel", unitTarget: "data-gear", dealCandidate: false },
-	14: { companyName: "Auth0", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
-	15: { companyName: "Auth0", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
-	16: { companyName: "Okta", contactName: "Kenny Lee", unitTarget: "trustaccept", dealCandidate: false },
-	17: { companyName: "ElevenLabs", contactName: "Henry Kearing", unitTarget: "trustaccept", dealCandidate: false },
-	18: { companyName: "Linkup", contactName: "Sacha Uzan", unitTarget: "lumens-technology", dealCandidate: false },
-	19: { companyName: "WP Engine", contactName: "Michael McBride", unitTarget: "lumens-technology", dealCandidate: false },
-	20: { companyName: "Stripe", contactName: "Thomas Garces", unitTarget: "unassigned", dealCandidate: false },
-	21: { companyName: "OneValley", contactName: "Laura Dawson", unitTarget: "trustaccept", dealCandidate: false },
-	22: { companyName: "IBM", contactName: "Shreya Sisodia", unitTarget: "trustaccept", dealCandidate: false },
-	23: { companyName: "Otis", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
-	24: { companyName: "F.W. Webb", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
-	25: { companyName: "Upper West Strategies", contactName: "Bill Hamersly", unitTarget: "lumens-technology", dealCandidate: false },
-	26: { companyName: "Grant Associates", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
-	27: { companyName: "JLL", contactName: "Emilie Goldman", unitTarget: "lumens-technology", dealCandidate: true, dealReason: "potential-client relationship; review before creating a Deal" },
-	28: { companyName: "T-Mobile", contactName: null, unitTarget: "lumens-technology", dealCandidate: false },
-	29: { companyName: "Dostmann Electronic", contactName: "Marcel Hahn", unitTarget: "lumens-technology", dealCandidate: false },
-	30: { companyName: "SVB", contactName: null, unitTarget: "trustaccept", dealCandidate: false },
-	31: { companyName: "GNBS", contactName: null, unitTarget: "lumens-guyana", dealCandidate: false },
-	32: { companyName: "International Labour Organization (ILO)", contactName: "Ariel Pino", unitTarget: "lumens-guyana", dealCandidate: false },
+	0: {
+		companyName: "Identiti",
+		contactName: "Tristan Limbrunner",
+		unitTarget: "lumens-technology",
+		dealCandidate: true,
+		dealReason: "Pep Boys / Identiti quote follow-up",
+	},
+	1: {
+		companyName: "Divisions Maintenance Group",
+		contactName: "Alyssa Finke",
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	2: {
+		companyName: null,
+		contactName: null,
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	3: {
+		companyName: "Sung Co",
+		contactName: "Vera Sung",
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	4: {
+		companyName: "Ingram Micro",
+		contactName: null,
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	5: {
+		companyName: "Ingram Micro",
+		contactName: "James Noble",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	6: {
+		companyName: "MA Labs",
+		contactName: "Hope Tian",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	7: {
+		companyName: "MA Labs",
+		contactName: "Sopher Zhan",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	8: {
+		companyName: "Supermicro",
+		contactName: "Jimmy Liu",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	9: {
+		companyName: "Object First",
+		contactName: "Michelle Medlock",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	10: {
+		companyName: "TP-Link",
+		contactName: "Dave Markwell",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	11: {
+		companyName: "GridVest",
+		contactName: "Josh Rhoades",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	12: {
+		companyName: "UNIX CCTV",
+		contactName: "Nicolas Rizo",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	13: {
+		companyName: "IDS Imaging",
+		contactName: "Nicole Ertel",
+		unitTarget: "data-gear",
+		dealCandidate: false,
+	},
+	14: {
+		companyName: "Auth0",
+		contactName: null,
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	15: {
+		companyName: "Auth0",
+		contactName: null,
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	16: {
+		companyName: "Okta",
+		contactName: "Kenny Lee",
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	17: {
+		companyName: "ElevenLabs",
+		contactName: "Henry Kearing",
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	18: {
+		companyName: "Linkup",
+		contactName: "Sacha Uzan",
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	19: {
+		companyName: "WP Engine",
+		contactName: "Michael McBride",
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	20: {
+		companyName: "Stripe",
+		contactName: "Thomas Garces",
+		unitTarget: "unassigned",
+		dealCandidate: false,
+	},
+	21: {
+		companyName: "OneValley",
+		contactName: "Laura Dawson",
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	22: {
+		companyName: "IBM",
+		contactName: "Shreya Sisodia",
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	23: {
+		companyName: "Otis",
+		contactName: null,
+		unitTarget: "lumens-guyana",
+		dealCandidate: false,
+	},
+	24: {
+		companyName: "F.W. Webb",
+		contactName: null,
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	25: {
+		companyName: "Upper West Strategies",
+		contactName: "Bill Hamersly",
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	26: {
+		companyName: "Grant Associates",
+		contactName: null,
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	27: {
+		companyName: "JLL",
+		contactName: "Emilie Goldman",
+		unitTarget: "lumens-technology",
+		dealCandidate: true,
+		dealReason: "potential-client relationship; review before creating a Deal",
+	},
+	28: {
+		companyName: "T-Mobile",
+		contactName: null,
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	29: {
+		companyName: "Dostmann Electronic",
+		contactName: "Marcel Hahn",
+		unitTarget: "lumens-technology",
+		dealCandidate: false,
+	},
+	30: {
+		companyName: "SVB",
+		contactName: null,
+		unitTarget: "trustaccept",
+		dealCandidate: false,
+	},
+	31: {
+		companyName: "GNBS",
+		contactName: null,
+		unitTarget: "lumens-guyana",
+		dealCandidate: false,
+	},
+	32: {
+		companyName: "International Labour Organization (ILO)",
+		contactName: "Ariel Pino",
+		unitTarget: "lumens-guyana",
+		dealCandidate: false,
+	},
 };
 
 function arg(name: string): string | undefined {
 	const prefix = `--${name}=`;
-	return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length);
+	return process.argv
+		.find((value) => value.startsWith(prefix))
+		?.slice(prefix.length);
 }
 
 function normalize(value: string | null | undefined): string {
@@ -127,14 +301,34 @@ function emailDomain(email: string | null | undefined): string | null {
 }
 
 const RELAY_DOMAINS = new Set([
-	"gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com",
-	"icloud.com", "me.com", "live.com", "msn.com", "atlassian.net",
+	"gmail.com",
+	"googlemail.com",
+	"yahoo.com",
+	"outlook.com",
+	"hotmail.com",
+	"icloud.com",
+	"me.com",
+	"live.com",
+	"msn.com",
+	"atlassian.net",
 ]);
 
 const ROLE_LOCALS = [
-	"info", "sales", "support", "hello", "contact", "admin", "office",
-	"generalinquiry", "standards", "connectwithsvb", "partnershipsisp",
-	"accountchangerequest", "cloudsi-clouddeployments", "jira", "auth0startups",
+	"info",
+	"sales",
+	"support",
+	"hello",
+	"contact",
+	"admin",
+	"office",
+	"generalinquiry",
+	"standards",
+	"connectwithsvb",
+	"partnershipsisp",
+	"accountchangerequest",
+	"cloudsi-clouddeployments",
+	"jira",
+	"auth0startups",
 ];
 
 function isRoleAddress(email: string | null | undefined): boolean {
@@ -142,7 +336,9 @@ function isRoleAddress(email: string | null | undefined): boolean {
 	const at = value.indexOf("@");
 	if (at < 1) return false;
 	const local = value.slice(0, at);
-	return ROLE_LOCALS.some((prefix) => local === prefix || local.startsWith(`${prefix}+`));
+	return ROLE_LOCALS.some(
+		(prefix) => local === prefix || local.startsWith(`${prefix}+`),
+	);
 }
 
 function domainForCompany(email: string | null | undefined): string | null {
@@ -169,7 +365,7 @@ function resolveBusinessUnit(
 			wanted.some((alias) => value.includes(alias) || alias.includes(value)),
 		);
 	});
-	return partial.length === 1 ? partial[0] ?? null : null;
+	return partial.length === 1 ? (partial[0] ?? null) : null;
 }
 
 function names(value: string): { firstName: string; lastName: string | null } {
@@ -182,7 +378,9 @@ function names(value: string): { firstName: string; lastName: string | null } {
 
 async function main() {
 	if (process.argv.includes("--apply")) {
-		throw new Error("Read-only preview. Use outlook-scan-promote.ts for writes.");
+		throw new Error(
+			"Read-only preview. Use outlook-scan-promote.ts for writes.",
+		);
 	}
 
 	const scanId = arg("scan-id") ?? DEFAULT_SCAN_ID;
@@ -224,7 +422,9 @@ async function main() {
 	const actualSourceIds = businessUnits as unknown as { sourceId: string }[];
 
 	const contactsByEmail = new Map(
-		contacts.filter((row) => row.email).map((row) => [row.email!.toLowerCase(), row]),
+		contacts
+			.filter((row) => row.email)
+			.map((row) => [row.email!.toLowerCase(), row]),
 	);
 	const companiesByDomain = new Map<string, CompanyRow[]>();
 	const companiesByName = new Map<string, CompanyRow[]>();
@@ -243,6 +443,7 @@ async function main() {
 
 	const existingSources = new Set(actualSourceIds.map((row) => row.sourceId));
 
+	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Dry-run mapping intentionally mirrors the promotion policy matrix.
 	const items = findings.map((finding, index) => {
 		const policy = POLICY[index] ?? {
 			companyName: finding.company ?? null,
@@ -253,18 +454,23 @@ async function main() {
 
 		const unit = resolveBusinessUnit(policy.unitTarget, actualBusinessUnits);
 		const email = finding.email?.trim().toLowerCase() || null;
-		const existingContact = email ? contactsByEmail.get(email) ?? null : null;
+		const existingContact = email ? (contactsByEmail.get(email) ?? null) : null;
 
 		const candidateDomain = domainForCompany(email);
-		const byDomain = candidateDomain ? companiesByDomain.get(candidateDomain) ?? [] : [];
+		const byDomain = candidateDomain
+			? (companiesByDomain.get(candidateDomain) ?? [])
+			: [];
 		const byName = policy.companyName
-			? companiesByName.get(normalize(policy.companyName)) ?? []
+			? (companiesByName.get(normalize(policy.companyName)) ?? [])
 			: [];
 
 		const companyMatches = new Map<string, CompanyRow>();
-		for (const company of [...byDomain, ...byName]) companyMatches.set(company.id, company);
+		for (const company of [...byDomain, ...byName])
+			companyMatches.set(company.id, company);
 		const existingCompany =
-			companyMatches.size === 1 ? [...companyMatches.values()][0] ?? null : null;
+			companyMatches.size === 1
+				? ([...companyMatches.values()][0] ?? null)
+				: null;
 
 		const canCreateContact =
 			!existingContact &&
@@ -341,8 +547,10 @@ async function main() {
 		};
 	});
 
-	const count = (section: "sourceRecord" | "company" | "contact", action: string) =>
-		items.filter((item) => item[section].action === action).length;
+	const count = (
+		section: "sourceRecord" | "company" | "contact",
+		action: string,
+	) => items.filter((item) => item[section].action === action).length;
 
 	const summary = {
 		mode: "DRY_RUN_READ_ONLY",
@@ -366,7 +574,8 @@ async function main() {
 			contactsMatched: count("contact", "match"),
 			contactsProposed: count("contact", "propose-create"),
 			contactsSkipped: count("contact", "skip"),
-			dealCandidatesForReview: items.filter((item) => item.policy.dealCandidate).length,
+			dealCandidatesForReview: items.filter((item) => item.policy.dealCandidate)
+				.length,
 		},
 		items,
 	};
