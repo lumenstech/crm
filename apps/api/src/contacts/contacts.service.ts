@@ -819,22 +819,7 @@ export class ContactsService {
 
 		if (input.businessUnit.length > 0) {
 			and.push({
-				OR: [
-					{
-						businessUnitAssociations: {
-							some: { businessUnitId: { in: input.businessUnit } },
-						},
-					},
-					{
-						company: {
-							is: {
-								businessUnitAssociations: {
-									some: { businessUnitId: { in: input.businessUnit } },
-								},
-							},
-						},
-					},
-				],
+				company: { is: { businessUnitId: { in: input.businessUnit } } },
 			});
 		}
 
@@ -919,24 +904,7 @@ export class ContactsService {
 						where: {
 							AND: [
 								where,
-								{
-									OR: [
-										{
-											businessUnitAssociations: {
-												some: { businessUnitId: unit.id },
-											},
-										},
-										{
-											company: {
-												is: {
-													businessUnitAssociations: {
-														some: { businessUnitId: unit.id },
-													},
-												},
-											},
-										},
-									],
-								},
+								{ company: { is: { businessUnitId: unit.id } } },
 							],
 						},
 					}),
@@ -952,10 +920,7 @@ export class ContactsService {
 			seniority: countsByKey(seniorities, "seniority"),
 			persona: countsByKey(personas, "function"),
 			businessUnit: Object.fromEntries(
-				businessUnits.map((unit, index) => [
-					unit.id,
-					businessUnitCounts[index] ?? 0,
-				]),
+				businessUnits.map((unit, index) => [unit.id, businessUnitCounts[index] ?? 0]),
 			),
 			activity,
 			...Object.fromEntries(
