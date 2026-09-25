@@ -4,9 +4,9 @@ import {
 	ingestGuyanaOpportunityInput,
 } from "../src/ingest/guyana-opportunity.contracts";
 import {
-	type GuyanaOpportunitySourceKey,
 	guyanaOpportunitySources,
 	isApprovedGuyanaOpportunitySourceUrl,
+	type GuyanaOpportunitySourceKey,
 } from "../src/ingest/guyana-opportunity.sources";
 
 const scoutOutput = z.object({
@@ -17,9 +17,7 @@ const scoutCandidateIdentity = z.object({
 	sourceUrl: z.string().url(),
 });
 
-const sourceKeys = Object.keys(
-	guyanaOpportunitySources,
-) as GuyanaOpportunitySourceKey[];
+const sourceKeys = Object.keys(guyanaOpportunitySources) as GuyanaOpportunitySourceKey[];
 const MAX_SOURCE_TEXT = 180_000;
 
 function requiredEnv(name: string) {
@@ -58,14 +56,10 @@ function configuredSourceUrls() {
 		) as Record<GuyanaOpportunitySourceKey, string[]>;
 	}
 
-	const parsed = JSON.parse(overrides) as Partial<
-		Record<GuyanaOpportunitySourceKey, string[]>
-	>;
+	const parsed = JSON.parse(overrides) as Partial<Record<GuyanaOpportunitySourceKey, string[]>>;
 	const output = {} as Record<GuyanaOpportunitySourceKey, string[]>;
 	for (const key of sourceKeys) {
-		const urls = parsed[key]?.length
-			? parsed[key]
-			: [guyanaOpportunitySources[key].url];
+		const urls = parsed[key]?.length ? parsed[key] : [guyanaOpportunitySources[key].url];
 		for (const url of urls) {
 			if (!isApprovedGuyanaOpportunitySourceUrl(key, url)) {
 				throw new Error(`Unapproved collector URL for ${key}: ${url}`);
@@ -79,15 +73,13 @@ function configuredSourceUrls() {
 async function fetchSource(url: string) {
 	const response = await fetch(url, {
 		headers: {
-			accept:
-				"text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+			accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
 			"user-agent": "CompCRM-GuyanaOpportunityCollector/1.0",
 		},
 		redirect: "follow",
 		signal: AbortSignal.timeout(30_000),
 	});
-	if (!response.ok)
-		throw new Error(`Source fetch failed ${response.status}: ${url}`);
+	if (!response.ok) throw new Error(`Source fetch failed ${response.status}: ${url}`);
 	const contentType = response.headers.get("content-type") ?? "";
 	const body = await response.text();
 	const text = contentType.includes("json") ? body : htmlToText(body);
@@ -124,10 +116,7 @@ function findJsonText(value: unknown): string | null {
 }
 
 async function runScout(input: string) {
-	const controlPlane = requiredEnv("GUYANA_COLLECTOR_LANGFLOW_URL").replace(
-		/\/$/,
-		"",
-	);
+	const controlPlane = requiredEnv("GUYANA_COLLECTOR_LANGFLOW_URL").replace(/\/$/, "");
 	const token = requiredEnv("GUYANA_COLLECTOR_LANGFLOW_TOKEN");
 	const response = await fetch(`${controlPlane}/api/langflow/run`, {
 		method: "POST",
@@ -143,14 +132,11 @@ async function runScout(input: string) {
 	});
 	const body = await response.text();
 	if (!response.ok) {
-		throw new Error(
-			`Langflow scout failed ${response.status}: ${body.slice(0, 1000)}`,
-		);
+		throw new Error(`Langflow scout failed ${response.status}: ${body.slice(0, 1000)}`);
 	}
 	const parsed = JSON.parse(body) as unknown;
 	const jsonText = findJsonText(parsed);
-	if (!jsonText)
-		throw new Error("Langflow scout did not return a JSON candidate envelope.");
+	if (!jsonText) throw new Error("Langflow scout did not return a JSON candidate envelope.");
 	return scoutOutput.parse(JSON.parse(jsonText) as unknown).candidates;
 }
 
@@ -173,9 +159,7 @@ async function submitCandidate(candidate: unknown) {
 	});
 	const body = await response.text();
 	if (!response.ok) {
-		throw new Error(
-			`CRM ingest failed ${response.status}: ${body.slice(0, 1000)}`,
-		);
+		throw new Error(`CRM ingest failed ${response.status}: ${body.slice(0, 1000)}`);
 	}
 	return JSON.parse(body) as unknown;
 }
@@ -186,10 +170,10 @@ async function collectSource(source: GuyanaOpportunitySourceKey, url: string) {
 		"Review the following approved Guyana opportunity source snapshot.",
 		`SOURCE_KEY: ${source}`,
 		`SOURCE_URL: ${url}`,
-		'Return ONLY valid JSON with this top-level shape: {"candidates":[...]}',
+		"Return ONLY valid JSON with this top-level shape: {\"candidates\":[...]}",
 		"Each candidate must match the Guyana opportunity ingest contract exactly and must use the supplied SOURCE_KEY.",
 		"Use a stable official notice/tender/project ID for sourceId when available. Do not invent missing facts.",
-		'If no current Guyana opportunity is supported by the source snapshot, return {"candidates":[]}.',
+		"If no current Guyana opportunity is supported by the source snapshot, return {\"candidates\":[]}.",
 		"SNAPSHOT:",
 		pageText,
 	].join("\n\n");
@@ -198,14 +182,10 @@ async function collectSource(source: GuyanaOpportunitySourceKey, url: string) {
 	for (const candidate of candidates) {
 		const identity = scoutCandidateIdentity.parse(candidate);
 		if (identity.source !== source) {
-			throw new Error(
-				`Scout returned source ${identity.source} for requested source ${source}.`,
-			);
+			throw new Error(`Scout returned source ${identity.source} for requested source ${source}.`);
 		}
 		if (!isApprovedGuyanaOpportunitySourceUrl(source, identity.sourceUrl)) {
-			throw new Error(
-				`Scout returned an unapproved source URL: ${identity.sourceUrl}`,
-			);
+			throw new Error(`Scout returned an unapproved source URL: ${identity.sourceUrl}`);
 		}
 		results.push(await submitCandidate(candidate));
 	}
@@ -214,12 +194,7 @@ async function collectSource(source: GuyanaOpportunitySourceKey, url: string) {
 
 async function main() {
 	const sourceUrls = configuredSourceUrls();
-	const summary: Array<{
-		source: string;
-		url: string;
-		candidates?: number;
-		error?: string;
-	}> = [];
+	const summary: Array<{ source: string; url: string; candidates?: number; error?: string }> = [];
 	for (const source of sourceKeys) {
 		for (const url of sourceUrls[source]) {
 			try {
@@ -234,9 +209,7 @@ async function main() {
 			}
 		}
 	}
-	console.log(
-		JSON.stringify({ ranAt: new Date().toISOString(), summary }, null, 2),
-	);
+	console.log(JSON.stringify({ ranAt: new Date().toISOString(), summary }, null, 2));
 	if (summary.every((item) => item.error)) process.exitCode = 1;
 }
 
