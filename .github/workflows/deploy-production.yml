@@ -1,0 +1,40 @@
+name: Deploy COMP CRM Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref to deploy to the Mac mini production worktree
+        required: true
+        default: feature/cross-business-unit-reuse
+      expected_head:
+        description: Optional exact SHA guard
+        required: false
+        default: ""
+
+concurrency:
+  group: comp-crm-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Mac mini production
+    runs-on: [self-hosted, macOS, comp-crm-production]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout deployment controls
+        uses: actions/checkout@v5
+        with:
+          ref: release
+
+      - name: Deploy guarded revision
+        env:
+          COMP_CRM_PROD_DIR: /Users/danny/Documents/Codex/comp-ai-crm-release-migration
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          chmod +x ops/macos/deploy-comp-crm-production.sh
+          ops/macos/deploy-comp-crm-production.sh "${{ inputs.source_ref }}"
