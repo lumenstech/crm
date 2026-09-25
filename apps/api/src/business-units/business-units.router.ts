@@ -1,4 +1,5 @@
 import { Inject } from "@nestjs/common";
+import type { z } from "zod";
 import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
@@ -34,7 +35,7 @@ export class BusinessUnitsRouter {
 		output: recordAssociationOutput,
 		meta: restMeta("POST", "/business-units/associations", ["Business Units"]),
 	})
-	async associateRecord(@Input() input: import("zod").z.infer<typeof associateRecordInput>) {
+	async associateRecord(@Input() input: z.infer<typeof associateRecordInput>) {
 		return this.businessUnits.associateRecord(input);
 	}
 
@@ -44,7 +45,7 @@ export class BusinessUnitsRouter {
 		meta: restMeta("GET", "/business-units/associations", ["Business Units"]),
 	})
 	async recordAssociations(
-		@Input() input: import("zod").z.infer<typeof recordAssociationsInput>,
+		@Input() input: z.infer<typeof recordAssociationsInput>,
 	) {
 		return this.businessUnits.recordAssociations(input.recordType, input.recordId);
 	}
@@ -55,7 +56,7 @@ export class BusinessUnitsRouter {
 		meta: restMeta("POST", "/business-units/opportunities", ["Business Units"]),
 	})
 	async createBusinessUnitOpportunity(
-		@Input() input: import("zod").z.infer<typeof createBusinessUnitOpportunityInput>,
+		@Input() input: z.infer<typeof createBusinessUnitOpportunityInput>,
 	) {
 		return this.businessUnits.createBusinessUnitOpportunity(input);
 	}
