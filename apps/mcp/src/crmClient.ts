@@ -60,19 +60,23 @@ export class CrmClient {
 			batch &&
 			typeof batch === "object" &&
 			Array.isArray((batch as { items?: unknown }).items)
-				? (batch as {
+				? (
+					batch as {
 						items: Array<{
 							sourceId: string;
 							status: string;
 							sourceRecordId: string | null;
 						}>;
-					}).items
+					}
+				).items
 				: [];
 
 		const resolutions: Array<Record<string, unknown>> = [];
 		for (const item of items) {
 			if (item.status !== "accepted" || !item.sourceRecordId) continue;
-			const signal = input.signals.find((candidate) => candidate.sourceId === item.sourceId);
+			const signal = input.signals.find(
+				(candidate) => candidate.sourceId === item.sourceId,
+			);
 			if (!signal) continue;
 			try {
 				const resolved = await this.request(
