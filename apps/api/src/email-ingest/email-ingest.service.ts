@@ -5,6 +5,7 @@ import { ContactsService } from "../contacts/contacts.service";
 import { CompaniesService } from "../companies/companies.service";
 import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
+import { IngestService } from "../ingest/ingest.service";
 import { BusinessUnitsService } from "../business-units/business-units.service";
 import type { CrmEmailBatch, CrmEmailLead } from "./email-ingest.contracts";
 
@@ -19,6 +20,8 @@ export type EmailIngestItemResult = {
 	contactId: string | null;
 	companyAssociationAdded: boolean;
 	contactAssociationAdded: boolean;
+	sourceRecordId: string | null;
+	duplicateSubmission: boolean;
 	error: string | null;
 };
 
@@ -29,6 +32,7 @@ export class EmailIngestService {
 		private readonly companies: CompaniesService,
 		private readonly contacts: ContactsService,
 		private readonly businessUnits: BusinessUnitsService,
+		private readonly signals: IngestService,
 	) {}
 
 	async process(batch: CrmEmailBatch) {
@@ -77,6 +81,8 @@ export class EmailIngestService {
 					contactId: null,
 					companyAssociationAdded: false,
 					contactAssociationAdded: false,
+					sourceRecordId: null,
+					duplicateSubmission: false,
 					error: error instanceof Error ? error.message : String(error),
 				});
 			}
@@ -113,9 +119,30 @@ export class EmailIngestService {
 				contactId: existingContact?.id ?? null,
 				companyAssociationAdded: false,
 				contactAssociationAdded: false,
+				sourceRecordId: null,
+				duplicateSubmission: false,
 				error: null,
 			};
 		}
+
+		const signal = await this.signals.signal({
+			project: batch.businessUnit,
+			source: "email-gateway",
+			sourceType: "prospect",
+			sourceId,
+			sourceUrl: lead.sourceUrl,
+			entity: lead.company,
+			signalScore: lead.signalScore,
+			tags: lead.tags,
+			payload: {
+				batch_id: batch.batchId,
+				company: lead.company,
+				domain: lead.domain ?? null,
+				contact_email: lead.contact?.email ?? null,
+				qualification: lead.qualification ?? null,
+				notes: lead.notes ?? null,
+			},
+		});
 
 		let company = existingCompany;
 		let created = false;
@@ -182,6 +209,8 @@ export class EmailIngestService {
 			contactId: contact?.id ?? null,
 			companyAssociationAdded,
 			contactAssociationAdded,
+			sourceRecordId: signal.sourceRecordId,
+			duplicateSubmission: signal.deduplicated,
 			error: null,
 		};
 	}
