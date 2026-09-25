@@ -6,7 +6,7 @@ on:
       source_ref:
         description: Git ref to deploy to the Mac mini production worktree
         required: true
-        default: feature/cross-business-unit-reuse
+        default: release
       expected_head:
         description: Optional exact SHA guard
         required: false
