@@ -51,11 +51,72 @@ export class CrmClient {
 		});
 	}
 
-	ingestLeads(input: IngestLeadsInput) {
-		return this.request("/rest/ingest/signals/batch", {
+	async ingestLeads(input: IngestLeadsInput) {
+		const batch = await this.request("/rest/ingest/signals/batch", {
 			method: "POST",
 			body: { project: input.businessUnit, signals: input.signals },
 		});
+		const items =
+			batch &&
+			typeof batch === "object" &&
+			Array.isArray((batch as { items?: unknown }).items)
+				? (batch as {
+						items: Array<{
+							sourceId: string;
+							status: string;
+							sourceRecordId: string | null;
+						}>;
+					}).items
+				: [];
+
+		const resolutions: Array<Record<string, unknown>> = [];
+		for (const item of items) {
+			if (item.status !== "accepted" || !item.sourceRecordId) continue;
+			const signal = input.signals.find((candidate) => candidate.sourceId === item.sourceId);
+			if (!signal) continue;
+			try {
+				const resolved = await this.request(
+					`/rest/ingest/signals/${encodeURIComponent(item.sourceRecordId)}/resolve-company`,
+					{
+						method: "POST",
+						body: {
+							sourceRecordId: item.sourceRecordId,
+							companyName: signal.entity ?? null,
+							domain:
+								typeof signal.payload.domain === "string"
+									? signal.payload.domain
+									: typeof signal.payload.website === "string"
+										? signal.payload.website
+										: null,
+							createIfMissing: true,
+							queueResearch: false,
+						},
+					},
+				);
+				resolutions.push({
+					sourceId: item.sourceId,
+					sourceRecordId: item.sourceRecordId,
+					status: "resolved",
+					...(resolved && typeof resolved === "object"
+						? (resolved as Record<string, unknown>)
+						: { result: resolved }),
+				});
+			} catch (error) {
+				resolutions.push({
+					sourceId: item.sourceId,
+					sourceRecordId: item.sourceRecordId,
+					status: "resolution_failed",
+					error: error instanceof Error ? error.message : "Company resolution failed.",
+				});
+			}
+		}
+
+		return {
+			...(batch && typeof batch === "object"
+				? (batch as Record<string, unknown>)
+				: { batch }),
+			resolutions,
+		};
 	}
 
 	createBusinessUnitOpportunity(input: CreateBusinessUnitOpportunityInput) {
