@@ -65,5 +65,5 @@ export const createBusinessUnitOpportunityOutput = z.object({
 		name: z.string(),
 	}),
 	associationId: z.string(),
-	created: z.literal(true),
+	created: z.boolean(),
 });
