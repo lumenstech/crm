@@ -1,0 +1,3 @@
+# Insert before the existing final catch-all rule.
+- hostname: comp-crm-mcp.516labs.com
+  service: http://127.0.0.1:3103
