@@ -61,14 +61,14 @@ export class CrmClient {
 			typeof batch === "object" &&
 			Array.isArray((batch as { items?: unknown }).items)
 				? (
-					batch as {
-						items: Array<{
-							sourceId: string;
-							status: string;
-							sourceRecordId: string | null;
-						}>;
-					}
-				).items
+						batch as {
+							items: Array<{
+								sourceId: string;
+								status: string;
+								sourceRecordId: string | null;
+							}>;
+						}
+					).items
 				: [];
 
 		const resolutions: Array<Record<string, unknown>> = [];
