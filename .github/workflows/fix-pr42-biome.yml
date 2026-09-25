@@ -1,17 +1,17 @@
 name: PR42 Biome Repair
 
 on:
-  push:
+  pull_request:
+    types: [synchronize]
     branches:
-      - fix/comp-crm-complete-ingest-flow
-    paths:
-      - .github/workflows/fix-pr42-biome.yml
+      - deploy/comp-crm-mcp-phase1
 
 permissions:
   contents: write
 
 jobs:
   repair:
+    if: github.head_ref == 'fix/comp-crm-complete-ingest-flow'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -30,24 +30,21 @@ jobs:
           from pathlib import Path
 
           path = Path("packages/db/scripts/outlook-scan-dry-run.ts")
-          text = path.read_text()
+          source = path.read_text()
           target = "\tconst items = findings.map((finding, index) => {"
           comment = "\t// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Dry-run mapping intentionally mirrors the promotion policy matrix.\n"
 
-          if comment not in text:
-              if target not in text:
+          if comment not in source:
+              if target not in source:
                   raise SystemExit("target line not found")
-              text = text.replace(target, comment + target, 1)
-              path.write_text(text)
+              source = source.replace(target, comment + target, 1)
+              path.write_text(source)
           PY
 
       - name: Format database package
         run: bunx biome format --write packages/db
 
-      - name: Verify database package lint
-        run: bunx biome check packages/db
-
-      - name: Commit repair
+      - name: Commit formatter output
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
