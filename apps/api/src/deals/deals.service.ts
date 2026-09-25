@@ -793,26 +793,15 @@ export class DealsService {
 			AND: [this.searchFilter(input.q), archivedFilter(input.archived)],
 		};
 
-		const [owners, stages, businessUnits, fieldFacets, ...closingCounts] =
-			await Promise.all([
-				this.db.deal.groupBy({
-					by: ["ownerId"],
-					where,
-					_count: { _all: true },
-				}),
-				this.db.deal.groupBy({ by: ["stage"], where, _count: { _all: true } }),
-				this.db.deal.groupBy({
-					by: ["businessUnitId"],
-					where,
-					_count: { _all: true },
-				}),
-				this.fields.filterFacetCounts("DEAL", where, filterableFields),
-				...CLOSING_WINDOWS.map((window) =>
-					this.db.deal.count({
-						where: { AND: [where, closingFilter(window)] },
-					}),
-				),
-			]);
+		const [owners, stages, businessUnits, fieldFacets, ...closingCounts] = await Promise.all([
+			this.db.deal.groupBy({ by: ["ownerId"], where, _count: { _all: true } }),
+			this.db.deal.groupBy({ by: ["stage"], where, _count: { _all: true } }),
+			this.db.deal.groupBy({ by: ["businessUnitId"], where, _count: { _all: true } }),
+			this.fields.filterFacetCounts("DEAL", where, filterableFields),
+			...CLOSING_WINDOWS.map((window) =>
+				this.db.deal.count({ where: { AND: [where, closingFilter(window)] } }),
+			),
+		]);
 
 		const stageCounts = countsByKey(stages, "stage");
 		const openCount = OPEN_DEAL_STAGES.reduce(
@@ -827,11 +816,7 @@ export class DealsService {
 		return {
 			status: { open: openCount, closed: closedCount },
 			owner: countsByKey(owners, "ownerId", FACET_UNASSIGNED),
-			businessUnit: countsByKey(
-				businessUnits,
-				"businessUnitId",
-				FACET_UNASSIGNED,
-			),
+			businessUnit: countsByKey(businessUnits, "businessUnitId", FACET_UNASSIGNED),
 			stage: stageCounts,
 			closing: Object.fromEntries(
 				CLOSING_WINDOWS.map((window, index) => [
