@@ -185,7 +185,12 @@ export class EmailIngestService {
 			};
 		}
 
-		if (contact && contact.companyId !== company.id) {
+		if (contact?.companyId && contact.companyId !== company.id) {
+			throw new BadRequestException(
+				"Existing contact email belongs to a different company; review required.",
+			);
+		}
+		if (contact && !contact.companyId) {
 			await this.contacts.update(contact.id, { companyId: company.id });
 			contact = { ...contact, companyId: company.id };
 		}
