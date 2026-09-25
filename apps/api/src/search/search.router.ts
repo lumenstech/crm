@@ -7,6 +7,12 @@ import { SearchService } from "./search.service";
 
 const quickInput = z.object({ q: z.string().default("") });
 
+const businessUnitRefOutput = z.object({
+	id: z.string(),
+	key: z.string(),
+	name: z.string(),
+});
+
 const searchHitOutput = z.object({
 	kind: z.enum(["company", "contact", "deal"]),
 	id: z.string(),
@@ -16,6 +22,8 @@ const searchHitOutput = z.object({
 	iconDarkUrl: z.string().nullable(),
 	iconTone: z.string().nullable(),
 	imageUrl: z.string().nullable(),
+	sourceBusinessUnit: businessUnitRefOutput.nullable(),
+	associatedBusinessUnits: z.array(businessUnitRefOutput),
 });
 
 const quickOutput = z.object({ hits: z.array(searchHitOutput) });
