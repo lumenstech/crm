@@ -44,7 +44,7 @@ jobs:
           PY
 
       - name: Format repository
-        run: bunx biome format --write .
+        run: bunx biome format --write apps/api apps/app apps/agent packages
 
       - name: Commit formatter output
         run: |
