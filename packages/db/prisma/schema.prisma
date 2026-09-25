@@ -320,6 +320,7 @@ model Company {
 
   businessUnitId String?
   businessUnit   BusinessUnit? @relation("CompCompanyBusinessUnit", fields: [businessUnitId], references: [id], onDelete: SetNull)
+  businessUnitAssociations CompanyBusinessUnit[]
 
   lastActivityAt DateTime?
   archivedAt     DateTime?
@@ -383,6 +384,8 @@ model Contact {
   primaryOf Company? @relation("PrimaryContact")
 
   source RecordSource @default(MANUAL)
+
+  businessUnitAssociations ContactBusinessUnit[]
 
   lastActivityAt DateTime?
   archivedAt     DateTime?
@@ -1621,6 +1624,8 @@ model BusinessUnit {
   updatedAt   DateTime @updatedAt
 
   compCompanies  Company[]   @relation("CompCompanyBusinessUnit")
+  companyAssociations CompanyBusinessUnit[]
+  contactAssociations ContactBusinessUnit[]
   compDeals      Deal[]      @relation("CompDealBusinessUnit")
   compAgentTasks AgentTask[] @relation("CompAgentTaskBusinessUnit")
   procurementPolicies ProcurementPricingPolicy[] @relation("ProcurementPolicyBusinessUnit")
@@ -1638,6 +1643,34 @@ model BusinessUnit {
 
   @@index([enabled, key])
   @@map("business_unit")
+}
+
+model CompanyBusinessUnit {
+  companyId      String
+  businessUnitId String
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  useCase        String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@id([companyId, businessUnitId])
+  @@index([businessUnitId, companyId])
+  @@map("company_business_unit")
+}
+
+model ContactBusinessUnit {
+  contactId      String
+  businessUnitId String
+  contact        Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  useCase        String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@id([contactId, businessUnitId])
+  @@index([businessUnitId, contactId])
+  @@map("contact_business_unit")
 }
 
 model CanonicalCompany {
