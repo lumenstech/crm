@@ -106,7 +106,10 @@ export class CrmClient {
 					sourceId: item.sourceId,
 					sourceRecordId: item.sourceRecordId,
 					status: "resolution_failed",
-					error: error instanceof Error ? error.message : "Company resolution failed.",
+					error:
+						error instanceof Error
+							? error.message
+							: "Company resolution failed.",
 				});
 			}
 		}
