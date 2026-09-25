@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "comp_crm": {
+      "type": "streamable-http",
+      "url": "https://comp-crm-mcp.516labs.com/mcp",
+      "bearer_token_env_var": "COMP_CRM_MCP_CALLER_TOKEN"
+    }
+  }
+}
