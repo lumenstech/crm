@@ -11,15 +11,13 @@ async function main() {
 		dataGearUnits,
 		sourceCount,
 	] = await Promise.all([
-		db.$queryRaw<
-			Array<{
-				scan_id: string;
-				messages_scanned: number;
-				next_scan_index: number;
-				finding_count: number;
-				payload_hash: string;
-			}>
-		>`
+		db.$queryRaw<Array<{
+			scan_id: string;
+			messages_scanned: number;
+			next_scan_index: number;
+			finding_count: number;
+			payload_hash: string;
+		}>>`
 			SELECT
 				scan_id,
 				messages_scanned,
@@ -29,13 +27,11 @@ async function main() {
 			FROM outlook_scan_archive
 			WHERE scan_id = ${scanId}
 		`,
-		db.$queryRaw<
-			Array<{
-				key: string;
-				name: string;
-				count: bigint;
-			}>
-		>`
+		db.$queryRaw<Array<{
+			key: string;
+			name: string;
+			count: bigint;
+		}>>`
 			SELECT bu.key, bu.name, COUNT(*)::bigint AS count
 			FROM source_record sr
 			JOIN business_unit bu ON bu.id = sr."businessUnitId"
@@ -45,13 +41,11 @@ async function main() {
 			GROUP BY bu.key, bu.name
 			ORDER BY bu.key
 		`,
-		db.$queryRaw<
-			Array<{
-				key: string;
-				name: string;
-				count: bigint;
-			}>
-		>`
+		db.$queryRaw<Array<{
+			key: string;
+			name: string;
+			count: bigint;
+		}>>`
 			SELECT bu.key, bu.name, COUNT(*)::bigint AS count
 			FROM company c
 			JOIN business_unit bu ON bu.id = c."businessUnitId"
@@ -60,13 +54,11 @@ async function main() {
 			GROUP BY bu.key, bu.name
 			ORDER BY bu.key
 		`,
-		db.$queryRaw<
-			Array<{
-				key: string;
-				name: string;
-				count: bigint;
-			}>
-		>`
+		db.$queryRaw<Array<{
+			key: string;
+			name: string;
+			count: bigint;
+		}>>`
 			SELECT bu.key, bu.name, COUNT(*)::bigint AS count
 			FROM contact ct
 			JOIN company c ON c.id = ct."companyId"
@@ -76,16 +68,14 @@ async function main() {
 			GROUP BY bu.key, bu.name
 			ORDER BY bu.key
 		`,
-		db.$queryRaw<
-			Array<{
-				id: string;
-				key: string;
-				name: string;
-				company_count: bigint;
-				deal_count: bigint;
-				source_count: bigint;
-			}>
-		>`
+		db.$queryRaw<Array<{
+			id: string;
+			key: string;
+			name: string;
+			company_count: bigint;
+			deal_count: bigint;
+			source_count: bigint;
+		}>>`
 			SELECT
 				bu.id,
 				bu.key,
