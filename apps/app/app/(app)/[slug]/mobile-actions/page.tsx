@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import {
 	PageShell,
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
 };
 
 export default async function MobileActionsPage() {
+	await connection();
 	await requireSession();
 
 	return (
