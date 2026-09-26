@@ -186,25 +186,24 @@ export class BusinessUnitsService {
 			};
 		}
 
-		const deal = await this.db.deal.create({
-			data: {
-				name: input.name.trim(),
-				company: { connect: { id: company.id } },
-				owner: { connect: { id: owner.id } },
-				businessUnit: {
-					connect: { id: association.targetBusinessUnit.id },
-				},
-				description: input.notes?.trim() || input.useCase?.trim() || null,
-				...(input.contactId
-					? {
-							contacts: {
-								create: {
-									contact: { connect: { id: input.contactId } },
-								},
-							},
-						}
-					: {}),
+		const dealData = {
+			name: input.name.trim(),
+			company: { connect: { id: company.id } },
+			owner: { connect: { id: owner.id } },
+			businessUnit: {
+				connect: { id: association.targetBusinessUnit.id },
 			},
+			description: input.notes?.trim() || input.useCase?.trim() || null,
+			contacts: input.contactId
+				? {
+						create: {
+							contact: { connect: { id: input.contactId } },
+						},
+					}
+				: undefined,
+		};
+		const deal = await this.db.deal.create({
+			data: dealData,
 			select: { id: true },
 		});
 
