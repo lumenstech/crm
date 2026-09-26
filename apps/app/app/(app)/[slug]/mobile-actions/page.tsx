@@ -12,6 +12,8 @@ import {
 import { requireSession } from "@/lib/session";
 import { MobileCrmActions } from "./mobile-crm-actions";
 
+export const instant = false;
+
 export const metadata: Metadata = {
 	title: "Mobile CRM Actions",
 };

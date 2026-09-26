@@ -50,6 +50,9 @@ restart_services() {
 health_check() {
   curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3100/ >/dev/null
   curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3101/health >/dev/null
+  if launchctl print "gui/$(id -u)/com.sequencenow.comp-ai-agent" >/dev/null 2>&1; then
+    curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3102/ >/dev/null
+  fi
   if launchctl print "gui/$(id -u)/com.sequencenow.comp-ai-mcp" >/dev/null 2>&1; then
     curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3103/health >/dev/null
     curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3103/ready >/dev/null
