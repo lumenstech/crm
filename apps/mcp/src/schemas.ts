@@ -6,6 +6,8 @@ export const searchCrmInput = z.object({
 });
 
 export const signalPayloadValue = z.json();
+export const jsonObject = z.record(z.string(), signalPayloadValue);
+export type SignalPayloadValue = z.infer<typeof signalPayloadValue>;
 
 export const ingestSignalInput = z.object({
 	source: z.string().trim().min(1).max(96),
