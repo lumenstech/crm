@@ -136,11 +136,11 @@
 				"apps/api/test/email-ingest.contracts.spec.ts",
 				"apps/api/test/mailbox-email-ingest.spec.ts",
 				"apps/api/test/mailbox-thread-writer.spec.ts",
-				"apps/app/app/(app)/\[slug\]/companies/companies-search-params.ts",
-				"apps/app/app/(app)/\[slug\]/mobile-actions/mobile-crm-actions.tsx",
-				"apps/app/app/(app)/\[slug\]/mobile-actions/page.tsx",
-				"apps/app/app/(app)/\[slug\]/settings/change-password.tsx",
-				"apps/app/app/api/mobile-crm/\[action\]/route.ts"
+				"apps/app/app/(app)/[slug]/companies/companies-search-params.ts",
+				"apps/app/app/(app)/[slug]/mobile-actions/mobile-crm-actions.tsx",
+				"apps/app/app/(app)/[slug]/mobile-actions/page.tsx",
+				"apps/app/app/(app)/[slug]/settings/change-password.tsx",
+				"apps/app/app/api/mobile-crm/[action]/route.ts"
 			],
 			"formatter": {
 				"enabled": false
@@ -155,7 +155,7 @@
 		},
 		{
 			"includes": [
-				"apps/app/app/(app)/\[slug\]/mobile-actions/mobile-crm-actions.tsx"
+				"apps/app/app/(app)/[slug]/mobile-actions/mobile-crm-actions.tsx"
 			],
 			"linter": {
 				"rules": {
