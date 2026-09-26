@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SOURCE_REF="${1:-release}"
+SOURCE_REMOTE="${2:-${COMP_CRM_SOURCE_REMOTE:-https://github.com/lumenstech/crm.git}}"
 PROD_DIR="${COMP_CRM_PROD_DIR:-/Users/danny/Documents/Codex/comp-ai-crm-release-migration}"
 EXPECTED_HEAD="${EXPECTED_HEAD:-}"
 
@@ -16,7 +17,8 @@ fi
 previous_sha="$(git rev-parse HEAD)"
 echo "Previous production SHA: $previous_sha"
 
-git fetch --prune origin "$SOURCE_REF"
+echo "Fetching $SOURCE_REF from $SOURCE_REMOTE"
+git fetch --prune "$SOURCE_REMOTE" "$SOURCE_REF"
 target_sha="$(git rev-parse FETCH_HEAD)"
 
 if [ -n "$EXPECTED_HEAD" ] && [ "$target_sha" != "$EXPECTED_HEAD" ]; then
