@@ -175,7 +175,9 @@ export class CrmClient {
 
 		if (!response.ok) {
 			const detail = z.string().safeParse(parsed);
-			const message = detail.success ? detail.data : JSON.stringify(parsed ?? {});
+			const message = detail.success
+				? detail.data
+				: JSON.stringify(parsed ?? {});
 			throw new Error(
 				redactSecrets(
 					`Comp CRM API ${response.status} ${response.statusText} at ${path}: ${message.slice(0, 2000)}`,
