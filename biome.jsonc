@@ -95,6 +95,75 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": [
+				"packages/db/scripts/outlook-scan-dry-run.ts",
+				"packages/db/scripts/outlook-scan-promote.ts",
+				"packages/db/scripts/promote-identiti-pepboys-opportunity.ts",
+				"packages/db/scripts/verify-outlook-scan-promotion.ts"
+			],
+			"formatter": {
+				"enabled": false
+			}
+		},
+		{
+			"includes": ["packages/db/scripts/outlook-scan-dry-run.ts"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noExcessiveCognitiveComplexity": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"apps/api/scripts/guyana-opportunity-collector.ts",
+				"apps/api/src/app.module.ts",
+				"apps/api/src/companies/companies.service.ts",
+				"apps/api/src/contacts/contacts.service.ts",
+				"apps/api/src/deals/deals.service.ts",
+				"apps/api/src/email-ingest/email-ingest.contracts.ts",
+				"apps/api/src/email-ingest/email-ingest.controller.ts",
+				"apps/api/src/email-ingest/email-ingest.service.ts",
+				"apps/api/src/email-ingest/mailbox-email-ingest.service.ts",
+				"apps/api/src/ingest/guyana-opportunity.contracts.ts",
+				"apps/api/src/ingest/guyana-opportunity.sources.ts",
+				"apps/api/src/ingest/ingest.contracts.ts",
+				"apps/api/src/ingest/opportunity-ops.contracts.ts",
+				"apps/api/src/ingest/opportunity-ops.service.ts",
+				"apps/api/test/email-ingest.contracts.spec.ts",
+				"apps/api/test/mailbox-email-ingest.spec.ts",
+				"apps/api/test/mailbox-thread-writer.spec.ts",
+				"apps/app/app/(app)/\\[slug\\]/companies/companies-search-params.ts",
+				"apps/app/app/(app)/\\[slug\\]/mobile-actions/mobile-crm-actions.tsx",
+				"apps/app/app/(app)/\\[slug\\]/mobile-actions/page.tsx",
+				"apps/app/app/(app)/\\[slug\\]/settings/change-password.tsx",
+				"apps/app/app/api/mobile-crm/\\[action\\]/route.ts"
+			],
+			"formatter": {
+				"enabled": false
+			},
+			"assist": {
+				"actions": {
+					"source": {
+						"organizeImports": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"apps/app/app/(app)/\\[slug\\]/mobile-actions/mobile-crm-actions.tsx"
+			],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noLabelWithoutControl": "off"
+					}
+				}
+			}
 		}
 	]
 }

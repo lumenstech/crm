@@ -5,18 +5,9 @@ export const searchCrmInput = z.object({
 	q: z.string().trim().min(1).max(320),
 });
 
-export const signalPayloadValue: z.ZodType<
-	string | number | boolean | null | unknown[] | Record<string, unknown>
-> = z.lazy(() =>
-	z.union([
-		z.string(),
-		z.number().finite(),
-		z.boolean(),
-		z.null(),
-		z.array(signalPayloadValue),
-		z.record(z.string(), signalPayloadValue),
-	]),
-);
+export const signalPayloadValue = z.json();
+export const jsonObject = z.record(z.string(), signalPayloadValue);
+export type SignalPayloadValue = z.infer<typeof signalPayloadValue>;
 
 export const ingestSignalInput = z.object({
 	source: z.string().trim().min(1).max(96),

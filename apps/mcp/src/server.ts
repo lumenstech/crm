@@ -4,18 +4,18 @@ import {
 	associateRecordWithBusinessUnitInput,
 	createBusinessUnitOpportunityInput,
 	ingestLeadsInput,
+	jsonObject,
 	listRecordBusinessUnitsInput,
 	searchCrmInput,
+	type SignalPayloadValue,
 } from "./schemas";
 
-function result(value: unknown) {
+function result(value: SignalPayloadValue) {
 	const text = JSON.stringify(value, null, 2);
+	const objectValue = jsonObject.safeParse(value);
 	return {
 		content: [{ type: "text" as const, text }],
-		structuredContent:
-			value && typeof value === "object" && !Array.isArray(value)
-				? (value as Record<string, unknown>)
-				: { value },
+		structuredContent: objectValue.success ? objectValue.data : { value },
 	};
 }
 

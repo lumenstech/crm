@@ -165,25 +165,45 @@ export class BusinessUnitsService {
 			});
 		}
 
-		const deal = await this.db.deal.create({
-			data: {
-				name: input.name.trim(),
-				company: { connect: { id: company.id } },
-				owner: { connect: { id: owner.id } },
-				businessUnit: {
-					connect: { id: association.targetBusinessUnit.id },
-				},
-				description: input.notes?.trim() || input.useCase?.trim() || null,
-				...(input.contactId
-					? {
-							contacts: {
-								create: {
-									contact: { connect: { id: input.contactId } },
-								},
-							},
-						}
-					: {}),
+		const existingDeal = await this.db.deal.findFirst({
+			where: {
+				companyId: company.id,
+				businessUnitId: association.targetBusinessUnit.id,
+				name: { equals: input.name.trim(), mode: "insensitive" },
+				stage: { notIn: ["CLOSED_WON", "CLOSED_LOST"] },
 			},
+			select: { id: true },
+			orderBy: { createdAt: "desc" },
+		});
+		if (existingDeal) {
+			return {
+				dealId: existingDeal.id,
+				companyId: company.id,
+				contactId: input.contactId ?? null,
+				businessUnit: association.targetBusinessUnit,
+				associationId: association.id,
+				created: false,
+			};
+		}
+
+		const dealData = {
+			name: input.name.trim(),
+			company: { connect: { id: company.id } },
+			owner: { connect: { id: owner.id } },
+			businessUnit: {
+				connect: { id: association.targetBusinessUnit.id },
+			},
+			description: input.notes?.trim() || input.useCase?.trim() || null,
+			contacts: input.contactId
+				? {
+						create: {
+							contact: { connect: { id: input.contactId } },
+						},
+					}
+				: undefined,
+		};
+		const deal = await this.db.deal.create({
+			data: dealData,
 			select: { id: true },
 		});
 
@@ -193,7 +213,7 @@ export class BusinessUnitsService {
 			contactId: input.contactId ?? null,
 			businessUnit: association.targetBusinessUnit,
 			associationId: association.id,
-			created: true as const,
+			created: true,
 		};
 	}
 
