@@ -47,15 +47,33 @@ restart_services() {
   done
 }
 
+wait_http() {
+  url="$1"
+  attempts="${2:-20}"
+  delay_seconds="${3:-1}"
+
+  i=1
+  while [ "$i" -le "$attempts" ]; do
+    if curl --fail --silent --show-error --max-time 5 "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay_seconds"
+    i=$((i + 1))
+  done
+
+  echo "Health check failed after $attempts attempts: $url"
+  return 1
+}
+
 health_check() {
-  curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3100/ >/dev/null
-  curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3101/health >/dev/null
+  wait_http http://127.0.0.1:3100/
+  wait_http http://127.0.0.1:3101/health
   if launchctl print "gui/$(id -u)/com.sequencenow.comp-ai-agent" >/dev/null 2>&1; then
-    curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3102/ >/dev/null
+    wait_http http://127.0.0.1:3102/
   fi
   if launchctl print "gui/$(id -u)/com.sequencenow.comp-ai-mcp" >/dev/null 2>&1; then
-    curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3103/health >/dev/null
-    curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3103/ready >/dev/null
+    wait_http http://127.0.0.1:3103/health
+    wait_http http://127.0.0.1:3103/ready
   fi
 }
 
