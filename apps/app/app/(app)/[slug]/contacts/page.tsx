@@ -29,7 +29,9 @@ export default function ContactsPage({
 			<PageShellHeader>
 				<PageShellHeading>
 					<PageShellTitle>Contacts</PageShellTitle>
-					<PageShellDescription>Relationships, conversations and next moves.</PageShellDescription>
+					<PageShellDescription>
+						Relationships, conversations and next moves.
+					</PageShellDescription>
 				</PageShellHeading>
 				<PageShellActions>
 					<CreateContactSheet />
