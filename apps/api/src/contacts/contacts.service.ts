@@ -70,6 +70,14 @@ const NO_COMPANY = "none";
 
 type FactColumns = Record<string, string | undefined>;
 
+type ContactRelationshipRow = {
+	contactId: string;
+	emailCount: number;
+	threadCount: number;
+	lastInboundAt: Date | null;
+	lastOutboundAt: Date | null;
+};
+
 const FACT_COLUMNS: FactColumns = {
 	title: "title",
 	seniority: "seniority",
@@ -133,19 +141,109 @@ export class ContactsService {
 			this.facetCounts(input, filterableFields),
 		]);
 
-		const tableFields = await this.fields.tableValuesFor(
-			"CONTACT",
-			rows.map((row) => row.id),
+		const ids = rows.map((row) => row.id);
+		const companyIds = rows.flatMap((row) => (row.company ? [row.company.id] : []));
+
+		const [tableFields, relationshipRows, associations, companyUnits] =
+			await Promise.all([
+				this.fields.tableValuesFor("CONTACT", ids),
+				ids.length === 0
+					? Promise.resolve([] as ContactRelationshipRow[])
+					: this.db.$queryRaw<ContactRelationshipRow[]>`
+						SELECT
+							t."contactId" AS "contactId",
+							COUNT(m.id)::int AS "emailCount",
+							COUNT(DISTINCT t.id)::int AS "threadCount",
+							MAX(m."sentAt") FILTER (WHERE m.direction = 'INBOUND') AS "lastInboundAt",
+							MAX(m."sentAt") FILTER (WHERE m.direction = 'OUTBOUND') AS "lastOutboundAt"
+						FROM "emailThread" t
+						LEFT JOIN "emailMessage" m ON m."threadId" = t.id
+						WHERE t."contactId" IN (${PrismaNamespace.join(ids)})
+						GROUP BY t."contactId"
+					`,
+				ids.length === 0
+					? Promise.resolve([])
+					: this.db.businessUnitRecordAssociation.findMany({
+							where: { recordType: "contact", recordId: { in: ids } },
+							select: {
+								recordId: true,
+								targetBusinessUnit: { select: { key: true, name: true } },
+							},
+						}),
+				companyIds.length === 0
+					? Promise.resolve([])
+					: this.db.company.findMany({
+							where: { id: { in: companyIds } },
+							select: {
+								id: true,
+								businessUnit: { select: { key: true, name: true } },
+							},
+						}),
+			]);
+
+		const relationshipByContact = new Map(
+			relationshipRows.map((row) => [row.contactId, row]),
+		);
+		const associationsByContact = new Map<
+			string,
+			Array<{ key: string; name: string }>
+		>();
+		for (const association of associations) {
+			const units = associationsByContact.get(association.recordId) ?? [];
+			if (
+				!units.some(
+					(unit) => unit.key === association.targetBusinessUnit.key,
+				)
+			) {
+				units.push(association.targetBusinessUnit);
+			}
+			associationsByContact.set(association.recordId, units);
+		}
+		const companyUnitById = new Map(
+			companyUnits.map((company) => [company.id, company.businessUnit]),
 		);
 
 		return {
-			rows: rows.map((row) => ({
-				...row,
-				lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
-				createdAt: row.createdAt.toISOString(),
-				archivedAt: row.archivedAt?.toISOString() ?? null,
-				fields: tableFields.get(row.id) ?? {},
-			})),
+			rows: rows.map((row) => {
+				const relationship = relationshipByContact.get(row.id);
+				const lastInboundAt = relationship?.lastInboundAt ?? null;
+				const lastOutboundAt = relationship?.lastOutboundAt ?? null;
+				const businessUnits = [...(associationsByContact.get(row.id) ?? [])];
+				const legacyUnit = row.company
+					? companyUnitById.get(row.company.id)
+					: null;
+				if (
+					legacyUnit &&
+					!businessUnits.some((unit) => unit.key === legacyUnit.key)
+				) {
+					businessUnits.push(legacyUnit);
+				}
+
+				const relationshipStatus =
+					(relationship?.emailCount ?? 0) === 0
+						? "no_email"
+						: lastInboundAt &&
+							(!lastOutboundAt || lastInboundAt > lastOutboundAt)
+							? "needs_reply"
+							: lastOutboundAt &&
+								(!lastInboundAt || lastOutboundAt > lastInboundAt)
+								? "waiting_on_them"
+								: "active";
+
+				return {
+					...row,
+					businessUnits,
+					emailCount: relationship?.emailCount ?? 0,
+					threadCount: relationship?.threadCount ?? 0,
+					lastInboundAt: lastInboundAt?.toISOString() ?? null,
+					lastOutboundAt: lastOutboundAt?.toISOString() ?? null,
+					relationshipStatus,
+					lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
+					createdAt: row.createdAt.toISOString(),
+					archivedAt: row.archivedAt?.toISOString() ?? null,
+					fields: tableFields.get(row.id) ?? {},
+				};
+			}),
 			total,
 			facetCounts,
 		};
