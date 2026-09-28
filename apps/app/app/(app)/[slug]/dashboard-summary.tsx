@@ -123,7 +123,8 @@ export function DashboardSummary() {
 		);
 	}
 
-	const { biggestOpen, overdueTasks, recentActivity, relationshipPulse } = summary;
+	const { biggestOpen, overdueTasks, recentActivity, relationshipPulse } =
+		summary;
 
 	const mine = scope === "me";
 	const largestOpenCents = biggestOpen[0]?.baseAmountCents ?? 0;
@@ -482,7 +483,10 @@ function RelationshipCard({
 										{[row.firstName, row.lastName].filter(Boolean).join(" ")}
 									</RecordLink>
 									<span className="block truncate text-muted-foreground">
-										{row.company?.name ?? row.title ?? row.email ?? "No company"}
+										{row.company?.name ??
+											row.title ??
+											row.email ??
+											"No company"}
 									</span>
 								</span>
 								<span className="shrink-0 text-right text-muted-foreground">
