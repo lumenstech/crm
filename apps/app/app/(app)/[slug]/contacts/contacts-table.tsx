@@ -158,7 +158,7 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 		id: "businessUnits",
 		header: "Business units",
 		width: "w-[14%]",
-		hideBelow: "xl",
+		hideBelow: "lg",
 		cell: (row) =>
 			row.businessUnits.length > 0 ? (
 				<span className="truncate text-muted-foreground">
