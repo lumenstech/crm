@@ -74,13 +74,9 @@ export class DashboardService {
 			now.getTime() - STALE_RELATIONSHIP_DAYS * DAY_MS,
 		);
 
-		const [
-			relationshipCounts,
-			needsReply,
-			waitingOnThem,
-			staleRelationships,
-		] = await Promise.all([
-			this.db.$queryRaw<RelationshipPulseCounts[]>`
+		const [relationshipCounts, needsReply, waitingOnThem, staleRelationships] =
+			await Promise.all([
+				this.db.$queryRaw<RelationshipPulseCounts[]>`
 				WITH rollup AS (
 					SELECT
 						c.id,
@@ -107,7 +103,7 @@ export class DashboardService {
 					)::int AS "staleCount"
 				FROM rollup
 			`,
-			this.db.$queryRaw<RelationshipPulseRow[]>`
+				this.db.$queryRaw<RelationshipPulseRow[]>`
 				WITH rollup AS (
 					SELECT
 						c.id, c."firstName", c."lastName", c.title, c.email,
@@ -128,7 +124,7 @@ export class DashboardService {
 				ORDER BY "lastInboundAt" DESC
 				LIMIT 6
 			`,
-			this.db.$queryRaw<RelationshipPulseRow[]>`
+				this.db.$queryRaw<RelationshipPulseRow[]>`
 				WITH rollup AS (
 					SELECT
 						c.id, c."firstName", c."lastName", c.title, c.email,
@@ -149,7 +145,7 @@ export class DashboardService {
 				ORDER BY "lastOutboundAt" DESC
 				LIMIT 6
 			`,
-			this.db.$queryRaw<RelationshipPulseRow[]>`
+				this.db.$queryRaw<RelationshipPulseRow[]>`
 				WITH rollup AS (
 					SELECT
 						c.id, c."firstName", c."lastName", c.title, c.email,
@@ -169,7 +165,7 @@ export class DashboardService {
 				ORDER BY GREATEST("lastInboundAt", "lastOutboundAt") ASC
 				LIMIT 6
 			`,
-		]);
+			]);
 
 		const [
 			openByStage,
