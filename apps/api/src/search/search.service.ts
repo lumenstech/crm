@@ -30,6 +30,7 @@ export class SearchService {
 	async quick(q: string): Promise<{ hits: SearchHit[] }> {
 		const term = q.trim();
 		if (term.length < 2) return { hits: [] };
+		const termParts = term.split(/\s+/);
 
 		const [companies, contacts, deals] = await Promise.all([
 			this.db.company.findMany({
@@ -59,6 +60,48 @@ export class SearchService {
 						{ email: { contains: term, mode: "insensitive" } },
 						{ title: { contains: term, mode: "insensitive" } },
 						{ company: { name: { contains: term, mode: "insensitive" } } },
+						...(termParts.length > 1
+							? [
+									{
+										AND: termParts.map((part) => ({
+											OR: [
+												{
+													firstName: {
+														contains: part,
+														mode: "insensitive" as const,
+													},
+												},
+												{
+													lastName: {
+														contains: part,
+														mode: "insensitive" as const,
+													},
+												},
+												{
+													email: {
+														contains: part,
+														mode: "insensitive" as const,
+													},
+												},
+												{
+													title: {
+														contains: part,
+														mode: "insensitive" as const,
+													},
+												},
+												{
+													company: {
+														name: {
+															contains: part,
+															mode: "insensitive" as const,
+														},
+													},
+												},
+											],
+										})),
+									},
+								]
+							: []),
 					],
 				},
 				take: PER_KIND,
