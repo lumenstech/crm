@@ -386,7 +386,6 @@ function ValueMeter({ share, color }: { share: number; color: string }) {
 	);
 }
 
-
 type RelationshipPulseData =
 	RouterOutputs["dashboard"]["summary"]["relationshipPulse"];
 
@@ -458,7 +457,9 @@ function RelationshipCard({
 			<CardHeader>
 				<CardTitle>{title}</CardTitle>
 				<CardDescription>
-					{count === 0 ? description : `${formatCount(count, "contact")} · ${description}`}
+					{count === 0
+						? description
+						: `${formatCount(count, "contact")} · ${description}`}
 				</CardDescription>
 				<CardAction>
 					<Button asChild variant="ghost" size="sm">
@@ -485,7 +486,11 @@ function RelationshipCard({
 									</span>
 								</span>
 								<span className="shrink-0 text-right text-muted-foreground">
-									{date(row) ? <LocalRelativeTime date={date(row)!} /> : "—"}
+									{date(row) ? (
+										<LocalRelativeTime date={date(row) ?? ""} />
+									) : (
+										"—"
+									)}
 								</span>
 							</div>
 						))}
