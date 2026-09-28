@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import {
 	PageShell,
@@ -11,11 +12,14 @@ import {
 import { requireSession } from "@/lib/session";
 import { MobileCrmActions } from "./mobile-crm-actions";
 
+export const instant = false;
+
 export const metadata: Metadata = {
 	title: "Mobile CRM Actions",
 };
 
 export default async function MobileActionsPage() {
+	await connection();
 	await requireSession();
 
 	return (
