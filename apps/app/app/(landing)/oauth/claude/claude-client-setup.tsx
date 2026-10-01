@@ -72,11 +72,7 @@ export function ClaudeClientSetup() {
 			</p>
 			<label htmlFor="claude-client-id" className="block space-y-1">
 				<span>Client ID</span>
-				<Input
-					id="claude-client-id"
-					readOnly
-					value={credentials.clientId}
-				/>
+				<Input id="claude-client-id" readOnly value={credentials.clientId} />
 			</label>
 			<label htmlFor="claude-client-secret" className="block space-y-1">
 				<span>Client secret</span>
