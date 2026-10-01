@@ -44,7 +44,7 @@ export function EmailPasswordSignIn() {
 				return;
 			}
 
-			window.location.assign(callbackURL);
+			window.location.assign(result.data?.url ?? callbackURL);
 		} catch {
 			toast.error("Could not reach the sign-in service.");
 		} finally {
