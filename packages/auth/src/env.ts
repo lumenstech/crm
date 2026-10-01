@@ -81,6 +81,7 @@ export const env = {
 	microsoft: microsoftCredentials(),
 	slack: slackCredentials(),
 	passwordReset: passwordReset(),
+	mcpPublicUrl: optional("COMP_CRM_MCP_PUBLIC_URL"),
 	cookieDomain: optional("AUTH_COOKIE_DOMAIN"),
 	trustedOrigins: [...new Set([...appUrls, apiUrl])],
 	isProduction: process.env.NODE_ENV === "production",
