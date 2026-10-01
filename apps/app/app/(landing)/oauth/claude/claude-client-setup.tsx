@@ -28,7 +28,9 @@ export function ClaudeClientSetup() {
 				scope: "crm:read crm:write offline_access",
 			});
 			if (result.error) {
-				toast.error(result.error.message || "Could not create the Claude client.");
+				toast.error(
+					result.error.message || "Could not create the Claude client.",
+				);
 				return;
 			}
 			const clientId = result.data?.client_id;
@@ -49,9 +51,14 @@ export function ClaudeClientSetup() {
 		return (
 			<div className="space-y-4 text-sm">
 				<p className="text-muted-foreground">
-					This creates one confidential OAuth client for Claude with PKCE and refresh-token support.
+					This creates one confidential OAuth client for Claude with PKCE and
+					refresh-token support.
 				</p>
-				<Button type="button" disabled={pending} onClick={() => void createClient()}>
+				<Button
+					type="button"
+					disabled={pending}
+					onClick={() => void createClient()}
+				>
 					{pending ? "Creating…" : "Create Claude OAuth client"}
 				</Button>
 			</div>
@@ -63,17 +70,29 @@ export function ClaudeClientSetup() {
 			<p className="text-muted-foreground">
 				Copy these values into Claude now. The client secret is only shown here.
 			</p>
-			<label className="block space-y-1">
+			<label htmlFor="claude-client-id" className="block space-y-1">
 				<span>Client ID</span>
-				<Input readOnly value={credentials.clientId} />
+				<Input
+					id="claude-client-id"
+					readOnly
+					value={credentials.clientId}
+				/>
 			</label>
-			<label className="block space-y-1">
+			<label htmlFor="claude-client-secret" className="block space-y-1">
 				<span>Client secret</span>
-				<Input readOnly value={credentials.clientSecret} />
+				<Input
+					id="claude-client-secret"
+					readOnly
+					value={credentials.clientSecret}
+				/>
 			</label>
-			<label className="block space-y-1">
+			<label htmlFor="claude-mcp-url" className="block space-y-1">
 				<span>MCP URL</span>
-				<Input readOnly value="https://comp-crm-mcp.516labs.com/mcp" />
+				<Input
+					id="claude-mcp-url"
+					readOnly
+					value="https://comp-crm-mcp.516labs.com/mcp"
+				/>
 			</label>
 		</div>
 	);
