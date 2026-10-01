@@ -6,6 +6,7 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { mcp } from "better-auth/plugins/mcp";
 import { organization } from "better-auth/plugins/organization";
 import { API_KEY_EXPIRATION, API_KEY_HEADER, API_KEY_PREFIX } from "./api-keys";
 import { AUTH_COOKIE_PREFIX } from "./cookies";
@@ -132,6 +133,18 @@ export const auth = betterAuth({
 	},
 
 	plugins: [
+		...(env.mcpPublicUrl
+			? [
+					mcp({
+						loginPage: new URL("/sign-in", env.appUrl).toString(),
+						resource: env.mcpPublicUrl,
+						oidcConfig: {
+							requirePKCE: true,
+							allowPlainCodeChallengeMethod: false,
+						},
+					}),
+				]
+			: []),
 		...(slackOAuth
 			? [
 					genericOAuth({
