@@ -32,7 +32,7 @@ export function OAuthConsent({
 		try {
 			const result = await authClient.oauth2.consent({
 				accept,
-				...(scope ? { scope } : {}),
+				scope: scope || undefined,
 			});
 			if (result.error) {
 				toast.error(
