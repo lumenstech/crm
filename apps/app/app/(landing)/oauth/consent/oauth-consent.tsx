@@ -2,25 +2,20 @@
 
 import { authClient } from "@crm/auth/client";
 import { Button } from "@crm/ui/components/button";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-export function OAuthConsent() {
-	const searchParams = useSearchParams();
+export function OAuthConsent({
+	clientId,
+	scope,
+	redirectHost,
+}: {
+	clientId: string;
+	scope: string;
+	redirectHost: string;
+}) {
 	const [clientName, setClientName] = useState("Claude");
 	const [pending, setPending] = useState(false);
-	const clientId = searchParams.get("client_id") ?? "";
-	const scope = searchParams.get("scope") ?? "";
-	const redirectHost = useMemo(() => {
-		const value = searchParams.get("redirect_uri");
-		if (!value) return "claude.ai";
-		try {
-			return new URL(value).hostname;
-		} catch {
-			return value;
-		}
-	}, [searchParams]);
 
 	useEffect(() => {
 		if (!clientId) return;
