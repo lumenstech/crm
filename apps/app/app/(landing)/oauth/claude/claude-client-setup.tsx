@@ -24,7 +24,6 @@ export function ClaudeClientSetup() {
 				token_endpoint_auth_method: "client_secret_basic",
 				grant_types: ["authorization_code", "refresh_token"],
 				response_types: ["code"],
-				require_pkce: true,
 				type: "web",
 				scope: "crm:read crm:write offline_access",
 			});
