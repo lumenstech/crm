@@ -36,7 +36,7 @@ export const MCP_RESOURCE_URL =
 	process.env.MCP_PUBLIC_URL?.trim() ||
 	"https://comp-crm-mcp.516labs.com/mcp";
 
-export const CRM_OAUTH_SCOPES = ["crm:read", "crm:write", "offline_access"] as const;
+export const CRM_OAUTH_SCOPES = [\n\t"crm:read",\n\t"crm:write",\n\t"offline_access",\n] as const;
 
 const socialProviders: NonNullable<BetterAuthOptions["socialProviders"]> = {};
 const slackOAuth = env.slack;
