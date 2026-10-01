@@ -44,7 +44,13 @@ export function EmailPasswordSignIn() {
 				return;
 			}
 
-			window.location.assign(result.data?.url ?? callbackURL);
+			const destination =
+				result.data &&
+				"url" in result.data &&
+				typeof result.data.url === "string"
+					? result.data.url
+					: callbackURL;
+			window.location.assign(destination);
 		} catch {
 			toast.error("Could not reach the sign-in service.");
 		} finally {
