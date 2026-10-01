@@ -63,7 +63,7 @@ export function createOAuthVerifier(): OAuthVerifier {
 		resourceMetadataUrl,
 		isAuthorized: async (header) => {
 			const token = bearerToken(header);
-			if (!token || token.split(".").length !== 3) return false;
+			if (token?.split(".").length !== 3) return false;
 			try {
 				const { payload } = await jwtVerify(token, jwks, {
 					issuer,
