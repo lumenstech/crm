@@ -4,7 +4,7 @@ import {
 	type ServerResponse,
 } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isAuthorized, parseCallerTokens } from "./auth";
+import { createOAuthVerifier, isAuthorized, parseCallerTokens } from "./auth";
 import { CrmClient } from "./crmClient";
 import { safeError } from "./redact";
 import { createCrmMcpServer } from "./server";
@@ -48,6 +48,7 @@ const crmBaseUrl = required("COMP_CRM_BASE_URL");
 const crmApiKey = required("COMP_CRM_API_KEY");
 const rawCallerTokens = required("MCP_CALLER_TOKENS");
 const callerTokens = parseCallerTokens(rawCallerTokens);
+const oauth = createOAuthVerifier();
 if (callerTokens.length === 0)
 	throw new Error("MCP_CALLER_TOKENS contains no usable token.");
 
@@ -77,6 +78,20 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 
+		if (
+			req.method === "GET" &&
+			(url.pathname === "/.well-known/oauth-protected-resource" ||
+				url.pathname === "/.well-known/oauth-protected-resource/mcp")
+		) {
+			json(res, 200, {
+				resource: oauth.resource,
+				authorization_servers: [oauth.issuer],
+				bearer_methods_supported: ["header"],
+				scopes_supported: ["crm:read", "crm:write", "offline_access"],
+			});
+			return;
+		}
+
 		if (url.pathname !== "/mcp") {
 			json(res, 404, { error: "not_found" });
 			return;
@@ -91,8 +106,16 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 
-		if (!isAuthorized(headerValue(req.headers.authorization), callerTokens)) {
-			res.setHeader("www-authenticate", "Bearer");
+		const authorization = headerValue(req.headers.authorization);
+		const legacyAuthorized = isAuthorized(authorization, callerTokens);
+		const oauthAuthorized = legacyAuthorized
+			? false
+			: await oauth.isAuthorized(authorization);
+		if (!(legacyAuthorized || oauthAuthorized)) {
+			res.setHeader(
+				"www-authenticate",
+				`Bearer resource_metadata="${oauth.resourceMetadataUrl}"`,
+			);
 			json(res, 401, { error: "unauthorized" });
 			return;
 		}
