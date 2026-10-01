@@ -45,10 +45,8 @@ export function EmailPasswordSignIn() {
 			}
 
 			const destination =
-				result.data &&
-				"url" in result.data &&
-				typeof result.data.url === "string"
-					? result.data.url
+				result.data && "url" in result.data
+					? (result.data.url ?? callbackURL)
 					: callbackURL;
 			window.location.assign(destination);
 		} catch {
