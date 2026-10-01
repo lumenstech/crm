@@ -77,6 +77,26 @@ health_check() {
   fi
 }
 
+deploy_database() {
+  local attempt=1
+  local max_attempts=3
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if bun run db:deploy; then
+      return 0
+    fi
+
+    if [ "$attempt" -eq "$max_attempts" ]; then
+      echo "Database migration deployment failed after $max_attempts attempts."
+      return 1
+    fi
+
+    echo "Database migration deployment attempt $attempt failed; retrying in 5 seconds."
+    sleep 5
+    attempt=$((attempt + 1))
+  done
+}
+
 rollback() {
   echo "Deployment failed; rolling back to $previous_sha"
   git checkout --detach "$previous_sha"
@@ -91,7 +111,7 @@ trap rollback ERR
 
 git checkout --detach "$target_sha"
 bun install --frozen-lockfile
-bun run db:deploy
+deploy_database
 bun run build
 restart_services
 sleep 3
