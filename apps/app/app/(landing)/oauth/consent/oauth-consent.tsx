@@ -35,7 +35,9 @@ export function OAuthConsent({
 				...(scope ? { scope } : {}),
 			});
 			if (result.error) {
-				toast.error(result.error.message || "Could not complete authorization.");
+				toast.error(
+					result.error.message || "Could not complete authorization.",
+				);
 				return;
 			}
 			if (result.data?.url) {
@@ -58,9 +60,7 @@ export function OAuthConsent({
 					Access returns to <strong>{redirectHost}</strong>.
 				</p>
 				{scope ? (
-					<p className="break-words text-muted-foreground">
-						Scopes: {scope}
-					</p>
+					<p className="break-words text-muted-foreground">Scopes: {scope}</p>
 				) : null}
 			</div>
 			<div className="flex gap-2">
