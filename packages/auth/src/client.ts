@@ -6,7 +6,12 @@ import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
 	baseURL: globalThis.window?.location.origin,
-	plugins: [\n\t\toauthProviderClient(),\n\t\tssoClient(),\n\t\tgenericOAuthClient(),\n\t\tapiKeyClient(),\n\t],
+	plugins: [
+		oauthProviderClient(),
+		ssoClient(),
+		genericOAuthClient(),
+		apiKeyClient(),
+	],
 });
 
 export const { getSession, signIn, signOut, useSession } = authClient;
