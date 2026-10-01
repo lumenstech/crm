@@ -64,6 +64,7 @@ const authBaseUrl = optional("COMP_CRM_AUTH_BASE_URL");
 const oauthClient = authBaseUrl
 	? createMcpAuthClient({ authURL: authBaseUrl, resource: resourceUrl })
 	: null;
+const oauthDiscovery = oauthClient?.discoveryHandler();
 
 function unauthorized(res: ServerResponse): void {
 	const wwwAuthenticate = `Bearer resource_metadata="${resourceMetadataUrl}"`;
@@ -87,6 +88,17 @@ function protectedResourceMetadata() {
 		bearer_methods_supported: ["header"],
 		scopes_supported: ["openid", "profile", "email", "offline_access"],
 	};
+}
+
+async function writeWebResponse(
+	res: ServerResponse,
+	response: Response,
+): Promise<void> {
+	res.statusCode = response.status;
+	response.headers.forEach((value, key) => {
+		res.setHeader(key, value);
+	});
+	res.end(Buffer.from(await response.arrayBuffer()));
 }
 
 const host = process.env.HOST?.trim() || "127.0.0.1";
@@ -114,6 +126,26 @@ const server = createServer(async (req, res) => {
 	try {
 		if (req.method === "GET" && url.pathname === "/health") {
 			json(res, 200, { ok: true, service: "comp-crm-mcp" });
+			return;
+		}
+
+		if (
+			req.method === "GET" &&
+			url.pathname === "/.well-known/oauth-authorization-server"
+		) {
+			if (!oauthDiscovery) {
+				json(res, 404, { error: "oauth_not_configured" });
+				return;
+			}
+			await writeWebResponse(
+				res,
+				await oauthDiscovery(
+					new Request(url, {
+						method: "GET",
+						headers: req.headers as HeadersInit,
+					}),
+				),
+			);
 			return;
 		}
 
