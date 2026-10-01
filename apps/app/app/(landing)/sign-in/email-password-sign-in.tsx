@@ -6,6 +6,11 @@ import { Input } from "@crm/ui/components/input";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const signInRedirect = z.object({
+	url: z.string().optional(),
+});
 
 export function EmailPasswordSignIn() {
 	const [mode, setMode] = useState<"sign-in" | "create">("sign-in");
@@ -44,7 +49,12 @@ export function EmailPasswordSignIn() {
 				return;
 			}
 
-			window.location.assign(callbackURL);
+			const parsedRedirect = signInRedirect.safeParse(result.data);
+			window.location.assign(
+				parsedRedirect.success
+					? (parsedRedirect.data.url ?? callbackURL)
+					: callbackURL,
+			);
 		} catch {
 			toast.error("Could not reach the sign-in service.");
 		} finally {

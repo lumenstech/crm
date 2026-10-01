@@ -1,10 +1,12 @@
 import { apiKey } from "@better-auth/api-key";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import { db } from "@crm/db";
 import { schemas } from "@crm/validation";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
+import { jwt } from "better-auth/plugins";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { organization } from "better-auth/plugins/organization";
 import { API_KEY_EXPIRATION, API_KEY_HEADER, API_KEY_PREFIX } from "./api-keys";
@@ -29,6 +31,15 @@ import {
 	isWorkspaceEmail,
 	primaryWorkspaceDomain,
 } from "./workspace";
+
+export const MCP_RESOURCE_URL =
+	process.env.MCP_PUBLIC_URL?.trim() || "https://comp-crm-mcp.516labs.com/mcp";
+
+export const CRM_OAUTH_SCOPES = [
+	"crm:read",
+	"crm:write",
+	"offline_access",
+] as const;
 
 const socialProviders: NonNullable<BetterAuthOptions["socialProviders"]> = {};
 const slackOAuth = env.slack;
@@ -132,6 +143,20 @@ export const auth = betterAuth({
 	},
 
 	plugins: [
+		jwt({
+			jwt: { issuer: env.apiUrl },
+		}),
+
+		oauthProvider({
+			loginPage: new URL("/sign-in", env.appUrl).toString(),
+			consentPage: new URL("/oauth/consent", env.appUrl).toString(),
+			scopes: [...CRM_OAUTH_SCOPES],
+			validAudiences: [MCP_RESOURCE_URL],
+			grantTypes: ["authorization_code", "refresh_token"],
+			allowDynamicClientRegistration: false,
+			allowUnauthenticatedClientRegistration: false,
+		}),
+
 		...(slackOAuth
 			? [
 					genericOAuth({
