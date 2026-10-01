@@ -33,8 +33,7 @@ import {
 } from "./workspace";
 
 export const MCP_RESOURCE_URL =
-	process.env.MCP_PUBLIC_URL?.trim() ||
-	"https://comp-crm-mcp.516labs.com/mcp";
+	process.env.MCP_PUBLIC_URL?.trim() || "https://comp-crm-mcp.516labs.com/mcp";
 
 export const CRM_OAUTH_SCOPES = [
 	"crm:read",
