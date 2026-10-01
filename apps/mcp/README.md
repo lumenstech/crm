@@ -24,10 +24,14 @@ HOST=127.0.0.1
 PORT=3103
 COMP_CRM_BASE_URL=http://127.0.0.1:3101
 COMP_CRM_API_KEY=crm_...
-MCP_CALLER_TOKENS=<strong caller token>
+COMP_CRM_AUTH_BASE_URL=http://127.0.0.1:3101/api/auth
+COMP_CRM_AUTH_PUBLIC_URL=https://comp-crm-api.516labs.com/api/auth
+COMP_CRM_MCP_PUBLIC_URL=https://comp-crm-mcp.516labs.com/mcp
+MCP_CALLER_TOKENS=<optional backward-compatible caller token>
 ```
 
 `MCP_CALLER_TOKENS` may be a single bare token or a JSON object whose keys are accepted tokens.
+OAuth access tokens are validated through Better Auth at `COMP_CRM_AUTH_BASE_URL`; the public URL is used only in protected-resource metadata.
 
 Endpoints:
 

@@ -5,8 +5,8 @@ import { schemas } from "@crm/validation";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
+import { mcp } from "better-auth/plugins";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
-import { mcp } from "better-auth/plugins/mcp";
 import { organization } from "better-auth/plugins/organization";
 import { API_KEY_EXPIRATION, API_KEY_HEADER, API_KEY_PREFIX } from "./api-keys";
 import { AUTH_COOKIE_PREFIX } from "./cookies";
@@ -139,6 +139,7 @@ export const auth = betterAuth({
 						loginPage: new URL("/sign-in", env.appUrl).toString(),
 						resource: env.mcpPublicUrl,
 						oidcConfig: {
+							loginPage: new URL("/sign-in", env.appUrl).toString(),
 							requirePKCE: true,
 							allowPlainCodeChallengeMethod: false,
 						},

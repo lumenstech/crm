@@ -50,6 +50,10 @@ model User {
 
   apiKeys Apikey[]
 
+  oauthapplications OauthApplication[]
+  oauthaccesstokens OauthAccessToken[]
+  oauthconsents     OauthConsent[]
+
   @@unique([email])
   @@map("user")
 }
@@ -2060,4 +2064,63 @@ model ProcurementCustomerRequestItem {
   @@index([requestId])
   @@index([productId])
   @@map("procurementCustomerRequestItem")
+}
+
+model OauthApplication {
+  id                String             @id
+  name              String?
+  icon              String?
+  metadata          String?
+  clientId          String?
+  clientSecret      String?
+  redirectUrls      String?
+  type              String?
+  disabled          Boolean?           @default(false)
+  userId            String?
+  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime?
+  updatedAt         DateTime?
+  oauthaccesstokens OauthAccessToken[]
+  oauthconsents     OauthConsent[]
+
+  @@unique([clientId])
+  @@index([userId])
+  @@map("oauthApplication")
+}
+
+model OauthAccessToken {
+  id                    String            @id
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  clientId              String?
+  oauthapplication      OauthApplication? @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId                String?
+  user                  User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes                String?
+  createdAt             DateTime?
+  updatedAt             DateTime?
+
+  @@unique([accessToken])
+  @@unique([refreshToken])
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauthAccessToken")
+}
+
+model OauthConsent {
+  id               String            @id
+  clientId         String?
+  oauthapplication OauthApplication? @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId           String?
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes           String?
+  createdAt        DateTime?
+  updatedAt        DateTime?
+  consentGiven     Boolean?
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauthConsent")
 }

@@ -28,10 +28,14 @@ const selected = services[service];
 const runnerDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(runnerDir, "../..");
 
-function required(name: "COMP_CRM_API_KEY" | "MCP_CALLER_TOKENS"): string {
+function required(name: "COMP_CRM_API_KEY"): string {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`Missing required environment variable: ${name}`);
 	return value;
+}
+
+function optional(name: "MCP_CALLER_TOKENS"): string | undefined {
+	return process.env[name]?.trim() || undefined;
 }
 
 const childArguments =
@@ -49,7 +53,12 @@ const childEnvironment =
 				PORT: selected.port,
 				COMP_CRM_BASE_URL: "http://127.0.0.1:3101",
 				COMP_CRM_API_KEY: required("COMP_CRM_API_KEY"),
-				MCP_CALLER_TOKENS: required("MCP_CALLER_TOKENS"),
+				COMP_CRM_AUTH_BASE_URL: "http://127.0.0.1:3101/api/auth",
+				COMP_CRM_AUTH_PUBLIC_URL: "https://comp-crm-api.516labs.com/api/auth",
+				COMP_CRM_MCP_PUBLIC_URL: "https://comp-crm-mcp.516labs.com/mcp",
+				...(optional("MCP_CALLER_TOKENS")
+					? { MCP_CALLER_TOKENS: optional("MCP_CALLER_TOKENS") }
+					: {}),
 			}
 		: {
 				...process.env,

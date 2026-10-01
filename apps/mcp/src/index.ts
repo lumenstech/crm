@@ -4,6 +4,7 @@ import {
 	type ServerResponse,
 } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpAuthClient } from "better-auth/plugins/mcp/client";
 import { isAuthorized, parseCallerTokens } from "./auth";
 import { CrmClient } from "./crmClient";
 import { safeError } from "./redact";
@@ -13,6 +14,11 @@ function required(name: string): string {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`Missing required environment variable: ${name}`);
 	return value;
+}
+
+function optional(name: string): string | undefined {
+	const value = process.env[name]?.trim();
+	return value || undefined;
 }
 
 function headerValue(value: string | string[] | undefined): string | undefined {
@@ -38,6 +44,51 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 	res.end(JSON.stringify(body));
 }
 
+function publicResourceUrl(): string {
+	const configured = optional("COMP_CRM_MCP_PUBLIC_URL");
+	if (!configured) return "https://comp-crm-mcp.516labs.com/mcp";
+	const url = new URL(configured);
+	if (url.protocol !== "https:") {
+		throw new Error("COMP_CRM_MCP_PUBLIC_URL must use HTTPS.");
+	}
+	return url.toString();
+}
+
+const resourceUrl = publicResourceUrl();
+const resourceMetadataUrl = new URL(
+	"/.well-known/oauth-protected-resource",
+	resourceUrl,
+).toString();
+const authPublicUrl = optional("COMP_CRM_AUTH_PUBLIC_URL");
+const authBaseUrl = optional("COMP_CRM_AUTH_BASE_URL");
+const oauthClient = authBaseUrl
+	? createMcpAuthClient({ authURL: authBaseUrl, resource: resourceUrl })
+	: null;
+
+function unauthorized(res: ServerResponse): void {
+	const wwwAuthenticate = `Bearer resource_metadata="${resourceMetadataUrl}"`;
+	res.setHeader("www-authenticate", wwwAuthenticate);
+	res.setHeader("access-control-expose-headers", "WWW-Authenticate");
+	json(res, 401, {
+		jsonrpc: "2.0",
+		error: {
+			code: -32000,
+			message: "Unauthorized: Authentication required.",
+			"www-authenticate": wwwAuthenticate,
+		},
+		id: null,
+	});
+}
+
+function protectedResourceMetadata() {
+	return {
+		resource: resourceUrl,
+		authorization_servers: authPublicUrl ? [authPublicUrl] : [],
+		bearer_methods_supported: ["header"],
+		scopes_supported: ["openid", "profile", "email", "offline_access"],
+	};
+}
+
 const host = process.env.HOST?.trim() || "127.0.0.1";
 const port = Number(process.env.PORT ?? "3103");
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -46,13 +97,16 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const crmBaseUrl = required("COMP_CRM_BASE_URL");
 const crmApiKey = required("COMP_CRM_API_KEY");
-const rawCallerTokens = required("MCP_CALLER_TOKENS");
-const callerTokens = parseCallerTokens(rawCallerTokens);
-if (callerTokens.length === 0)
-	throw new Error("MCP_CALLER_TOKENS contains no usable token.");
+const rawCallerTokens = optional("MCP_CALLER_TOKENS");
+const callerTokens = rawCallerTokens ? parseCallerTokens(rawCallerTokens) : [];
+if (callerTokens.length === 0 && !oauthClient) {
+	throw new Error(
+		"Configure COMP_CRM_AUTH_BASE_URL or MCP_CALLER_TOKENS for MCP authentication.",
+	);
+}
 
 const client = new CrmClient(crmBaseUrl, crmApiKey);
-const secrets = [crmApiKey, rawCallerTokens, ...callerTokens];
+const secrets = [crmApiKey, rawCallerTokens ?? "", ...callerTokens];
 
 const server = createServer(async (req, res) => {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host ?? host}`);
@@ -60,6 +114,16 @@ const server = createServer(async (req, res) => {
 	try {
 		if (req.method === "GET" && url.pathname === "/health") {
 			json(res, 200, { ok: true, service: "comp-crm-mcp" });
+			return;
+		}
+
+		if (
+			req.method === "GET" &&
+			(url.pathname === "/.well-known/oauth-protected-resource" ||
+				url.pathname === "/.well-known/oauth-protected-resource/mcp")
+		) {
+			res.setHeader("access-control-allow-origin", "*");
+			json(res, 200, protectedResourceMetadata());
 			return;
 		}
 
@@ -91,9 +155,13 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 
-		if (!isAuthorized(headerValue(req.headers.authorization), callerTokens)) {
-			res.setHeader("www-authenticate", "Bearer");
-			json(res, 401, { error: "unauthorized" });
+		const authorization = headerValue(req.headers.authorization);
+		const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+		const oauthAuthorized =
+			token && oauthClient ? await oauthClient.verifyToken(token) : null;
+		const staticAuthorized = isAuthorized(authorization, callerTokens);
+		if (!oauthAuthorized && !staticAuthorized) {
+			unauthorized(res);
 			return;
 		}
 
