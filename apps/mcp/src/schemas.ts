@@ -26,6 +26,7 @@ export const ingestLeadsInput = z.object({
 	signals: z.array(ingestSignalInput).min(1).max(100),
 });
 
+export type IngestSignalInput = z.infer<typeof ingestSignalInput>;
 export type IngestLeadsInput = z.infer<typeof ingestLeadsInput>;
 
 export const reusableRecordType = z.enum(["company", "contact"]);
