@@ -60,7 +60,7 @@ describe("cross-business-unit reuse schemas", () => {
 });
 
 
-test("record interaction requires a CRM record anchor", () => {
+it("record interaction requires a CRM record anchor", () => {
 	expect(
 		recordInteractionInput.safeParse({
 			channel: "whatsapp",
@@ -77,7 +77,7 @@ test("record interaction requires a CRM record anchor", () => {
 		}).success).toBe(true);
 });
 
-test("record interaction validates WhatsApp attachments", () => {
+it("record interaction validates WhatsApp attachments", () => {
 	const parsed = recordInteractionInput.parse({
 		channel: "whatsapp",
 		direction: "inbound",
@@ -93,7 +93,7 @@ test("record interaction validates WhatsApp attachments", () => {
 	expect(parsed.attachments.length).toBe(1);
 });
 
-test("list record interactions supports channel filtering", () => {
+it("list record interactions supports channel filtering", () => {
 	const parsed = listRecordInteractionsInput.parse({
 		companyId: "company_123",
 		channel: "whatsapp",
