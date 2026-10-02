@@ -58,6 +58,7 @@ export const activityCreateInput = z
 		type: composableEnum,
 		subject: z.string().trim().optional(),
 		body: z.string().trim().optional(),
+		externalId: z.string().trim().min(1).max(500).optional(),
 		occurredAt: z.string().optional(),
 		dueAt: z.string().nullable().optional(),
 		companyId: z.string().optional(),
