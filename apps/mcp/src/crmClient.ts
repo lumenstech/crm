@@ -5,6 +5,8 @@ import type {
 	CreateBusinessUnitOpportunityInput,
 	IngestLeadsInput,
 	ListRecordBusinessUnitsInput,
+	ListRecordInteractionsInput,
+	RecordInteractionInput,
 } from "./schemas";
 
 const jsonValue = z.json();
@@ -139,6 +141,57 @@ export class CrmClient {
 			method: "POST",
 			body: input,
 		});
+	}
+
+	recordInteraction(input: RecordInteractionInput) {
+		const meta = {
+			channel: input.channel,
+			direction: input.direction,
+			externalMessageId: input.externalMessageId ?? null,
+			conversationId: input.conversationId ?? null,
+			businessUnit: input.businessUnit ?? null,
+			attachments: input.attachments,
+		};
+		return this.request("/rest/activities", {
+			method: "POST",
+			body: {
+				type: "NOTE",
+				subject: input.subject ?? null,
+				body: input.body ?? null,
+				occurredAt: input.occurredAt ?? undefined,
+				companyId: input.companyId ?? undefined,
+				contactId: input.contactId ?? undefined,
+				dealId: input.dealId ?? undefined,
+				meta,
+			},
+		});
+	}
+
+	async listRecordInteractions(input: ListRecordInteractionsInput) {
+		const timeline = z
+			.object({
+				entries: z.array(z.record(z.string(), z.json())),
+				nextCursor: z.string().nullable(),
+			})
+			.parse(
+				await this.request("/rest/activities", {
+					query: {
+						companyId: input.companyId ?? undefined,
+						contactId: input.contactId ?? undefined,
+						dealId: input.dealId ?? undefined,
+						filter: "all",
+						limit: String(input.limit),
+					},
+				}),
+			);
+		if (!input.channel) return timeline;
+		return {
+			...timeline,
+			entries: timeline.entries.filter((entry) => {
+				const meta = z.record(z.string(), z.json()).safeParse(entry.meta);
+				return meta.success && meta.data.channel === input.channel;
+			}),
+		};
 	}
 
 	private async request(path: string, options: RequestOptions = {}) {
