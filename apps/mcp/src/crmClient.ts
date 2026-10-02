@@ -4,6 +4,7 @@ import type {
 	AssociateRecordWithBusinessUnitInput,
 	CreateBusinessUnitOpportunityInput,
 	IngestLeadsInput,
+	IngestSignalInput,
 	ListRecordBusinessUnitsInput,
 	ListRecordInteractionsInput,
 	RecordInteractionInput,
@@ -39,6 +40,16 @@ export class CrmClient {
 
 	search(q: string) {
 		return this.request("/rest/search", { query: { q } });
+	}
+
+	ingestSignal(input: { businessUnit: string; signal: IngestSignalInput }) {
+		return this.request("/rest/ingest/signals/batch", {
+			method: "POST",
+			body: {
+				project: input.businessUnit,
+				signals: [input.signal],
+			},
+		});
 	}
 
 	async ingestLeads(input: IngestLeadsInput) {
