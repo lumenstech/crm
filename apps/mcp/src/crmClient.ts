@@ -156,8 +156,8 @@ export class CrmClient {
 			method: "POST",
 			body: {
 				type: "NOTE",
-				subject: input.subject ?? null,
-				body: input.body ?? null,
+				subject: input.subject ?? undefined,
+				body: input.body ?? undefined,
 				occurredAt: input.occurredAt ?? undefined,
 				companyId: input.companyId ?? undefined,
 				contactId: input.contactId ?? undefined,
