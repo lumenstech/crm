@@ -10,6 +10,8 @@ Remote MCP facade for Comp CRM.
 - `associate_record_with_business_unit`
 - `ingest_leads`
 - `create_business_unit_opportunity`
+- `record_interaction`
+- `list_record_interactions`
 
 The required workflow is global search first, reuse and associate existing records, ingest only genuinely new records, then create qualified opportunities after association.
 
@@ -25,6 +27,9 @@ PORT=3103
 COMP_CRM_BASE_URL=http://127.0.0.1:3101
 COMP_CRM_API_KEY=crm_...
 MCP_CALLER_TOKENS=<strong caller token>
+WHATSAPP_BUSINESS_UNIT=data-gear
+META_VERIFY_TOKEN=<Meta webhook verify token>
+META_APP_SECRET=<Meta app secret>
 ```
 
 `MCP_CALLER_TOKENS` may be a single bare token or a JSON object whose keys are accepted tokens.
@@ -34,8 +39,12 @@ Endpoints:
 - `GET /health`
 - `GET /ready`
 - `POST /mcp`
+- `GET /webhooks/whatsapp`
+- `POST /webhooks/whatsapp`
 
 The MCP endpoint requires `Authorization: Bearer ...`.
+
+The WhatsApp webhook verifies Meta signatures. Inbound messages match contacts by normalized phone number. Unique matches become CRM activities. Unknown or ambiguous senders enter the existing lead-ingest queue.
 
 ## Validation
 
