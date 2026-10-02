@@ -1,4 +1,4 @@
-import type { Db } from "@crm/db";
+import { type Db, Prisma } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
@@ -31,6 +31,7 @@ export class SearchService {
 		const term = q.trim();
 		if (term.length < 2) return { hits: [] };
 		const termParts = term.split(/\s+/);
+		const phoneContactIds = await this.phoneContactIds(term);
 
 		const [companies, contacts, deals] = await Promise.all([
 			this.db.company.findMany({
@@ -60,6 +61,9 @@ export class SearchService {
 						{ email: { contains: term, mode: "insensitive" } },
 						{ title: { contains: term, mode: "insensitive" } },
 						{ company: { name: { contains: term, mode: "insensitive" } } },
+						...(phoneContactIds.length > 0
+							? [{ id: { in: phoneContactIds } }]
+							: []),
 						...(termParts.length > 1
 							? [
 									{
@@ -172,6 +176,26 @@ export class SearchService {
 			list.push(row.targetBusinessUnit);
 			byRecord.set(key, list);
 		}
+
+	private async phoneContactIds(term: string): Promise<string[]> {
+		const digits = term.replace(/[^0-9]/g, "");
+		if (digits.length < 7) return [];
+
+		const candidates = [digits];
+		if (digits.length === 11 && digits.startsWith("1")) {
+			candidates.push(digits.slice(1));
+		}
+
+		const rows = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+			SELECT id
+			FROM contact
+			WHERE "archivedAt" IS NULL
+				AND regexp_replace(COALESCE(phone, \'\'), \'[^0-9]\', \'\', \'g\') IN (${Prisma.join(candidates)})
+			LIMIT 5
+		`);
+
+		return rows.map((row) => row.id);
+	}
 
 		return {
 			hits: [
