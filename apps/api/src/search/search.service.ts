@@ -177,7 +177,6 @@ export class SearchService {
 			byRecord.set(key, list);
 		}
 
-
 		return {
 			hits: [
 				...companies.map(
@@ -248,5 +247,4 @@ export class SearchService {
 
 		return rows.map((row) => row.id);
 	}
-
 }
