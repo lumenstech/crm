@@ -1245,6 +1245,7 @@ model Activity {
   occurredAt  DateTime?
   dueAt       DateTime?
   completedAt DateTime?
+  externalId  String?   @unique
 
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
