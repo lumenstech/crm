@@ -177,25 +177,6 @@ export class SearchService {
 			byRecord.set(key, list);
 		}
 
-	private async phoneContactIds(term: string): Promise<string[]> {
-		const digits = term.replace(/[^0-9]/g, "");
-		if (digits.length < 7) return [];
-
-		const candidates = [digits];
-		if (digits.length === 11 && digits.startsWith("1")) {
-			candidates.push(digits.slice(1));
-		}
-
-		const rows = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-			SELECT id
-			FROM contact
-			WHERE "archivedAt" IS NULL
-				AND regexp_replace(COALESCE(phone, \'\'), \'[^0-9]\', \'\', \'g\') IN (${Prisma.join(candidates)})
-			LIMIT 5
-		`);
-
-		return rows.map((row) => row.id);
-	}
 
 		return {
 			hits: [
@@ -248,4 +229,24 @@ export class SearchService {
 			],
 		};
 	}
+	private async phoneContactIds(term: string): Promise<string[]> {
+		const digits = term.replace(/[^0-9]/g, "");
+		if (digits.length < 7) return [];
+
+		const candidates = [digits];
+		if (digits.length === 11 && digits.startsWith("1")) {
+			candidates.push(digits.slice(1));
+		}
+
+		const rows = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+			SELECT id
+			FROM contact
+			WHERE "archivedAt" IS NULL
+				AND regexp_replace(COALESCE(phone, \'\'), \'[^0-9]\', \'\', \'g\') IN (${Prisma.join(candidates)})
+			LIMIT 5
+		`);
+
+		return rows.map((row) => row.id);
+	}
+
 }
