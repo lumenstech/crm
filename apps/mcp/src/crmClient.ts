@@ -156,6 +156,9 @@ export class CrmClient {
 			method: "POST",
 			body: {
 				type: "NOTE",
+				externalId: input.externalMessageId
+					? `${input.channel}:${input.externalMessageId}`
+					: undefined,
 				subject: input.subject ?? undefined,
 				body: input.body ?? undefined,
 				occurredAt: input.occurredAt ?? undefined,
