@@ -145,6 +145,7 @@ export class ActivitiesService {
 				companyId,
 				contactId: input.contactId ?? null,
 				dealId: input.dealId ?? null,
+				meta: input.meta ?? undefined,
 				createdById: actingUserId,
 			},
 			select: ENTRY_SELECT,
