@@ -141,7 +141,7 @@ export class ActivitiesService {
 		if (input.externalId) {
 			const existing = await this.db.activity.findUnique({
 				where: { externalId: input.externalId },
-				select: ENTRY_SELECT,
+					select: ENTRY_SELECT,
 			});
 			if (existing) return serializeEntry(existing);
 		}
