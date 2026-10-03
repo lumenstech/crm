@@ -3,6 +3,8 @@ import {
 	associateRecordWithBusinessUnitInput,
 	createBusinessUnitOpportunityInput,
 	ingestLeadsInput,
+	listRecordInteractionsInput,
+	recordInteractionInput,
 } from "../src/schemas";
 
 describe("ingest_leads schema", () => {
@@ -55,4 +57,47 @@ describe("cross-business-unit reuse schemas", () => {
 		expect(parsed.ownerId).toBeUndefined();
 		expect(parsed.targetBusinessUnit).toBe("energybms");
 	});
+});
+
+
+it("record interaction requires a CRM record anchor", () => {
+	expect(
+		recordInteractionInput.safeParse({
+			channel: "whatsapp",
+			direction: "inbound",
+			body: "Need pricing on 8 B300 systems.",
+		}).success).toBe(false);
+	expect(
+		recordInteractionInput.safeParse({
+			channel: "whatsapp",
+			direction: "inbound",
+			body: "Need pricing on 8 B300 systems.",
+			contactId: "contact_123",
+			externalMessageId: "wamid.123",
+		}).success).toBe(true);
+});
+
+it("record interaction validates WhatsApp attachments", () => {
+	const parsed = recordInteractionInput.parse({
+		channel: "whatsapp",
+		direction: "inbound",
+		companyId: "company_123",
+		attachments: [
+			{
+				id: "media_123",
+				name: "rfq.pdf",
+				mediaType: "application/pdf",
+			},
+		],
+	});
+	expect(parsed.attachments.length).toBe(1);
+});
+
+it("list record interactions supports channel filtering", () => {
+	const parsed = listRecordInteractionsInput.parse({
+		companyId: "company_123",
+		channel: "whatsapp",
+	});
+	expect(parsed.channel).toBe("whatsapp");
+	expect(parsed.limit).toBe(30);
 });
