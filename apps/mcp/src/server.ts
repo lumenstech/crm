@@ -6,6 +6,8 @@ import {
 	ingestLeadsInput,
 	jsonObject,
 	listRecordBusinessUnitsInput,
+	listRecordInteractionsInput,
+	recordInteractionInput,
 	type SignalPayloadValue,
 	searchCrmInput,
 } from "./schemas";
@@ -86,6 +88,32 @@ export function createCrmMcpServer(client: CrmClient): McpServer {
 			result(
 				await client.createBusinessUnitOpportunity(
 					createBusinessUnitOpportunityInput.parse(input),
+				),
+			),
+	);
+
+	server.registerTool(
+		"record_interaction",
+		{
+			description:
+				"Record a CRM interaction after the company/contact/deal is resolved. Use channel=whatsapp for WhatsApp messages. Never creates a parallel contact record.",
+			inputSchema: recordInteractionInput.shape,
+		},
+		async (input) =>
+			result(await client.recordInteraction(recordInteractionInput.parse(input))),
+	);
+
+	server.registerTool(
+		"list_record_interactions",
+		{
+			description:
+				"List CRM timeline interactions for a resolved company, contact, or deal. Can filter to WhatsApp or another recorded channel.",
+			inputSchema: listRecordInteractionsInput.shape,
+		},
+		async (input) =>
+			result(
+				await client.listRecordInteractions(
+					listRecordInteractionsInput.parse(input),
 				),
 			),
 	);
