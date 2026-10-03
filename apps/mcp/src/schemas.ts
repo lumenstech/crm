@@ -26,6 +26,7 @@ export const ingestLeadsInput = z.object({
 	signals: z.array(ingestSignalInput).min(1).max(100),
 });
 
+export type IngestSignalInput = z.infer<typeof ingestSignalInput>;
 export type IngestLeadsInput = z.infer<typeof ingestLeadsInput>;
 
 export const reusableRecordType = z.enum(["company", "contact"]);
@@ -62,3 +63,51 @@ export type ListRecordBusinessUnitsInput = z.infer<
 export type CreateBusinessUnitOpportunityInput = z.infer<
 	typeof createBusinessUnitOpportunityInput
 >;
+
+
+export const interactionChannel = z.enum(["whatsapp", "email", "sms", "phone", "web", "other"]);
+export const interactionDirection = z.enum(["inbound", "outbound", "internal"]);
+
+export const recordInteractionInput = z
+	.object({
+		channel: interactionChannel,
+		direction: interactionDirection,
+		externalMessageId: z.string().trim().min(1).max(320).nullable().optional(),
+		conversationId: z.string().trim().min(1).max(320).nullable().optional(),
+		subject: z.string().trim().max(320).nullable().optional(),
+		body: z.string().trim().max(12000).nullable().optional(),
+		occurredAt: z.iso.datetime({ offset: true }).nullable().optional(),
+		companyId: z.string().trim().min(1).nullable().optional(),
+		contactId: z.string().trim().min(1).nullable().optional(),
+		dealId: z.string().trim().min(1).nullable().optional(),
+		businessUnit: businessUnitKey.nullable().optional(),
+		attachments: z
+			.array(
+				z.object({
+					id: z.string().trim().min(1).max(320).nullable().optional(),
+					name: z.string().trim().min(1).max(500).nullable().optional(),
+					mediaType: z.string().trim().min(1).max(160).nullable().optional(),
+					url: z.url().nullable().optional(),
+				}),
+			)
+			.max(20)
+			.default([]),
+	})
+	.refine((input) => input.companyId || input.contactId || input.dealId, {
+		message: "An interaction must reference a company, contact, or deal.",
+	});
+
+export const listRecordInteractionsInput = z
+	.object({
+		companyId: z.string().trim().min(1).nullable().optional(),
+		contactId: z.string().trim().min(1).nullable().optional(),
+		dealId: z.string().trim().min(1).nullable().optional(),
+		channel: interactionChannel.nullable().optional(),
+		limit: z.number().int().min(1).max(100).default(30),
+	})
+	.refine((input) => input.companyId || input.contactId || input.dealId, {
+		message: "A timeline must reference a company, contact, or deal.",
+	});
+
+export type RecordInteractionInput = z.infer<typeof recordInteractionInput>;
+export type ListRecordInteractionsInput = z.infer<typeof listRecordInteractionsInput>;
