@@ -63,11 +63,13 @@ export class GuyanaOpportunityService {
 			input.electrical.scopeMatch !== "none";
 
 		const [existing] = await this.db.$queryRaw<ExistingOpportunityRow[]>`
-			SELECT id, payload->>'collector_content_hash' AS "contentHash"
-			FROM source_record
-			WHERE "sourceSystem" = ${sourceSystem}
-				AND "sourceType" = 'guyana-opportunity'
-				AND "sourceId" = ${input.sourceId}
+			SELECT sr.id, sr.payload->>'collector_content_hash' AS "contentHash"
+			FROM source_record sr
+			JOIN business_unit bu ON bu.id = sr."businessUnitId"
+			WHERE bu.key = ${input.project}
+				AND sr."sourceSystem" = ${sourceSystem}
+				AND sr."sourceType" = 'guyana-opportunity'
+				AND sr."sourceId" = ${input.sourceId}
 			LIMIT 1
 		`;
 

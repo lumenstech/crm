@@ -13,6 +13,7 @@ import { activityFacetInput, listInput } from "../trpc/list-input";
 
 export const contactListInput = listInput.extend({
 	owner: z.array(z.string()).default([]),
+	businessUnit: z.array(z.string()).default([]),
 	company: z.array(z.string()).default([]),
 	source: z.array(z.string()).default([]),
 	title: z.array(z.string()).default([]),

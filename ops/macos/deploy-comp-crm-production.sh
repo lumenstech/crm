@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_REF="${1:-release}"
+SOURCE_REMOTE="${2:-${COMP_CRM_SOURCE_REMOTE:-https://github.com/lumenstech/crm.git}}"
+PROD_DIR="${COMP_CRM_PROD_DIR:-/Users/danny/Documents/Codex/comp-ai-crm-release-migration}"
+EXPECTED_HEAD="${EXPECTED_HEAD:-}"
+
+cd "$PROD_DIR"
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "Production worktree is dirty; refusing deployment."
+  git status --short
+  exit 2
+fi
+
+previous_sha="$(git rev-parse HEAD)"
+echo "Previous production SHA: $previous_sha"
+
+echo "Fetching $SOURCE_REF from $SOURCE_REMOTE"
+git fetch --prune "$SOURCE_REMOTE" "$SOURCE_REF"
+target_sha="$(git rev-parse FETCH_HEAD)"
+
+if [ -n "$EXPECTED_HEAD" ] && [ "$target_sha" != "$EXPECTED_HEAD" ]; then
+  echo "Expected $EXPECTED_HEAD but fetched $target_sha; refusing deployment."
+  exit 3
+fi
+
+echo "Target production SHA: $target_sha"
+
+restart_services() {
+  uid_now="$(id -u)"
+  labels=(
+    com.sequencenow.comp-ai-app
+    com.sequencenow.comp-ai-api
+    com.sequencenow.comp-ai-agent
+    com.sequencenow.comp-ai-mcp
+  )
+
+  for label in "${labels[@]}"; do
+    if launchctl print "gui/$uid_now/$label" >/dev/null 2>&1; then
+      echo "Restarting $label"
+      launchctl kickstart -k "gui/$uid_now/$label"
+    else
+      echo "Skipping $label (not loaded)"
+    fi
+  done
+}
+
+wait_http() {
+  url="$1"
+  attempts="${2:-20}"
+  delay_seconds="${3:-1}"
+
+  i=1
+  while [ "$i" -le "$attempts" ]; do
+    if curl --fail --silent --show-error --max-time 5 "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay_seconds"
+    i=$((i + 1))
+  done
+
+  echo "Health check failed after $attempts attempts: $url"
+  return 1
+}
+
+health_check() {
+  wait_http http://127.0.0.1:3100/
+  wait_http http://127.0.0.1:3101/health
+  if launchctl print "gui/$(id -u)/com.sequencenow.comp-ai-agent" >/dev/null 2>&1; then
+    wait_http http://127.0.0.1:3102/
+  fi
+  if launchctl print "gui/$(id -u)/com.sequencenow.comp-ai-mcp" >/dev/null 2>&1; then
+    wait_http http://127.0.0.1:3103/health
+    wait_http http://127.0.0.1:3103/ready
+  fi
+}
+
+rollback() {
+  echo "Deployment failed; rolling back to $previous_sha"
+  git checkout --detach "$previous_sha"
+  bun install --frozen-lockfile
+  bun run build
+  restart_services
+  health_check
+  echo "Rollback completed."
+}
+
+trap rollback ERR
+
+git checkout --detach "$target_sha"
+bun install --frozen-lockfile
+bun run db:deploy
+bun run build
+restart_services
+sleep 3
+health_check
+
+trap - ERR
+
+echo "Production deployment passed."
+echo "DEPLOYED_SHA=$target_sha"

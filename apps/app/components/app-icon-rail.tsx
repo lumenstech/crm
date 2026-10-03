@@ -70,6 +70,12 @@ const ITEMS: RailItem[] = [
 		icon: Partnership,
 		match: "prefix",
 	},
+	{
+		title: "Mobile CRM",
+		href: "/mobile-actions",
+		icon: Search,
+		match: "prefix",
+	},
 	{ title: "Settings", href: "/settings", icon: Settings, match: "prefix" },
 ];
 

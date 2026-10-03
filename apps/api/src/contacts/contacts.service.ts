@@ -817,6 +817,12 @@ export class ContactsService {
 		const owner = ownerFilter<Prisma.ContactWhereInput>(input.owner);
 		if (owner) and.push(owner);
 
+		if (input.businessUnit.length > 0) {
+			and.push({
+				company: { is: { businessUnitId: { in: input.businessUnit } } },
+			});
+		}
+
 		const company = this.companyFilter(input.company);
 		if (company) and.push(company);
 
@@ -842,6 +848,10 @@ export class ContactsService {
 		const where = {
 			AND: [this.searchFilter(input.q), archivedFilter(input.archived)],
 		};
+		const businessUnits = await this.db.businessUnit.findMany({
+			where: { enabled: true },
+			select: { id: true },
+		});
 
 		const [
 			owners,
@@ -852,6 +862,7 @@ export class ContactsService {
 			personas,
 			activity,
 			fieldFacets,
+			businessUnitCounts,
 		] = await Promise.all([
 			this.db.contact.groupBy({
 				by: ["ownerId"],
@@ -887,6 +898,18 @@ export class ContactsService {
 				this.db.contact.count({ where: { AND: [where, activityWhere] } }),
 			),
 			this.fields.filterFacetCounts("CONTACT", where, filterableFields),
+			Promise.all(
+				businessUnits.map((unit) =>
+					this.db.contact.count({
+						where: {
+							AND: [
+								where,
+								{ company: { is: { businessUnitId: unit.id } } },
+							],
+						},
+					}),
+				),
+			),
 		]);
 
 		return {
@@ -896,6 +919,9 @@ export class ContactsService {
 			title: countsByKey(titles, "title"),
 			seniority: countsByKey(seniorities, "seniority"),
 			persona: countsByKey(personas, "function"),
+			businessUnit: Object.fromEntries(
+				businessUnits.map((unit, index) => [unit.id, businessUnitCounts[index] ?? 0]),
+			),
 			activity,
 			...Object.fromEntries(
 				Object.entries(fieldFacets).map(([key, counts]) => [

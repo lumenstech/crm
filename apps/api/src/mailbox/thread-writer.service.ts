@@ -10,6 +10,7 @@ import {
 import { Injectable, Logger } from "@nestjs/common";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
+import { MailboxEmailIngestService } from "../email-ingest/mailbox-email-ingest.service";
 import type { SyncSource } from "./mailbox.constants";
 import {
 	MailboxMatchService,
@@ -39,6 +40,7 @@ export class ThreadWriterService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly match: MailboxMatchService,
 		private readonly stamp: ActivityStampService,
+		private readonly emailIngest: MailboxEmailIngestService,
 	) {}
 
 	async context(): Promise<MatchContext> {
@@ -62,6 +64,8 @@ export class ThreadWriterService {
 		parsed: IncomingMessage,
 		context: MatchContext,
 	): Promise<boolean> {
+		if (await this.emailIngest.handle(parsed, options.mailbox)) return false;
+
 		const existing = await this.db.emailMessage.findUnique({
 			where: { rfcMessageId: parsed.rfcMessageId },
 			select: {
