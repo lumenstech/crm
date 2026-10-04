@@ -141,7 +141,7 @@ export class ActivitiesService {
 		if (input.externalId) {
 			const existing = await this.db.activity.findUnique({
 				where: { externalId: input.externalId },
-					select: ENTRY_SELECT,
+				select: ENTRY_SELECT,
 			});
 			if (existing) return serializeEntry(existing);
 		}
@@ -151,20 +151,20 @@ export class ActivitiesService {
 		let activity: Entry;
 		try {
 			activity = await this.db.activity.create({
-			data: {
-				type: input.type,
-				subject: blankToNull(input.subject ?? ""),
-				body: blankToNull(input.body ?? ""),
-				occurredAt: parseDate(input.occurredAt) ?? new Date(),
-				dueAt: isTask ? parseDate(input.dueAt) : null,
-				companyId,
-				contactId: input.contactId ?? null,
-				dealId: input.dealId ?? null,
-				meta: input.meta ?? undefined,
-				externalId: input.externalId,
-				createdById: actingUserId,
-			},
-			select: ENTRY_SELECT,
+				data: {
+					type: input.type,
+					subject: blankToNull(input.subject ?? ""),
+					body: blankToNull(input.body ?? ""),
+					occurredAt: parseDate(input.occurredAt) ?? new Date(),
+					dueAt: isTask ? parseDate(input.dueAt) : null,
+					companyId,
+					contactId: input.contactId ?? null,
+					dealId: input.dealId ?? null,
+					meta: input.meta ?? undefined,
+					externalId: input.externalId,
+					createdById: actingUserId,
+				},
+				select: ENTRY_SELECT,
 			});
 		} catch (error) {
 			if (
