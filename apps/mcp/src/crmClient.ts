@@ -163,21 +163,23 @@ export class CrmClient {
 			businessUnit: input.businessUnit ?? null,
 			attachments: input.attachments,
 		};
+		const body: Record<string, JsonValue> = {
+			type: "NOTE",
+			meta,
+		};
+		if (input.externalMessageId) {
+			body.externalId = `${input.channel}:${input.externalMessageId}`;
+		}
+		if (input.subject != null) body.subject = input.subject;
+		if (input.body != null) body.body = input.body;
+		if (input.occurredAt != null) body.occurredAt = input.occurredAt;
+		if (input.companyId != null) body.companyId = input.companyId;
+		if (input.contactId != null) body.contactId = input.contactId;
+		if (input.dealId != null) body.dealId = input.dealId;
+
 		return this.request("/rest/activities", {
 			method: "POST",
-			body: {
-				type: "NOTE",
-				externalId: input.externalMessageId
-					? `${input.channel}:${input.externalMessageId}`
-					: undefined,
-				subject: input.subject ?? undefined,
-				body: input.body ?? undefined,
-				occurredAt: input.occurredAt ?? undefined,
-				companyId: input.companyId ?? undefined,
-				contactId: input.contactId ?? undefined,
-				dealId: input.dealId ?? undefined,
-				meta,
-			},
+			body,
 		});
 	}
 
