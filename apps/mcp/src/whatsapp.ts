@@ -92,7 +92,9 @@ export function verifyWhatsappSignature(
 	const supplied = signature.slice("sha256=".length);
 	if (!/^[0-9a-f]{64}$/i.test(supplied)) return false;
 
-	const expected = createHmac("sha256", appSecret).update(rawBody).digest("hex");
+	const expected = createHmac("sha256", appSecret)
+		.update(rawBody)
+		.digest("hex");
 	return timingSafeEqual(
 		Buffer.from(supplied.toLowerCase(), "hex"),
 		Buffer.from(expected, "hex"),
@@ -118,9 +120,7 @@ export async function processWhatsappWebhook(
 					contacts.find((contact) => contact.wa_id === message.from)?.profile
 						?.name ?? null;
 				const search = searchResponse.parse(await client.search(message.from));
-				const contactHits = search.hits.filter(
-					(hit) => hit.kind === "contact",
-				);
+				const contactHits = search.hits.filter((hit) => hit.kind === "contact");
 
 				if (contactHits.length !== 1) {
 					await client.ingestSignal({
@@ -137,8 +137,7 @@ export async function processWhatsappWebhook(
 								profileName,
 								messageType: message.type,
 								text: messageText(message) ?? null,
-								phoneNumberId:
-									change.value.metadata?.phone_number_id ?? null,
+								phoneNumberId: change.value.metadata?.phone_number_id ?? null,
 								media: messageMedia(message),
 								matchCount: contactHits.length,
 							},
@@ -197,7 +196,9 @@ function occurredAt(timestamp: string | undefined): string | undefined {
 	return new Date(seconds * 1000).toISOString();
 }
 
-function messageText(message: z.infer<typeof whatsappMessage>): string | undefined {
+function messageText(
+	message: z.infer<typeof whatsappMessage>,
+): string | undefined {
 	return (
 		message.text?.body ??
 		message.image?.caption ??
