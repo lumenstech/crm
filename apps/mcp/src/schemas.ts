@@ -64,8 +64,14 @@ export type CreateBusinessUnitOpportunityInput = z.infer<
 	typeof createBusinessUnitOpportunityInput
 >;
 
-
-export const interactionChannel = z.enum(["whatsapp", "email", "sms", "phone", "web", "other"]);
+export const interactionChannel = z.enum([
+	"whatsapp",
+	"email",
+	"sms",
+	"phone",
+	"web",
+	"other",
+]);
 export const interactionDirection = z.enum(["inbound", "outbound", "internal"]);
 
 export const recordInteractionInput = z
@@ -110,4 +116,6 @@ export const listRecordInteractionsInput = z
 	});
 
 export type RecordInteractionInput = z.infer<typeof recordInteractionInput>;
-export type ListRecordInteractionsInput = z.infer<typeof listRecordInteractionsInput>;
+export type ListRecordInteractionsInput = z.infer<
+	typeof listRecordInteractionsInput
+>;
