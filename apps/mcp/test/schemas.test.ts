@@ -59,14 +59,14 @@ describe("cross-business-unit reuse schemas", () => {
 	});
 });
 
-
 it("record interaction requires a CRM record anchor", () => {
 	expect(
 		recordInteractionInput.safeParse({
 			channel: "whatsapp",
 			direction: "inbound",
 			body: "Need pricing on 8 B300 systems.",
-		}).success).toBe(false);
+		}).success,
+	).toBe(false);
 	expect(
 		recordInteractionInput.safeParse({
 			channel: "whatsapp",
@@ -74,7 +74,8 @@ it("record interaction requires a CRM record anchor", () => {
 			body: "Need pricing on 8 B300 systems.",
 			contactId: "contact_123",
 			externalMessageId: "wamid.123",
-		}).success).toBe(true);
+		}).success,
+	).toBe(true);
 });
 
 it("record interaction validates WhatsApp attachments", () => {
