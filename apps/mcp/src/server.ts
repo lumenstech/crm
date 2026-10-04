@@ -100,7 +100,9 @@ export function createCrmMcpServer(client: CrmClient): McpServer {
 			inputSchema: recordInteractionInput.shape,
 		},
 		async (input) =>
-			result(await client.recordInteraction(recordInteractionInput.parse(input))),
+			result(
+				await client.recordInteraction(recordInteractionInput.parse(input)),
+			),
 	);
 
 	server.registerTool(
