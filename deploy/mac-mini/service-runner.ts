@@ -39,18 +39,34 @@ const childArguments =
 		? [resolve(repoRoot, "apps/mcp/dist/index.js")]
 		: ["run", `--filter=${service}`, "start"];
 
+const mcpEnvironment: NodeJS.ProcessEnv = {
+	NODE_ENV: "production",
+	PATH: process.env.PATH ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+	HOST: "127.0.0.1",
+	PORT: selected.port,
+	COMP_CRM_BASE_URL: "http://127.0.0.1:3101",
+	COMP_CRM_API_KEY: required("COMP_CRM_API_KEY"),
+	MCP_CALLER_TOKENS: required("MCP_CALLER_TOKENS"),
+};
+
+for (const name of [
+	"MCP_OAUTH_ISSUER_URL",
+	"MCP_PUBLIC_URL",
+	"MCP_OAUTH_JWKS_URL",
+	"MCP_RESOURCE_METADATA_URL",
+	"META_VERIFY_TOKEN",
+	"WHATSAPP_VERIFY_TOKEN",
+	"META_APP_SECRET",
+	"WHATSAPP_APP_SECRET",
+	"WHATSAPP_BUSINESS_UNIT",
+] as const) {
+	const value = process.env[name]?.trim();
+	if (value) mcpEnvironment[name] = value;
+}
+
 const childEnvironment =
 	service === "mcp"
-		? {
-				NODE_ENV: "production",
-				PATH:
-					process.env.PATH ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
-				HOST: "127.0.0.1",
-				PORT: selected.port,
-				COMP_CRM_BASE_URL: "http://127.0.0.1:3101",
-				COMP_CRM_API_KEY: required("COMP_CRM_API_KEY"),
-				MCP_CALLER_TOKENS: required("MCP_CALLER_TOKENS"),
-			}
+		? mcpEnvironment
 		: {
 				...process.env,
 				NODE_ENV: "production",

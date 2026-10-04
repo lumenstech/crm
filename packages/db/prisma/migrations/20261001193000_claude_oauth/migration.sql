@@ -1,4 +1,4 @@
-CREATE TABLE "jwks" (
+CREATE TABLE IF NOT EXISTS "jwks" (
     "id" TEXT NOT NULL,
     "publicKey" TEXT NOT NULL,
     "privateKey" TEXT NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE "jwks" (
     CONSTRAINT "jwks_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "oauthClient" (
+CREATE TABLE IF NOT EXISTS "oauthClient" (
     "id" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
     "clientSecret" TEXT,
@@ -43,7 +43,7 @@ CREATE TABLE "oauthClient" (
     CONSTRAINT "oauthClient_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "oauthRefreshToken" (
+CREATE TABLE IF NOT EXISTS "oauthRefreshToken" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE "oauthRefreshToken" (
     CONSTRAINT "oauthRefreshToken_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "oauthAccessToken" (
+CREATE TABLE IF NOT EXISTS "oauthAccessToken" (
     "id" TEXT NOT NULL,
     "token" TEXT,
     "clientId" TEXT NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE "oauthAccessToken" (
     CONSTRAINT "oauthAccessToken_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "oauthConsent" (
+CREATE TABLE IF NOT EXISTS "oauthConsent" (
     "id" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
     "userId" TEXT,
@@ -86,56 +86,156 @@ CREATE TABLE "oauthConsent" (
     CONSTRAINT "oauthConsent_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "oauthClient_clientId_key" ON "oauthClient"("clientId");
-CREATE INDEX "oauthClient_userId_idx" ON "oauthClient"("userId");
-CREATE UNIQUE INDEX "oauthRefreshToken_token_key" ON "oauthRefreshToken"("token");
-CREATE INDEX "oauthRefreshToken_clientId_idx" ON "oauthRefreshToken"("clientId");
-CREATE INDEX "oauthRefreshToken_sessionId_idx" ON "oauthRefreshToken"("sessionId");
-CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauthRefreshToken"("userId");
-CREATE UNIQUE INDEX "oauthAccessToken_token_key" ON "oauthAccessToken"("token");
-CREATE INDEX "oauthAccessToken_clientId_idx" ON "oauthAccessToken"("clientId");
-CREATE INDEX "oauthAccessToken_sessionId_idx" ON "oauthAccessToken"("sessionId");
-CREATE INDEX "oauthAccessToken_userId_idx" ON "oauthAccessToken"("userId");
-CREATE INDEX "oauthAccessToken_refreshId_idx" ON "oauthAccessToken"("refreshId");
-CREATE INDEX "oauthConsent_clientId_idx" ON "oauthConsent"("clientId");
-CREATE INDEX "oauthConsent_userId_idx" ON "oauthConsent"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "oauthClient_clientId_key" ON "oauthClient"("clientId");
+CREATE INDEX IF NOT EXISTS "oauthClient_userId_idx" ON "oauthClient"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "oauthRefreshToken_token_key" ON "oauthRefreshToken"("token");
+CREATE INDEX IF NOT EXISTS "oauthRefreshToken_clientId_idx" ON "oauthRefreshToken"("clientId");
+CREATE INDEX IF NOT EXISTS "oauthRefreshToken_sessionId_idx" ON "oauthRefreshToken"("sessionId");
+CREATE INDEX IF NOT EXISTS "oauthRefreshToken_userId_idx" ON "oauthRefreshToken"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "oauthAccessToken_token_key" ON "oauthAccessToken"("token");
+CREATE INDEX IF NOT EXISTS "oauthAccessToken_clientId_idx" ON "oauthAccessToken"("clientId");
+CREATE INDEX IF NOT EXISTS "oauthAccessToken_sessionId_idx" ON "oauthAccessToken"("sessionId");
+CREATE INDEX IF NOT EXISTS "oauthAccessToken_userId_idx" ON "oauthAccessToken"("userId");
+CREATE INDEX IF NOT EXISTS "oauthAccessToken_refreshId_idx" ON "oauthAccessToken"("refreshId");
+CREATE INDEX IF NOT EXISTS "oauthConsent_clientId_idx" ON "oauthConsent"("clientId");
+CREATE INDEX IF NOT EXISTS "oauthConsent_userId_idx" ON "oauthConsent"("userId");
 
-ALTER TABLE "oauthClient"
-ADD CONSTRAINT "oauthClient_userId_fkey"
-FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthClient_userId_fkey'
+    ) THEN
+        ALTER TABLE "oauthClient"
+        ADD CONSTRAINT "oauthClient_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthRefreshToken"
-ADD CONSTRAINT "oauthRefreshToken_clientId_fkey"
-FOREIGN KEY ("clientId") REFERENCES "oauthClient"("clientId") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthRefreshToken_clientId_fkey'
+    ) THEN
+        ALTER TABLE "oauthRefreshToken"
+        ADD CONSTRAINT "oauthRefreshToken_clientId_fkey"
+        FOREIGN KEY ("clientId") REFERENCES "oauthClient"("clientId") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthRefreshToken"
-ADD CONSTRAINT "oauthRefreshToken_sessionId_fkey"
-FOREIGN KEY ("sessionId") REFERENCES "session"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthRefreshToken_sessionId_fkey'
+    ) THEN
+        ALTER TABLE "oauthRefreshToken"
+        ADD CONSTRAINT "oauthRefreshToken_sessionId_fkey"
+        FOREIGN KEY ("sessionId") REFERENCES "session"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthRefreshToken"
-ADD CONSTRAINT "oauthRefreshToken_userId_fkey"
-FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthRefreshToken_userId_fkey'
+    ) THEN
+        ALTER TABLE "oauthRefreshToken"
+        ADD CONSTRAINT "oauthRefreshToken_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthAccessToken"
-ADD CONSTRAINT "oauthAccessToken_clientId_fkey"
-FOREIGN KEY ("clientId") REFERENCES "oauthClient"("clientId") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthAccessToken_clientId_fkey'
+    ) THEN
+        ALTER TABLE "oauthAccessToken"
+        ADD CONSTRAINT "oauthAccessToken_clientId_fkey"
+        FOREIGN KEY ("clientId") REFERENCES "oauthClient"("clientId") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthAccessToken"
-ADD CONSTRAINT "oauthAccessToken_sessionId_fkey"
-FOREIGN KEY ("sessionId") REFERENCES "session"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthAccessToken_sessionId_fkey'
+    ) THEN
+        ALTER TABLE "oauthAccessToken"
+        ADD CONSTRAINT "oauthAccessToken_sessionId_fkey"
+        FOREIGN KEY ("sessionId") REFERENCES "session"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthAccessToken"
-ADD CONSTRAINT "oauthAccessToken_userId_fkey"
-FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthAccessToken_userId_fkey'
+    ) THEN
+        ALTER TABLE "oauthAccessToken"
+        ADD CONSTRAINT "oauthAccessToken_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthAccessToken"
-ADD CONSTRAINT "oauthAccessToken_refreshId_fkey"
-FOREIGN KEY ("refreshId") REFERENCES "oauthRefreshToken"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthAccessToken_refreshId_fkey'
+    ) THEN
+        ALTER TABLE "oauthAccessToken"
+        ADD CONSTRAINT "oauthAccessToken_refreshId_fkey"
+        FOREIGN KEY ("refreshId") REFERENCES "oauthRefreshToken"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthConsent"
-ADD CONSTRAINT "oauthConsent_clientId_fkey"
-FOREIGN KEY ("clientId") REFERENCES "oauthClient"("clientId") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthConsent_clientId_fkey'
+    ) THEN
+        ALTER TABLE "oauthConsent"
+        ADD CONSTRAINT "oauthConsent_clientId_fkey"
+        FOREIGN KEY ("clientId") REFERENCES "oauthClient"("clientId") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
 
-ALTER TABLE "oauthConsent"
-ADD CONSTRAINT "oauthConsent_userId_fkey"
-FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'oauthConsent_userId_fkey'
+    ) THEN
+        ALTER TABLE "oauthConsent"
+        ADD CONSTRAINT "oauthConsent_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END
+$$;
