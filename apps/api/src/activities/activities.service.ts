@@ -1,4 +1,9 @@
-import { ActivityType, type Db, type Prisma } from "@crm/db";
+import {
+	ActivityType,
+	type Db,
+	type Prisma,
+	Prisma as PrismaNamespace,
+} from "@crm/db";
 import { activityMeta } from "@crm/validation/activity-meta";
 import {
 	BadRequestException,
@@ -133,22 +138,48 @@ export class ActivitiesService {
 	): Promise<ActivityEntry> {
 		const companyId = await this.resolveCompanyId(input);
 
+		if (input.externalId) {
+			const existing = await this.db.activity.findUnique({
+				where: { externalId: input.externalId },
+				select: ENTRY_SELECT,
+			});
+			if (existing) return serializeEntry(existing);
+		}
+
 		const isTask = input.type === ActivityType.TASK;
 
-		const activity = await this.db.activity.create({
-			data: {
-				type: input.type,
-				subject: blankToNull(input.subject ?? ""),
-				body: blankToNull(input.body ?? ""),
-				occurredAt: parseDate(input.occurredAt) ?? new Date(),
-				dueAt: isTask ? parseDate(input.dueAt) : null,
-				companyId,
-				contactId: input.contactId ?? null,
-				dealId: input.dealId ?? null,
-				createdById: actingUserId,
-			},
-			select: ENTRY_SELECT,
-		});
+		let activity: Entry;
+		try {
+			activity = await this.db.activity.create({
+				data: {
+					type: input.type,
+					subject: blankToNull(input.subject ?? ""),
+					body: blankToNull(input.body ?? ""),
+					occurredAt: parseDate(input.occurredAt) ?? new Date(),
+					dueAt: isTask ? parseDate(input.dueAt) : null,
+					companyId,
+					contactId: input.contactId ?? null,
+					dealId: input.dealId ?? null,
+					meta: input.meta ?? undefined,
+					externalId: input.externalId,
+					createdById: actingUserId,
+				},
+				select: ENTRY_SELECT,
+			});
+		} catch (error) {
+			if (
+				input.externalId &&
+				error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
+				error.code === "P2002"
+			) {
+				const existing = await this.db.activity.findUnique({
+					where: { externalId: input.externalId },
+					select: ENTRY_SELECT,
+				});
+				if (existing) return serializeEntry(existing);
+			}
+			throw error;
+		}
 
 		await this.stamp.touch(
 			{ companyId, contactId: input.contactId, dealId: input.dealId },

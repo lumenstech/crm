@@ -4,7 +4,10 @@ import type {
 	AssociateRecordWithBusinessUnitInput,
 	CreateBusinessUnitOpportunityInput,
 	IngestLeadsInput,
+	IngestSignalInput,
 	ListRecordBusinessUnitsInput,
+	ListRecordInteractionsInput,
+	RecordInteractionInput,
 } from "./schemas";
 
 const jsonValue = z.json();
@@ -14,6 +17,25 @@ type RequestOptions = {
 	method?: "GET" | "POST";
 	query?: Record<string, string | undefined>;
 	body?: JsonValue;
+};
+
+type InteractionActivityPayload = {
+	type: "NOTE";
+	meta: {
+		channel: RecordInteractionInput["channel"];
+		direction: RecordInteractionInput["direction"];
+		externalMessageId: string | null;
+		conversationId: string | null;
+		businessUnit: string | null;
+		attachments: RecordInteractionInput["attachments"];
+	};
+	externalId?: string;
+	subject?: string;
+	body?: string;
+	occurredAt?: string;
+	companyId?: string;
+	contactId?: string;
+	dealId?: string;
 };
 
 export class CrmClient {
@@ -37,6 +59,16 @@ export class CrmClient {
 
 	search(q: string) {
 		return this.request("/rest/search", { query: { q } });
+	}
+
+	ingestSignal(input: { businessUnit: string; signal: IngestSignalInput }) {
+		return this.request("/rest/ingest/signals/batch", {
+			method: "POST",
+			body: {
+				project: input.businessUnit,
+				signals: [input.signal],
+			},
+		});
 	}
 
 	async ingestLeads(input: IngestLeadsInput) {
@@ -139,6 +171,62 @@ export class CrmClient {
 			method: "POST",
 			body: input,
 		});
+	}
+
+	recordInteraction(input: RecordInteractionInput) {
+		const meta = {
+			channel: input.channel,
+			direction: input.direction,
+			externalMessageId: input.externalMessageId ?? null,
+			conversationId: input.conversationId ?? null,
+			businessUnit: input.businessUnit ?? null,
+			attachments: input.attachments,
+		};
+		const body: InteractionActivityPayload = {
+			type: "NOTE",
+			meta,
+		};
+		if (input.externalMessageId) {
+			body.externalId = `${input.channel}:${input.externalMessageId}`;
+		}
+		if (input.subject != null) body.subject = input.subject;
+		if (input.body != null) body.body = input.body;
+		if (input.occurredAt != null) body.occurredAt = input.occurredAt;
+		if (input.companyId != null) body.companyId = input.companyId;
+		if (input.contactId != null) body.contactId = input.contactId;
+		if (input.dealId != null) body.dealId = input.dealId;
+
+		return this.request("/rest/activities", {
+			method: "POST",
+			body: jsonValue.parse(body),
+		});
+	}
+
+	async listRecordInteractions(input: ListRecordInteractionsInput) {
+		const timeline = z
+			.object({
+				entries: z.array(z.record(z.string(), z.json())),
+				nextCursor: z.string().nullable(),
+			})
+			.parse(
+				await this.request("/rest/activities", {
+					query: {
+						companyId: input.companyId ?? undefined,
+						contactId: input.contactId ?? undefined,
+						dealId: input.dealId ?? undefined,
+						filter: "all",
+						limit: String(input.limit),
+					},
+				}),
+			);
+		if (!input.channel) return timeline;
+		return {
+			...timeline,
+			entries: timeline.entries.filter((entry) => {
+				const meta = z.record(z.string(), z.json()).safeParse(entry.meta);
+				return meta.success && meta.data.channel === input.channel;
+			}),
+		};
 	}
 
 	private async request(path: string, options: RequestOptions = {}) {

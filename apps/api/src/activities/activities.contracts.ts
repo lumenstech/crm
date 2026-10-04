@@ -1,5 +1,8 @@
 import { ActivityType } from "@crm/db";
-import { activityMeta } from "@crm/validation/activity-meta";
+import {
+	activityMeta,
+	activityMetaFields,
+} from "@crm/validation/activity-meta";
 import { z } from "zod";
 
 const COMPOSABLE_TYPES = [
@@ -58,11 +61,13 @@ export const activityCreateInput = z
 		type: composableEnum,
 		subject: z.string().trim().optional(),
 		body: z.string().trim().optional(),
+		externalId: z.string().trim().min(1).max(500).optional(),
 		occurredAt: z.string().optional(),
 		dueAt: z.string().nullable().optional(),
 		companyId: z.string().optional(),
 		contactId: z.string().optional(),
 		dealId: z.string().optional(),
+		meta: activityMetaFields.optional(),
 	})
 	.refine((input) => input.companyId || input.contactId || input.dealId, {
 		message: "An activity has to be about a company, a contact or a deal.",
