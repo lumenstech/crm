@@ -19,6 +19,25 @@ type RequestOptions = {
 	body?: JsonValue;
 };
 
+type InteractionActivityPayload = {
+	type: "NOTE";
+	meta: {
+		channel: RecordInteractionInput["channel"];
+		direction: RecordInteractionInput["direction"];
+		externalMessageId: string | null;
+		conversationId: string | null;
+		businessUnit: string | null;
+		attachments: RecordInteractionInput["attachments"];
+	};
+	externalId?: string;
+	subject?: string;
+	body?: string;
+	occurredAt?: string;
+	companyId?: string;
+	contactId?: string;
+	dealId?: string;
+};
+
 export class CrmClient {
 	private readonly baseUrl: string;
 
@@ -163,23 +182,23 @@ export class CrmClient {
 			businessUnit: input.businessUnit ?? null,
 			attachments: input.attachments,
 		};
-		const body = {
+		const body: InteractionActivityPayload = {
 			type: "NOTE",
 			meta,
-			...(input.externalMessageId
-				? { externalId: `${input.channel}:${input.externalMessageId}` }
-				: {}),
-			...(input.subject != null ? { subject: input.subject } : {}),
-			...(input.body != null ? { body: input.body } : {}),
-			...(input.occurredAt != null ? { occurredAt: input.occurredAt } : {}),
-			...(input.companyId != null ? { companyId: input.companyId } : {}),
-			...(input.contactId != null ? { contactId: input.contactId } : {}),
-			...(input.dealId != null ? { dealId: input.dealId } : {}),
 		};
+		if (input.externalMessageId) {
+			body.externalId = `${input.channel}:${input.externalMessageId}`;
+		}
+		if (input.subject != null) body.subject = input.subject;
+		if (input.body != null) body.body = input.body;
+		if (input.occurredAt != null) body.occurredAt = input.occurredAt;
+		if (input.companyId != null) body.companyId = input.companyId;
+		if (input.contactId != null) body.contactId = input.contactId;
+		if (input.dealId != null) body.dealId = input.dealId;
 
 		return this.request("/rest/activities", {
 			method: "POST",
-			body,
+			body: jsonValue.parse(body),
 		});
 	}
 
