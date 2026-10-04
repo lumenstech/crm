@@ -1,5 +1,8 @@
 import { ActivityType } from "@crm/db";
-import { activityMeta, activityMetaFields } from "@crm/validation/activity-meta";
+import {
+	activityMeta,
+	activityMetaFields,
+} from "@crm/validation/activity-meta";
 import { z } from "zod";
 
 const COMPOSABLE_TYPES = [
