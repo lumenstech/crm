@@ -23,8 +23,7 @@ describe("WhatsApp webhook verification", () => {
 	it("verifies X-Hub-Signature-256 against the raw request body", () => {
 		const body = Buffer.from('{"entry":[]}');
 		const secret = "app-secret";
-		const signature =
-			`sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+		const signature = `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
 		expect(verifyWhatsappSignature(body, signature, secret)).toBe(true);
 		expect(verifyWhatsappSignature(body, "sha256=deadbeef", secret)).toBe(
 			false,
