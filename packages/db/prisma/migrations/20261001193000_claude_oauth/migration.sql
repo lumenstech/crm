@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS "oauthConsent" (
     CONSTRAINT "oauthConsent_pkey" PRIMARY KEY ("id")
 );
 
+ALTER TABLE "oauthAccessToken"
+ADD COLUMN IF NOT EXISTS "token" TEXT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS "oauthClient_clientId_key" ON "oauthClient"("clientId");
 CREATE INDEX IF NOT EXISTS "oauthClient_userId_idx" ON "oauthClient"("userId");
 CREATE UNIQUE INDEX IF NOT EXISTS "oauthRefreshToken_token_key" ON "oauthRefreshToken"("token");
