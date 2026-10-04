@@ -163,19 +163,19 @@ export class CrmClient {
 			businessUnit: input.businessUnit ?? null,
 			attachments: input.attachments,
 		};
-		const body: Record<string, JsonValue> = {
+		const body = {
 			type: "NOTE",
 			meta,
+			...(input.externalMessageId
+				? { externalId: `${input.channel}:${input.externalMessageId}` }
+				: {}),
+			...(input.subject != null ? { subject: input.subject } : {}),
+			...(input.body != null ? { body: input.body } : {}),
+			...(input.occurredAt != null ? { occurredAt: input.occurredAt } : {}),
+			...(input.companyId != null ? { companyId: input.companyId } : {}),
+			...(input.contactId != null ? { contactId: input.contactId } : {}),
+			...(input.dealId != null ? { dealId: input.dealId } : {}),
 		};
-		if (input.externalMessageId) {
-			body.externalId = `${input.channel}:${input.externalMessageId}`;
-		}
-		if (input.subject != null) body.subject = input.subject;
-		if (input.body != null) body.body = input.body;
-		if (input.occurredAt != null) body.occurredAt = input.occurredAt;
-		if (input.companyId != null) body.companyId = input.companyId;
-		if (input.contactId != null) body.contactId = input.contactId;
-		if (input.dealId != null) body.dealId = input.dealId;
 
 		return this.request("/rest/activities", {
 			method: "POST",
