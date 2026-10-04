@@ -9,6 +9,8 @@ import {
 } from "./guyana-opportunity.contracts";
 import { GuyanaOpportunityService } from "./guyana-opportunity.service";
 import {
+	ingestSignalBatchInput,
+	ingestSignalBatchOutput,
 	ingestSignalInput,
 	ingestSignalOutput,
 	promoteSignalInput,
@@ -54,6 +56,15 @@ export class IngestRouter {
 	})
 	async signal(@Input() input: z.infer<typeof ingestSignalInput>) {
 		return this.ingest.signal(input);
+	}
+
+	@Mutation({
+		input: ingestSignalBatchInput,
+		output: ingestSignalBatchOutput,
+		meta: restMeta("POST", "/ingest/signals/batch", ["Ingest"]),
+	})
+	async batch(@Input() input: z.infer<typeof ingestSignalBatchInput>) {
+		return this.ingest.batch(input);
 	}
 
 	@Mutation({

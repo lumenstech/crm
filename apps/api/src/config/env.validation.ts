@@ -77,6 +77,38 @@ export class EnvironmentVariables {
 	SLACK_CLIENT_SECRET?: string;
 
 	@IsOptional()
+	@IsString()
+	RESEND_API_KEY?: string;
+
+	@IsOptional()
+	@IsString()
+	RESEND_WEBHOOK_SECRET?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_ALLOWED_SENDERS?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_ADDRESS?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_RECEIPT_FROM?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EMAIL_INGEST_RECEIPT_TO?: string;
+
+	@IsOptional()
+	@IsString()
+	PASSWORD_RESET_FROM?: string;
+
+	@IsOptional()
+	@IsString()
+	PASSWORD_RESET_REPLY_TO?: string;
+
+	@IsOptional()
 	@IsUrl({ require_tld: false })
 	API_URL?: string;
 

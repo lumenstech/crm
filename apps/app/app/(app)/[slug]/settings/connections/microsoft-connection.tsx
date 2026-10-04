@@ -317,14 +317,20 @@ export function MicrosoftConnection({
 					<div className="-ml-2 flex flex-wrap items-center gap-1 text-muted-foreground">
 						<AlertDialog>
 							<AlertDialogTrigger asChild>
-								<Button variant="ghost" size="xs" disabled={startBackfill.isPending}>
+								<Button
+									variant="ghost"
+									size="xs"
+									disabled={startBackfill.isPending}
+								>
 									Import mail history
 								</Button>
 							</AlertDialogTrigger>
 
 							<AlertDialogContent>
 								<AlertDialogHeader>
-									<AlertDialogTitle>Import existing Outlook mail?</AlertDialogTitle>
+									<AlertDialogTitle>
+										Import existing Outlook mail?
+									</AlertDialogTitle>
 									<AlertDialogDescription>
 										The CRM reads available Outlook history in small batches.
 										New mail keeps syncing. Existing messages are deduplicated.

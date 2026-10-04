@@ -155,6 +155,7 @@ export function DealsTable() {
 		placeholderData: (previous) => previous,
 	});
 	const users = useQuery(trpc.users.list.queryOptions());
+	const businessUnits = useQuery(trpc.businessUnits.list.queryOptions());
 
 	const rows = deals.data?.rows ?? [];
 	const selection = useTableSelection(
@@ -184,6 +185,15 @@ export function DealsTable() {
 	const fieldFacets = useFieldFacets("DEAL", facetCounts);
 
 	const facets: DataTableFacet[] = [
+		{
+			id: "businessUnit",
+			label: "Business unit",
+			options: (businessUnits.data ?? []).flatMap((unit) =>
+				(facetCounts?.businessUnit?.[unit.id] ?? 0) > 0
+					? [{ value: unit.id, label: unit.name }]
+					: [],
+			),
+		},
 		{
 			id: "owner",
 			label: "Owner",

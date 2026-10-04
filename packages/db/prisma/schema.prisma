@@ -50,6 +50,11 @@ model User {
 
   apiKeys Apikey[]
 
+  oauthClients       OauthClient[]
+  oauthRefreshTokens OauthRefreshToken[]
+  oauthAccessTokens  OauthAccessToken[]
+  oauthConsents      OauthConsent[]
+
   @@unique([email])
   @@map("user")
 }
@@ -121,6 +126,9 @@ model Session {
 
   activeOrganizationId String?
 
+  oauthRefreshTokens OauthRefreshToken[]
+  oauthAccessTokens  OauthAccessToken[]
+
   @@unique([token])
   @@index([userId])
   @@map("session")
@@ -166,6 +174,119 @@ model RateLimit {
 
   @@unique([key])
   @@map("rateLimit")
+}
+
+
+model Jwks {
+  id         String   @id
+  publicKey  String
+  privateKey String
+  createdAt  DateTime
+  expiresAt  DateTime?
+
+  @@map("jwks")
+}
+
+model OauthClient {
+  id                      String   @id
+  clientId                String   @unique
+  clientSecret            String?
+  disabled                Boolean? @default(false)
+  skipConsent             Boolean?
+  enableEndSession        Boolean?
+  subjectType             String?
+  scopes                  String[] @default([])
+  userId                  String?
+  user                    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt               DateTime?
+  updatedAt               DateTime?
+  name                    String?
+  uri                     String?
+  icon                    String?
+  contacts                String[] @default([])
+  tos                     String?
+  policy                  String?
+  softwareId              String?
+  softwareVersion         String?
+  softwareStatement       String?
+  redirectUris            String[] @default([])
+  postLogoutRedirectUris  String[] @default([])
+  tokenEndpointAuthMethod String?
+  grantTypes              String[] @default([])
+  responseTypes           String[] @default([])
+  public                  Boolean?
+  type                    String?
+  requirePKCE             Boolean?
+  referenceId             String?
+  metadata                Json?
+  oauthRefreshTokens      OauthRefreshToken[]
+  oauthAccessTokens       OauthAccessToken[]
+  oauthConsents           OauthConsent[]
+
+  @@index([userId])
+  @@map("oauthClient")
+}
+
+model OauthRefreshToken {
+  id           String             @id
+  token        String             @unique
+  clientId     String
+  client       OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId    String?
+  session      Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId  String?
+  expiresAt    DateTime
+  createdAt    DateTime
+  revoked      DateTime?
+  authTime     DateTime?
+  scopes       String[]
+  accessTokens OauthAccessToken[]
+
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([userId])
+  @@map("oauthRefreshToken")
+}
+
+model OauthAccessToken {
+  id           String             @id
+  token        String?            @unique
+  clientId     String
+  client       OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId    String?
+  session      Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId       String?
+  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId  String?
+  refreshId    String?
+  refreshToken OauthRefreshToken? @relation(fields: [refreshId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  createdAt    DateTime
+  scopes       String[]
+
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([refreshId])
+  @@map("oauthAccessToken")
+}
+
+model OauthConsent {
+  id          String      @id
+  clientId    String
+  client      OauthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId String?
+  scopes      String[]
+  createdAt   DateTime
+  updatedAt   DateTime
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauthConsent")
 }
 
 enum DealStage {
@@ -1634,6 +1755,9 @@ model BusinessUnit {
   campaigns      Campaign[]
   agentRuns      AgentRunContext[]
   sourceRecords  SourceRecord[]
+  recordMappings RecordMapping[]
+  sourcedRecordAssociations BusinessUnitRecordAssociation[] @relation("RecordAssociationSourceBusinessUnit")
+  targetRecordAssociations  BusinessUnitRecordAssociation[] @relation("RecordAssociationTargetBusinessUnit")
 
   @@index([enabled, key])
   @@map("business_unit")
@@ -1752,13 +1876,15 @@ model SourceRecord {
   opportunityId  String?
   opportunity    CanonicalOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
 
-  @@unique([sourceSystem, sourceType, sourceId])
+  @@unique([businessUnitId, sourceSystem, sourceType, sourceId])
   @@index([businessUnitId, sourceType])
   @@map("source_record")
 }
 
 model RecordMapping {
   id             String   @id @default(uuid())
+  businessUnitId String
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   sourceSystem   String
   sourceType     String
   sourceId       String
@@ -1771,9 +1897,29 @@ model RecordMapping {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([sourceSystem, sourceType, sourceId, canonicalType])
+  @@unique([businessUnitId, sourceSystem, sourceType, sourceId, canonicalType])
+  @@index([businessUnitId, canonicalType])
   @@index([canonicalType, canonicalId])
   @@map("record_mapping")
+}
+
+model BusinessUnitRecordAssociation {
+  id                   String   @id @default(uuid())
+  recordType           String
+  recordId             String
+  sourceBusinessUnitId String?
+  sourceBusinessUnit   BusinessUnit? @relation("RecordAssociationSourceBusinessUnit", fields: [sourceBusinessUnitId], references: [id], onDelete: SetNull)
+  targetBusinessUnitId String
+  targetBusinessUnit   BusinessUnit @relation("RecordAssociationTargetBusinessUnit", fields: [targetBusinessUnitId], references: [id], onDelete: Cascade)
+  useCase              String?
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([recordType, recordId, targetBusinessUnitId])
+  @@index([recordType, recordId])
+  @@index([targetBusinessUnitId, recordType])
+  @@map("business_unit_record_association")
 }
 
 model Campaign {
@@ -1881,12 +2027,6 @@ enum ProcurementAvailabilityStatus {
   LIVE
   RFQ
   UNAVAILABLE
-}
-
-enum ProcurementDemandType {
-  PURCHASE
-  LEASE
-  CLOUD_CAPACITY
 }
 
 model ProcurementPricingPolicy {
@@ -1998,9 +2138,6 @@ model ProcurementCustomerRequest {
   requestedAt          DateTime                 @default(now())
   status               ProcurementRequestStatus @default(SOURCING)
   quoteStatus          ProcurementQuoteStatus   @default(NOT_QUOTED)
-  demandType           ProcurementDemandType    @default(PURCHASE)
-  nextAction           String?
-  followUpAt           DateTime?
   targetBudget         Decimal?                 @db.Decimal(16, 2)
   currency             String                   @default("USD")
   requiredBy           DateTime?
@@ -2013,8 +2150,6 @@ model ProcurementCustomerRequest {
   items ProcurementCustomerRequestItem[]
 
   @@index([businessUnitId, status, requestedAt])
-  @@index([businessUnitId, followUpAt])
-  @@index([businessUnitId, demandType, status])
   @@index([businessUnitId, crmAccountId])
   @@map("procurementCustomerRequest")
 }
@@ -2029,7 +2164,7 @@ model ProcurementCustomerRequestItem {
   manufacturer            String?
   model                   String?
   manufacturerSku         String?
-  quantity                Decimal?                   @db.Decimal(14, 3)
+  quantity                Decimal                    @default(1) @db.Decimal(14, 3)
   gpuModel                String?
   gpuCount                Int?
   cpu                     String?

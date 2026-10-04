@@ -43,6 +43,29 @@ export const ingestSignalOutput = z.object({
 	promoted: z.literal(false),
 });
 
+export const ingestSignalBatchItemInput = ingestSignalInput.omit({ project: true });
+
+export const ingestSignalBatchInput = z.object({
+	project: z.string().trim().min(1).max(96),
+	signals: z.array(ingestSignalBatchItemInput).min(1).max(100),
+});
+
+export const ingestSignalBatchItemOutput = z.object({
+	sourceId: z.string(),
+	status: z.enum(["accepted", "failed"]),
+	sourceRecordId: z.string().nullable(),
+	deduplicated: z.boolean(),
+	error: z.string().nullable(),
+});
+
+export const ingestSignalBatchOutput = z.object({
+	project: z.string(),
+	accepted: z.number().int().nonnegative(),
+	deduplicated: z.number().int().nonnegative(),
+	failed: z.number().int().nonnegative(),
+	items: z.array(ingestSignalBatchItemOutput),
+});
+
 export const signalInboxInput = z.object({
 	project: z.string().trim().min(1).max(96).optional(),
 	source: z.string().trim().min(1).max(96).optional(),
@@ -167,6 +190,8 @@ export const promoteSignalOutput = z.object({
 
 export type IngestSignalInput = z.infer<typeof ingestSignalInput>;
 export type IngestSignalOutput = z.infer<typeof ingestSignalOutput>;
+export type IngestSignalBatchInput = z.infer<typeof ingestSignalBatchInput>;
+export type IngestSignalBatchOutput = z.infer<typeof ingestSignalBatchOutput>;
 export type SignalInboxInput = z.infer<typeof signalInboxInput>;
 export type SignalInboxOutput = z.infer<typeof signalInboxOutput>;
 export type SignalCompanyCandidatesOutput = z.infer<

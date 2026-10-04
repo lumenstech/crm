@@ -652,6 +652,10 @@ export class CompaniesService {
 		const owner = ownerFilter<Prisma.CompanyWhereInput>(input.owner);
 		if (owner) and.push(owner);
 
+		if (input.businessUnit.length > 0) {
+			and.push({ businessUnitId: { in: input.businessUnit } });
+		}
+
 		if (input.industry.length > 0)
 			and.push({ industry: { in: input.industry } });
 		if (input.enrichment.length > 0) {
@@ -677,8 +681,15 @@ export class CompaniesService {
 			AND: [this.searchFilter(input.q), archivedFilter(input.archived)],
 		};
 
-		const [owners, industries, enrichment, sources, activity, fieldFacets] =
-			await Promise.all([
+		const [
+			owners,
+			industries,
+			enrichment,
+			sources,
+			businessUnits,
+			activity,
+			fieldFacets,
+		] = await Promise.all([
 				this.db.company.groupBy({
 					by: ["ownerId"],
 					where,
@@ -699,6 +710,11 @@ export class CompaniesService {
 					where,
 					_count: { _all: true },
 				}),
+				this.db.company.groupBy({
+					by: ["businessUnitId"],
+					where,
+					_count: { _all: true },
+				}),
 				activityFacetCounts((activityWhere) =>
 					this.db.company.count({ where: { AND: [where, activityWhere] } }),
 				),
@@ -710,6 +726,7 @@ export class CompaniesService {
 			industry: countsByKey(industries, "industry"),
 			enrichment: countsByKey(enrichment, "enrichmentStatus"),
 			source: countsByKey(sources, "source"),
+			businessUnit: countsByKey(businessUnits, "businessUnitId", FACET_UNASSIGNED),
 			activity,
 			...Object.fromEntries(
 				Object.entries(fieldFacets).map(([key, counts]) => [
