@@ -28,6 +28,11 @@ type ResendReceivedEvent = {
 		from?: string;
 		to?: string[];
 		subject?: string;
+		attachments?: Array<{
+			id: string;
+			filename?: string;
+			content_type?: string;
+		}>;
 	};
 };
 
@@ -139,7 +144,11 @@ export class EmailIngestController {
 			subject: received.subject ?? event.data.subject ?? null,
 			body: received.text ?? null,
 			conversationId: event.data.email_id,
-			attachments: [],
+			attachments: (event.data.attachments ?? []).map((attachment) => ({
+				id: attachment.id,
+				name: attachment.filename,
+				mediaType: attachment.content_type,
+			})),
 		});
 
 		return { accepted: true, channel: "email", result };
