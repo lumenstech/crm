@@ -15,6 +15,8 @@ import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
 import type { EnvironmentVariables } from "../config/env.validation";
 import { parseCrmEmailBatch } from "./email-ingest.contracts";
 import { EmailIngestService } from "./email-ingest.service";
+import { parseChannelRoutes, routeEmail } from "./channel-routes";
+import { InboundMessageService } from "./inbound-message.service";
 
 const MAX_BODY_BYTES = 512_000;
 const MAX_WEBHOOK_AGE_SECONDS = 300;
@@ -43,6 +45,7 @@ export class EmailIngestController {
 
 	constructor(
 		private readonly ingest: EmailIngestService,
+		private readonly inbound: InboundMessageService,
 		private readonly config: ConfigService<EnvironmentVariables, true>,
 	) {}
 
@@ -88,32 +91,58 @@ export class EmailIngestController {
 		const allowed = allowedSenders(
 			this.config.get("CRM_EMAIL_INGEST_ALLOWED_SENDERS", { infer: true }),
 		);
-		if (!sender || !allowed.has(sender)) {
-			this.logger.warn({
-				message: "Rejected CRM ingest email from unauthorized sender",
-				sender: sender ?? "unknown",
-				emailId: event.data.email_id,
-			});
-			return { accepted: true, ignored: true, reason: "sender_not_allowed" };
-		}
 
-		if (!received.text?.trim()) {
-			return { accepted: true, ignored: true, reason: "missing_text_body" };
-		}
+		// Preserve the existing structured automation path, but only for explicitly
+		// allowlisted senders. Ordinary inbound email never gains write authority.
+		if (sender && allowed.has(sender) && received.text?.trim()) {
+			try {
+				const batch = parseCrmEmailBatch(received.text);
+				const result = await this.ingest.process(batch);
 
-		const batch = parseCrmEmailBatch(received.text);
-		const result = await this.ingest.process(batch);
-
-		await sendReceiptIfConfigured(apiKey, this.config, sender, result).catch(
-			(error: unknown) => {
-				this.logger.error(
-					{ message: "CRM email ingest receipt failed", batchId: batch.batchId },
-					error instanceof Error ? error.stack : String(error),
+				await sendReceiptIfConfigured(apiKey, this.config, sender, result).catch(
+					(error: unknown) => {
+						this.logger.error(
+							{ message: "CRM email ingest receipt failed", batchId: batch.batchId },
+							error instanceof Error ? error.stack : String(error),
+						);
+					},
 				);
-			},
-		);
 
-		return { accepted: true, batchId: batch.batchId, result };
+				return { accepted: true, batchId: batch.batchId, result };
+			} catch {
+				// Not a structured COMP-CRM-INGEST-V1 payload. Treat it as ordinary,
+				// untrusted inbound email below rather than granting automation authority.
+			}
+		}
+
+		const routes = parseChannelRoutes(
+			this.config.get("CRM_CHANNEL_ROUTES_JSON", { infer: true }),
+		);
+		const recipients = received.to ?? event.data.to ?? [];
+		const routedRecipient = recipients
+			.map((value) => extractEmail(value))
+			.find((value): value is string => Boolean(value && routeEmail(routes, value)));
+		if (!routedRecipient) {
+			return { accepted: true, ignored: true, reason: "recipient_not_routed" };
+		}
+		const businessUnit = routeEmail(routes, routedRecipient);
+		if (!businessUnit) {
+			return { accepted: true, ignored: true, reason: "recipient_not_routed" };
+		}
+
+		const result = await this.inbound.process({
+			channel: "email",
+			externalMessageId: event.data.email_id,
+			businessUnit,
+			sender: sender ?? received.from ?? event.data.from ?? "unknown",
+			recipient: routedRecipient,
+			subject: received.subject ?? event.data.subject ?? null,
+			body: received.text ?? null,
+			conversationId: event.data.email_id,
+			attachments: [],
+		});
+
+		return { accepted: true, channel: "email", result };
 	}
 }
 
