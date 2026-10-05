@@ -137,6 +137,7 @@ export class WhatsappIngressController {
 						occurredAt: occurredAt(message.timestamp) ?? null,
 						conversationId: message.from,
 						attachments: messageAttachments(message),
+						identityVerified: true,
 					});
 					if ("recorded" in result && result.recorded) recorded += 1;
 					else if ("queuedForReview" in result && result.queuedForReview) queued += 1;
