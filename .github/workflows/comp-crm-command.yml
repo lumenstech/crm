@@ -1,0 +1,62 @@
+name: COMP CRM Command Bridge
+
+on:
+  push:
+    branches:
+      - crm-commands
+    paths:
+      - ".comp-crm/commands/*.json"
+
+concurrency:
+  group: comp-crm-command-bridge
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  execute:
+    name: Execute COMP CRM command
+    runs-on: [self-hosted, macOS, comp-crm-production]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout command branch
+        uses: actions/checkout@v5
+        with:
+          ref: crm-commands
+
+      - name: Resolve command file
+        id: command
+        shell: bash
+        run: |
+          set -euo pipefail
+          command_file="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" -- '.comp-crm/commands/*.json' | tail -n 1)"
+          if [ -z "$command_file" ]; then
+            echo "No COMP CRM command file found in commit $GITHUB_SHA"
+            exit 2
+          fi
+          echo "file=$command_file" >> "$GITHUB_OUTPUT"
+          echo "Executing COMP CRM command: $command_file"
+
+      - name: Execute through authenticated CRM service layer
+        shell: bash
+        env:
+          COMP_CRM_BASE_URL: http://127.0.0.1:3101
+        run: |
+          set -euo pipefail
+
+          plist="$HOME/Library/LaunchAgents/com.sequencenow.comp-ai-mcp.plist"
+          if [ ! -f "$plist" ]; then
+            echo "COMP CRM MCP launchd plist not found."
+            exit 3
+          fi
+
+          COMP_CRM_API_KEY="$(/usr/libexec/PlistBuddy -c 'Print :EnvironmentVariables:COMP_CRM_API_KEY' "$plist" 2>/dev/null || true)"
+          if [ -z "$COMP_CRM_API_KEY" ]; then
+            echo "COMP_CRM_API_KEY is not available from the existing production MCP service configuration."
+            exit 4
+          fi
+
+          export COMP_CRM_API_KEY
+          bun tools/comp-crm-command.ts "${{ steps.command.outputs.file }}"
