@@ -102,6 +102,26 @@ export class EnvironmentVariables {
 
 	@IsOptional()
 	@IsString()
+	CRM_CHANNEL_ROUTES_JSON?: string;
+
+	@IsOptional()
+	@IsString()
+	META_VERIFY_TOKEN?: string;
+
+	@IsOptional()
+	@IsString()
+	WHATSAPP_VERIFY_TOKEN?: string;
+
+	@IsOptional()
+	@IsString()
+	META_APP_SECRET?: string;
+
+	@IsOptional()
+	@IsString()
+	WHATSAPP_APP_SECRET?: string;
+
+	@IsOptional()
+	@IsString()
 	PASSWORD_RESET_FROM?: string;
 
 	@IsOptional()
