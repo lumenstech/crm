@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ActivityType, type Db, Prisma } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
@@ -21,6 +22,7 @@ export type InboundMessage = {
 		name?: string;
 		mediaType?: string;
 	}>;
+	identityVerified?: boolean;
 };
 
 type ContactCandidate = {
@@ -31,6 +33,7 @@ type ContactCandidate = {
 };
 
 const MAX_BODY_CHARS = 10_000;
+const MAX_MESSAGES_PER_SENDER_PER_HOUR = 60;
 
 @Injectable()
 export class InboundMessageService {
@@ -49,6 +52,11 @@ export class InboundMessageService {
 			return { accepted: false, reason: "business_unit_unavailable" as const };
 		}
 
+		const allowed = await this.checkRateLimit(input);
+		if (!allowed) {
+			return { accepted: false, reason: "rate_limited" as const };
+		}
+
 		const externalId = `${input.channel}:${input.externalMessageId}`;
 		const prior = await this.db.activity.findUnique({
 			where: { externalId },
@@ -64,6 +72,9 @@ export class InboundMessageService {
 		}
 
 		const matches = await this.contactMatches(input.channel, input.sender);
+		if (!input.identityVerified) {
+			return this.queueUnresolved(input, matches.length, "sender_identity_unverified");
+		}
 		if (matches.length !== 1) {
 			return this.queueUnresolved(input, matches.length);
 		}
@@ -167,6 +178,27 @@ export class InboundMessageService {
 			sourceRecordId: signal.sourceRecordId,
 			reason,
 		};
+	}
+
+	private async checkRateLimit(input: InboundMessage): Promise<boolean> {
+		const hourBucket = Math.floor(Date.now() / 3_600_000);
+		const key = `channel-ingress:${input.channel}:${input.sender.trim().toLowerCase()}:${hourBucket}`;
+		const id = createHash("sha256").update(key).digest("hex");
+		const row = await this.db.rateLimit.upsert({
+			where: { key },
+			create: {
+				id,
+				key,
+				count: 1,
+				lastRequest: BigInt(Date.now()),
+			},
+			update: {
+				count: { increment: 1 },
+				lastRequest: BigInt(Date.now()),
+			},
+			select: { count: true },
+		});
+		return row.count <= MAX_MESSAGES_PER_SENDER_PER_HOUR;
 	}
 
 	private async contactMatches(
