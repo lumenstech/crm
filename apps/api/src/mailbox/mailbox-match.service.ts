@@ -25,6 +25,27 @@ export type MatchResult = {
 	external: Participant[];
 };
 
+export type HistoricalMatchCandidate = {
+	contactId: string | null;
+	contactEmail: string | null;
+	companyId: string | null;
+	companyName: string | null;
+};
+
+export type HistoricalMatchResult =
+	| {
+			status: "resolved";
+			match: MatchResult;
+			candidates: HistoricalMatchCandidate[];
+			reason: null;
+	  }
+	| {
+			status: "unresolved" | "ambiguous";
+			match: null;
+			candidates: HistoricalMatchCandidate[];
+			reason: string;
+	  };
+
 export type MatchContext = {
 	ourAddresses: ReadonlySet<string>;
 	ourDomains: ReadonlySet<string>;
@@ -150,6 +171,122 @@ export class MailboxMatchService {
 		}
 
 		return this.create(external, domain, request);
+	}
+
+	async resolveHistorical(
+		participants: readonly Participant[],
+		context: MatchContext,
+	): Promise<HistoricalMatchResult> {
+		const external = externalParticipants(participants, {
+			ourDomains: context.ourDomains,
+			ourAddresses: context.ourAddresses,
+			suppressedDomains: context.suppressedDomains,
+			suppressedEmails: context.suppressedEmails,
+		});
+		if (external.length === 0) {
+			return {
+				status: "unresolved",
+				match: null,
+				candidates: [],
+				reason: "The message has no eligible external participant.",
+			};
+		}
+
+		const emails = [...new Set(external.map((person) => person.email))];
+		const domains = [
+			...new Set(
+				external
+					.map((person) => workDomain(person.email))
+					.filter((domain): domain is string => domain !== null),
+			),
+		];
+		const [contacts, companies] = await Promise.all([
+			this.db.contact.findMany({
+				where: { email: { in: emails }, archivedAt: null },
+				select: {
+					id: true,
+					email: true,
+					company: { select: { id: true, name: true, archivedAt: true } },
+				},
+			}),
+			this.db.company.findMany({
+				where: { domain: { in: domains }, archivedAt: null },
+				select: { id: true, name: true, domain: true },
+			}),
+		]);
+
+		const candidates = [
+			...contacts.map((contact) => ({
+				contactId: contact.id,
+				contactEmail: contact.email,
+				companyId: contact.company?.id ?? null,
+				companyName: contact.company?.name ?? null,
+			})),
+			...companies
+				.filter(
+					(company) =>
+						!contacts.some((contact) => contact.company?.id === company.id),
+				)
+				.map((company) => ({
+					contactId: null,
+					contactEmail: null,
+					companyId: company.id,
+					companyName: company.name,
+				})),
+		];
+
+		const contactCompanies = new Set(
+			contacts
+				.map((contact) => contact.company?.id)
+				.filter((id): id is string => Boolean(id)),
+		);
+		const companyIds = new Set([
+			...contactCompanies,
+			...companies.map((company) => company.id),
+		]);
+
+		if (
+			contacts.length === 1 &&
+			contactCompanies.size === 1 &&
+			companyIds.size === 1
+		) {
+			const contact = contacts[0];
+			const company = contact?.company;
+			if (contact && company) {
+				return {
+					status: "resolved",
+					match: {
+						companyId: company.id,
+						contactId: contact.id,
+						external,
+					},
+					candidates,
+					reason: null,
+				};
+			}
+		}
+
+		if (contacts.length > 1 || companyIds.size > 1) {
+			return {
+				status: "ambiguous",
+				match: null,
+				candidates,
+				reason:
+					"The external participants resolve to more than one canonical company or contact.",
+			};
+		}
+
+		return {
+			status: "unresolved",
+			match: null,
+			candidates,
+			reason:
+				contacts.length === 1
+					? "The matched contact has no active canonical company."
+					: companies.length === 1
+						? "A canonical company matches, but no exact active contact matches."
+						: "No exact active canonical contact or company matches the external participants.",
+		};
 	}
 
 	private async create(

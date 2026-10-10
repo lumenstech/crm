@@ -18,11 +18,17 @@ export {
 	SYNC_SCOPES,
 } from "@crm/auth";
 
-export const SYNC_SOURCES = ["calendar", "gmail", "outlook"] as const;
+export const SYNC_SOURCES = [
+	"calendar",
+	"gmail",
+	"outlook",
+	"purelymail",
+] as const;
 export type SyncSource = (typeof SYNC_SOURCES)[number];
 
 export const GOOGLE_SYNC_SOURCES = ["calendar", "gmail"] as const;
 export const MICROSOFT_SYNC_SOURCES = ["outlook"] as const;
+export const PURELYMAIL_SYNC_SOURCES = ["purelymail"] as const;
 
 export type GoogleSyncSource = (typeof GOOGLE_SYNC_SOURCES)[number];
 export type MicrosoftSyncSource = (typeof MICROSOFT_SYNC_SOURCES)[number];
@@ -41,10 +47,10 @@ export const SCOPE_FOR_SOURCE = {
 	calendar: CALENDAR_SCOPE,
 	gmail: GMAIL_SCOPE,
 	outlook: OUTLOOK_MAIL_SCOPE,
-} satisfies Record<SyncSource, string>;
+} satisfies Record<Exclude<SyncSource, "purelymail">, string>;
 
 export const PROVIDER_FOR_SOURCE = {
 	calendar: GOOGLE_PROVIDER_ID,
 	gmail: GOOGLE_PROVIDER_ID,
 	outlook: MICROSOFT_PROVIDER_ID,
-} satisfies Record<SyncSource, MailboxProviderId>;
+} satisfies Record<Exclude<SyncSource, "purelymail">, MailboxProviderId>;

@@ -72,7 +72,7 @@ export function TimelineEntry({
 		? entry.emailThread
 			? "via Gmail"
 			: "via Calendar"
-		: entry.createdBy.name;
+		: (entry.createdBy?.name ?? "COMP CRM automated ingress");
 
 	const headline = change
 		? `${dealStageLabel(change.from)} → ${dealStageLabel(change.to)}`

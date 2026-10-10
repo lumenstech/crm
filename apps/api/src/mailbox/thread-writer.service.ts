@@ -15,6 +15,7 @@ import type { SyncSource } from "./mailbox.constants";
 import {
 	MailboxMatchService,
 	type MatchContext,
+	type MatchResult,
 } from "./mailbox-match.service";
 import { snippetOf } from "./message-text";
 import type { Participant } from "./participants";
@@ -31,6 +32,37 @@ export type IncomingMessage = {
 	outlookMessageId?: string | null;
 	outlookWebLink?: string | null;
 };
+
+export type ThreadWriteRow = Pick<MailboxSync, "userId" | "autoCreate">;
+
+export type ThreadWriteOptions = {
+	mailbox: string;
+	origin: SyncSource;
+	providerThreadId?: string;
+	skipCommandIngest?: boolean;
+	match?: MatchResult;
+};
+
+export type ThreadWriteResult =
+	| {
+			status: "stored";
+			activityId: string;
+			companyId: string | null;
+			contactId: string | null;
+	  }
+	| {
+			status: "duplicate";
+			activityId: string | null;
+			companyId: string | null;
+			contactId: string | null;
+	  }
+	| {
+			status: "unresolved";
+			rfcMessageId: string;
+			companyId: null;
+			contactId: null;
+	  }
+	| { status: "ignored"; rfcMessageId: string };
 
 @Injectable()
 export class ThreadWriterService {
@@ -59,12 +91,27 @@ export class ThreadWriterService {
 	}
 
 	async store(
-		row: MailboxSync,
-		options: { mailbox: string; origin: SyncSource },
+		row: ThreadWriteRow,
+		options: ThreadWriteOptions,
 		parsed: IncomingMessage,
 		context: MatchContext,
 	): Promise<boolean> {
-		if (await this.emailIngest.handle(parsed, options.mailbox)) return false;
+		const result = await this.storeDetailed(row, options, parsed, context);
+		return result.status === "stored";
+	}
+
+	async storeDetailed(
+		row: ThreadWriteRow,
+		options: ThreadWriteOptions,
+		parsed: IncomingMessage,
+		context: MatchContext,
+	): Promise<ThreadWriteResult> {
+		if (
+			!options.skipCommandIngest &&
+			(await this.emailIngest.handle(parsed, options.mailbox))
+		) {
+			return { status: "ignored", rfcMessageId: parsed.rfcMessageId };
+		}
 
 		const existing = await this.db.emailMessage.findUnique({
 			where: { rfcMessageId: parsed.rfcMessageId },
@@ -79,7 +126,14 @@ export class ThreadWriterService {
 				},
 			},
 		});
-		if (existing?.thread.activity) return false;
+		if (existing?.thread.activity) {
+			return {
+				status: "duplicate",
+				activityId: existing.thread.activity.id,
+				companyId: existing.thread.companyId,
+				contactId: existing.thread.contactId,
+			};
+		}
 
 		const repair = existing !== null;
 		const participants = [parsed.from, ...parsed.recipients];
@@ -104,34 +158,45 @@ export class ThreadWriterService {
 				outbound ||
 				(await this.hasOutboundInThread(parsed.rootId, options.mailbox));
 
-			const match = await this.match.resolve(
-				{
-					participants,
-					allowCreate: row.autoCreate && repliedTo,
-					source: RecordSource.EMAIL,
-					ownerId: row.userId,
-				},
-				context,
-			);
+			const match =
+				options.match ??
+				(await this.match.resolve(
+					{
+						participants,
+						allowCreate: row.autoCreate && repliedTo,
+						source: RecordSource.EMAIL,
+						ownerId: row.userId,
+					},
+					context,
+				));
 
 			companyId = match.companyId;
 			contactId = match.contactId;
 
 			if (!companyId && !contactId) {
-				return false;
+				return {
+					status: "unresolved",
+					rfcMessageId: parsed.rfcMessageId,
+					companyId: null,
+					contactId: null,
+				};
 			}
 		}
 
 		let occurredAt: Date;
+		let activityId: string;
 
 		try {
-			occurredAt = await this.db.$transaction(async (tx) => {
+			const projection = await this.db.$transaction(async (tx) => {
 				const record = existing
 					? { id: existing.threadId }
 					: await tx.emailThread.upsert({
 							where: { rootMessageId: parsed.rootId },
 							create: {
 								rootMessageId: parsed.rootId,
+								provider: options.providerThreadId ? options.origin : null,
+								mailbox: options.providerThreadId ? options.mailbox : null,
+								providerThreadId: options.providerThreadId ?? null,
 								subject: parsed.subject,
 								companyId,
 								contactId,
@@ -139,7 +204,13 @@ export class ThreadWriterService {
 								lastMessageAt: parsed.sentAt,
 								messageCount: 0,
 							},
-							update: {},
+							update: options.providerThreadId
+								? {
+										provider: options.origin,
+										mailbox: options.mailbox,
+										providerThreadId: options.providerThreadId,
+									}
+								: {},
 							select: { id: true },
 						});
 
@@ -195,14 +266,28 @@ export class ThreadWriterService {
 					origin: options.origin,
 				});
 			});
+			occurredAt = projection.createdAt;
+			activityId = projection.id;
 		} catch (error) {
-			if (await this.storedElsewhere(error, parsed.rfcMessageId)) return false;
+			if (await this.storedElsewhere(error, parsed.rfcMessageId)) {
+				return {
+					status: "duplicate",
+					activityId: null,
+					companyId,
+					contactId,
+				};
+			}
 			throw error;
 		}
 
 		await this.touch({ companyId, contactId }, occurredAt, parsed.rfcMessageId);
 
-		return !repair;
+		return {
+			status: "stored",
+			activityId,
+			companyId,
+			contactId,
+		};
 	}
 
 	private async storedElsewhere(
@@ -268,7 +353,7 @@ export class ThreadWriterService {
 			contactId: string | null;
 			origin: SyncSource;
 		},
-	): Promise<Date> {
+	): Promise<{ id: string; createdAt: Date }> {
 		const activity = await tx.activity.upsert({
 			where: { emailThreadId },
 			create: {
@@ -286,9 +371,9 @@ export class ThreadWriterService {
 				body: summary.snippet,
 				occurredAt: summary.lastMessageAt,
 			},
-			select: { createdAt: true },
+			select: { id: true, createdAt: true },
 		});
 
-		return activity.createdAt;
+		return activity;
 	}
 }

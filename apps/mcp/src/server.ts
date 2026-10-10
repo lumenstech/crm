@@ -3,11 +3,16 @@ import type { CrmClient } from "./crmClient";
 import {
 	associateRecordWithBusinessUnitInput,
 	createBusinessUnitOpportunityInput,
+	finalizeOutreachInput,
+	historicalEmailImportInput,
 	ingestLeadsInput,
 	jsonObject,
+	listCompanyOutreachHistoryInput,
 	listRecordBusinessUnitsInput,
 	listRecordInteractionsInput,
+	preflightOutreachInput,
 	recordInteractionInput,
+	reserveOutreachInput,
 	type SignalPayloadValue,
 	searchCrmInput,
 } from "./schemas";
@@ -129,6 +134,71 @@ export function createCrmMcpServer(client: CrmClient): McpServer {
 		},
 		async (input) =>
 			result(await client.ingestLeads(ingestLeadsInput.parse(input))),
+	);
+
+	server.registerTool(
+		"preflight_outreach",
+		{
+			description:
+				"Resolve one canonical CRM company and determine whether outreach is allowed. This operation never sends email.",
+			inputSchema: preflightOutreachInput.shape,
+		},
+		async (input) =>
+			result(
+				await client.preflightOutreach(preflightOutreachInput.parse(input)),
+			),
+	);
+
+	server.registerTool(
+		"reserve_outreach",
+		{
+			description:
+				"Create an atomic CRM-backed outreach reservation before any sender is called.",
+			inputSchema: reserveOutreachInput.shape,
+		},
+		async (input) =>
+			result(await client.reserveOutreach(reserveOutreachInput.parse(input))),
+	);
+
+	server.registerTool(
+		"finalize_outreach",
+		{
+			description:
+				"Record an idempotent provider status for an existing outreach reservation.",
+			inputSchema: finalizeOutreachInput.shape,
+		},
+		async (input) =>
+			result(await client.finalizeOutreach(finalizeOutreachInput.parse(input))),
+	);
+
+	server.registerTool(
+		"import_historical_email",
+		{
+			description:
+				"Import one verified historical Gmail or Outlook message into canonical CRM mailbox history. Requires exact provider, message, thread, and RFC IDs plus a mailbox matching the authenticated CRM user. Never creates contacts or outreach ledger rows; unresolved and conflicting matches return for review.",
+			inputSchema: historicalEmailImportInput.shape,
+		},
+		async (input) =>
+			result(
+				await client.importHistoricalEmail(
+					historicalEmailImportInput.parse(input),
+				),
+			),
+	);
+
+	server.registerTool(
+		"list_company_outreach_history",
+		{
+			description:
+				"List durable outreach history for one canonical CRM company.",
+			inputSchema: listCompanyOutreachHistoryInput.shape,
+		},
+		async (input) =>
+			result(
+				await client.listCompanyOutreachHistory(
+					listCompanyOutreachHistoryInput.parse(input),
+				),
+			),
 	);
 
 	return server;

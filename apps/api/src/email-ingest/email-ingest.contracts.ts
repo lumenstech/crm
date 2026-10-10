@@ -26,6 +26,7 @@ export const crmEmailLead = z.object({
 
 export const crmEmailBatch = z.object({
 	version: z.literal(CRM_EMAIL_VERSION),
+	commandToken: z.string().trim().min(32).max(256).optional(),
 	mode: z.enum(["CHECK", "INGEST"]).default("INGEST"),
 	batchId: z.string().trim().min(1).max(160),
 	businessUnit: z.string().trim().min(1).max(96),
