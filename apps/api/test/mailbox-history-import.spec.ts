@@ -28,6 +28,7 @@ const roots = [
 	`<history-inbound-${suffix}@mail.test>`,
 	`<history-ambiguous-${suffix}@mail.test>`,
 	`<history-archived-${suffix}@mail.test>`,
+	`<history-provider-race-${suffix}@mail.test>`,
 ];
 
 const agent = {
@@ -226,6 +227,44 @@ describe("historical mailbox import", () => {
 		).toBe(0);
 	});
 
+	it("serializes concurrent reuse of one provider message ID", async () => {
+		const first = message({
+			providerMessageId: `provider-race-${suffix}`,
+			providerThreadId: `thread-race-${suffix}`,
+			rfcMessageId: `<rfc-race-a-${suffix}@mail.test>`,
+			rootMessageId: roots[4],
+		});
+		const second = message({
+			providerMessageId: first.providerMessageId,
+			providerThreadId: first.providerThreadId,
+			rfcMessageId: `<rfc-race-b-${suffix}@mail.test>`,
+			rootMessageId: first.rootMessageId,
+		});
+		const results = await Promise.all([
+			history.import(first, userId, mailbox),
+			history.import(second, userId, mailbox),
+		]);
+
+		expect(results.map((result) => result.status).sort()).toEqual([
+			"conflict",
+			"imported",
+		]);
+		expect(
+			await db.emailMessage.count({
+				where: {
+					rfcMessageId: {
+						in: [first.rfcMessageId, second.rfcMessageId],
+					},
+				},
+			}),
+		).toBe(1);
+		expect(
+			await db.emailThread.count({
+				where: { rootMessageId: first.rootMessageId },
+			}),
+		).toBe(1);
+	});
+
 	it("derives inbound direction from the authenticated mailbox", async () => {
 		const input = message({
 			providerMessageId: `provider-inbound-${suffix}`,
@@ -278,7 +317,7 @@ describe("historical mailbox import", () => {
 			rootMessageId: roots[3],
 			recipients: [
 				{ email: archivedEmail, name: "Archived Buyer", kind: "to" },
-		],
+			],
 		});
 		const result = await history.import(input, userId, mailbox);
 

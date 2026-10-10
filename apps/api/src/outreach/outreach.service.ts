@@ -950,7 +950,6 @@ export class OutreachService {
 			)
 			.digest("hex")}`;
 	}
-
 }
 
 function matchedIdentifiers(

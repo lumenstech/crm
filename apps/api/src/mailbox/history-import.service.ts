@@ -166,6 +166,17 @@ export class HistoricalEmailImportService {
 					reason: "The canonical thread writer ignored this message.",
 				});
 			}
+			if (stored.status === "conflict") {
+				return this.result(input, direction, originalSentAt, {
+					status: "conflict",
+					companyId: stored.companyId,
+					contactId: stored.contactId,
+					activityId: stored.activityId,
+					emailThreadId: null,
+					candidates: [],
+					reason: stored.reason,
+				});
+			}
 			const canonical = await this.db.emailMessage.findUnique({
 				where: { rfcMessageId: input.rfcMessageId },
 				select: {
@@ -243,8 +254,20 @@ export class HistoricalEmailImportService {
 			this.db.emailMessage.findFirst({
 				where:
 					input.source === "gmail"
-						? { gmailMessageId: input.providerMessageId }
-						: { outlookMessageId: input.providerMessageId },
+						? {
+								gmailMessageId: input.providerMessageId,
+								thread: {
+									provider: input.source,
+									mailbox: input.mailbox,
+								},
+							}
+						: {
+								outlookMessageId: input.providerMessageId,
+								thread: {
+									provider: input.source,
+									mailbox: input.mailbox,
+								},
+							},
 				select: {
 					rfcMessageId: true,
 					thread: {

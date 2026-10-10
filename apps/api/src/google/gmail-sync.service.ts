@@ -195,7 +195,10 @@ export class GmailSyncService {
 		if (ids.length === 0) return { written: 0, remaining: 0 };
 
 		const alreadyHave = await this.db.emailMessage.findMany({
-			where: { gmailMessageId: { in: [...ids] } },
+			where: {
+				gmailMessageId: { in: [...ids] },
+				thread: { provider: "gmail", mailbox },
+			},
 			select: { gmailMessageId: true },
 		});
 		const seen = new Set(
