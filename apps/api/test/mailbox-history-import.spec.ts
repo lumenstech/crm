@@ -16,6 +16,7 @@ import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "history-import-spec";
 const mailbox = `history-${suffix}@example.test`;
+const otherMailbox = `history-other-${suffix}@example.test`;
 const userId = `history-user-${suffix}`;
 const firstDomain = `history-a-${suffix}.test`;
 const secondDomain = `history-b-${suffix}.test`;
@@ -29,6 +30,7 @@ const roots = [
 	`<history-ambiguous-${suffix}@mail.test>`,
 	`<history-archived-${suffix}@mail.test>`,
 	`<history-provider-race-${suffix}@mail.test>`,
+	`<history-provider-mailbox-${suffix}@mail.test>`,
 ];
 
 const agent = {
@@ -263,6 +265,43 @@ describe("historical mailbox import", () => {
 				where: { rootMessageId: first.rootMessageId },
 			}),
 		).toBe(1);
+	});
+
+	it("rejects a provider thread scope change across mailboxes", async () => {
+		const first = message({
+			providerMessageId: `provider-mailbox-a-${suffix}`,
+			providerThreadId: `thread-mailbox-a-${suffix}`,
+			rfcMessageId: `<rfc-mailbox-a-${suffix}@mail.test>`,
+			rootMessageId: roots[5],
+		});
+		const imported = await history.import(first, userId, mailbox);
+		const second = message({
+			mailbox: otherMailbox,
+			providerMessageId: `provider-mailbox-b-${suffix}`,
+			providerThreadId: `thread-mailbox-b-${suffix}`,
+			rfcMessageId: `<rfc-mailbox-b-${suffix}@mail.test>`,
+			rootMessageId: roots[5],
+			from: { email: otherMailbox, name: "Other History User" },
+		});
+		const conflict = await history.import(second, userId, otherMailbox);
+
+		expect(imported.status).toBe("imported");
+		expect(conflict.status).toBe("conflict");
+		expect(
+			await db.emailMessage.count({
+				where: { rfcMessageId: second.rfcMessageId },
+			}),
+		).toBe(0);
+		expect(
+			await db.emailThread.findUnique({
+				where: { rootMessageId: roots[5] },
+				select: { provider: true, mailbox: true, providerThreadId: true },
+			}),
+		).toEqual({
+			provider: "gmail",
+			mailbox,
+			providerThreadId: first.providerThreadId,
+		});
 	});
 
 	it("derives inbound direction from the authenticated mailbox", async () => {

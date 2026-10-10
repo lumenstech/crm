@@ -226,7 +226,11 @@ export class OutlookSyncService {
 
 				const stored = await this.threads.store(
 					row,
-					{ mailbox, origin: "outlook" },
+					{
+						mailbox,
+						origin: "outlook",
+						providerThreadId: parsed.providerThreadId ?? undefined,
+					},
 					parsed,
 					context,
 				);
@@ -346,7 +350,11 @@ export class OutlookSyncService {
 
 				const stored = await this.threads.store(
 					row,
-					{ mailbox, origin: "outlook" },
+					{
+						mailbox,
+						origin: "outlook",
+						providerThreadId: parsed.providerThreadId ?? undefined,
+					},
 					parsed,
 					context,
 				);
@@ -430,6 +438,7 @@ export class OutlookSyncService {
 		return {
 			rfcMessageId: normaliseMessageId(internetMessageId),
 			rootId,
+			providerThreadId: message.conversationId ?? null,
 			subject: message.subject?.trim() || null,
 			from,
 			recipients: [...to, ...cc],

@@ -23,6 +23,7 @@ import type { Participant } from "./participants";
 export type IncomingMessage = {
 	rfcMessageId: string;
 	rootId: string;
+	providerThreadId?: string | null;
 	subject: string | null;
 	from: Participant;
 	recipients: { email: string; name: string | null; kind: "to" | "cc" }[];
@@ -197,16 +198,41 @@ export class ThreadWriterService {
 		try {
 			const projection = await this.db.$transaction(async (tx) => {
 				await this.lockProviderMessage(tx, options, parsed);
+				const existingRoot = existing
+					? null
+					: await tx.emailThread.findUnique({
+							where: { rootMessageId: parsed.rootId },
+							select: {
+								id: true,
+								provider: true,
+								mailbox: true,
+								providerThreadId: true,
+								companyId: true,
+								contactId: true,
+								activity: { select: { id: true } },
+							},
+						});
+				if (
+					existingRoot &&
+					options.providerThreadId &&
+					providerScopeChanged(existingRoot, options)
+				) {
+					return {
+						kind: "conflict" as const,
+						activityId: existingRoot.activity?.id ?? null,
+						companyId: existingRoot.companyId,
+						contactId: existingRoot.contactId,
+						reason:
+							"The provider thread identity is already linked to a different mailbox or provider thread.",
+					};
+				}
 				if (!repair) {
 					const providerMessage = providerMessageWhere(options, parsed);
 					if (providerMessage) {
 						const existingProviderMessage = await tx.emailMessage.findFirst({
 							where: {
 								...providerMessage,
-								thread: {
-									provider: options.origin,
-									mailbox: options.mailbox,
-								},
+								thread: providerMessageThreadWhere(options),
 							},
 							select: {
 								rfcMessageId: true,
@@ -244,29 +270,41 @@ export class ThreadWriterService {
 				}
 				const record = existing
 					? { id: existing.threadId }
-					: await tx.emailThread.upsert({
-							where: { rootMessageId: parsed.rootId },
-							create: {
-								rootMessageId: parsed.rootId,
-								provider: options.providerThreadId ? options.origin : null,
-								mailbox: options.providerThreadId ? options.mailbox : null,
-								providerThreadId: options.providerThreadId ?? null,
-								subject: parsed.subject,
-								companyId,
-								contactId,
-								firstMessageAt: parsed.sentAt,
-								lastMessageAt: parsed.sentAt,
-								messageCount: 0,
-							},
-							update: options.providerThreadId
-								? {
-										provider: options.origin,
-										mailbox: options.mailbox,
-										providerThreadId: options.providerThreadId,
-									}
-								: {},
-							select: { id: true },
-						});
+					: existingRoot
+						? { id: existingRoot.id }
+						: await tx.emailThread.upsert({
+								where: { rootMessageId: parsed.rootId },
+								create: {
+									rootMessageId: parsed.rootId,
+									provider: options.providerThreadId ? options.origin : null,
+									mailbox: options.providerThreadId ? options.mailbox : null,
+									providerThreadId: options.providerThreadId ?? null,
+									subject: parsed.subject,
+									companyId,
+									contactId,
+									firstMessageAt: parsed.sentAt,
+									lastMessageAt: parsed.sentAt,
+									messageCount: 0,
+								},
+								update: {},
+								select: { id: true },
+							});
+				if (
+					existingRoot &&
+					options.providerThreadId &&
+					(!existingRoot.provider ||
+						!existingRoot.mailbox ||
+						!existingRoot.providerThreadId)
+				) {
+					await tx.emailThread.update({
+						where: { id: existingRoot.id },
+						data: {
+							provider: options.origin,
+							mailbox: options.mailbox,
+							providerThreadId: options.providerThreadId,
+						},
+					});
+				}
 
 				if (!repair) {
 					await tx.emailMessage.create({
@@ -491,4 +529,37 @@ function providerMessageWhere(
 		return { outlookMessageId: parsed.outlookMessageId };
 	}
 	return null;
+}
+
+function providerMessageThreadWhere(
+	options: ThreadWriteOptions,
+): Prisma.EmailThreadWhereInput {
+	return {
+		OR: [
+			{ provider: options.origin, mailbox: options.mailbox },
+			{ provider: null, mailbox: null, providerThreadId: null },
+		],
+	};
+}
+
+function providerScopeChanged(
+	existing: {
+		provider: string | null;
+		mailbox: string | null;
+		providerThreadId: string | null;
+	},
+	options: ThreadWriteOptions,
+): boolean {
+	const hasIdentity =
+		existing.provider !== null ||
+		existing.mailbox !== null ||
+		existing.providerThreadId !== null;
+	if (!hasIdentity) return false;
+
+	return (
+		existing.provider !== options.origin ||
+		existing.mailbox !== options.mailbox ||
+		(existing.providerThreadId !== null &&
+			existing.providerThreadId !== options.providerThreadId)
+	);
 }
