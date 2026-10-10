@@ -111,6 +111,8 @@ const priorCanonicalMailboxContactOutput = z.object({
 	count: z.number().int().nonnegative(),
 	latestSentAt: z.string().nullable(),
 	contactIds: z.array(z.string()),
+	businessUnitKeys: z.array(z.string()),
+	unattributedCount: z.number().int().nonnegative(),
 });
 
 const outreachHistoryOutput = z.object({

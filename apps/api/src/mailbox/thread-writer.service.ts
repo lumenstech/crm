@@ -7,10 +7,15 @@ import {
 	Prisma as PrismaNamespace,
 	RecordSource,
 } from "@crm/db";
+import { jsonObject } from "@crm/db/json";
 import { Injectable, Logger } from "@nestjs/common";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
 import { MailboxEmailIngestService } from "../email-ingest/mailbox-email-ingest.service";
+import {
+	evidenceForSender,
+	sendingBusinessUnitEvidence,
+} from "./email-provenance";
 import type { SyncSource } from "./mailbox.constants";
 import {
 	MailboxMatchService,
@@ -356,6 +361,7 @@ export class ThreadWriterService {
 					companyId,
 					contactId,
 					origin: options.origin,
+					fromEmail: parsed.from.email,
 				});
 				return {
 					kind: repair ? ("repair" as const) : ("stored" as const),
@@ -489,8 +495,30 @@ export class ThreadWriterService {
 			companyId: string | null;
 			contactId: string | null;
 			origin: SyncSource;
+			fromEmail: string;
 		},
 	): Promise<{ id: string; occurredAt: Date }> {
+		const evidence = evidenceForSender(summary.fromEmail);
+		const current = await tx.activity.findUnique({
+			where: { emailThreadId },
+			select: { meta: true },
+		});
+		const existingEvidence = sendingBusinessUnitEvidence(current?.meta);
+		const activityMeta: Prisma.JsonObject = {
+			synced: true,
+			source: summary.origin,
+		};
+		if (evidence) activityMeta.sendingBusinessUnit = evidence;
+		const activityUpdate: Prisma.ActivityUpdateInput = {
+			body: summary.snippet,
+			occurredAt: summary.lastMessageAt,
+		};
+		if (evidence && !existingEvidence) {
+			activityUpdate.meta = {
+				...jsonObject(current?.meta ?? undefined),
+				sendingBusinessUnit: evidence,
+			};
+		}
 		const activity = await tx.activity.upsert({
 			where: { emailThreadId },
 			create: {
@@ -502,12 +530,9 @@ export class ThreadWriterService {
 				contactId: summary.contactId,
 				createdById: userId,
 				emailThreadId,
-				meta: { synced: true, source: summary.origin },
+				meta: activityMeta,
 			},
-			update: {
-				body: summary.snippet,
-				occurredAt: summary.lastMessageAt,
-			},
+			update: activityUpdate,
 			select: { id: true, occurredAt: true },
 		});
 

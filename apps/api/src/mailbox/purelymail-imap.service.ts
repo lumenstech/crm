@@ -12,6 +12,7 @@ import {
 	type EmailAddress,
 	simpleParser,
 } from "mailparser";
+import { z } from "zod";
 import { BusinessUnitsService } from "../business-units/business-units.service";
 import type { EnvironmentVariables } from "../config/env.validation";
 import { InjectDatabase } from "../database/database.constants";
@@ -324,9 +325,7 @@ export class PurelymailImapService
 async function discoverSentFolder(client: ImapFlow): Promise<string> {
 	const folders = await client.list();
 	const special = folders.find(
-		(folder) =>
-			typeof (folder as { specialUse?: string }).specialUse === "string" &&
-			(folder as { specialUse: string }).specialUse.toLowerCase() === "\\sent",
+		(folder) => folder.specialUse?.toLowerCase() === "\\sent",
 	);
 	if (special) return special.path;
 	const fallback = folders.find((folder) =>
@@ -419,10 +418,11 @@ function dateOf(value?: Date | string): Date {
 function parseCursor(value: string | null): { uid: number } | null {
 	if (!value) return null;
 	try {
-		const parsed = JSON.parse(value) as { uid?: unknown };
-		return typeof parsed.uid === "number" && Number.isInteger(parsed.uid)
-			? { uid: parsed.uid }
-			: null;
+		const parsed = z
+			.object({ uid: z.number().int() })
+			.strict()
+			.safeParse(JSON.parse(value));
+		return parsed.success ? parsed.data : null;
 	} catch {
 		return null;
 	}

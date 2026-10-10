@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
+import type { z } from "zod";
 import type { EnvironmentVariables } from "../config/env.validation";
 import {
 	executorAcceptInput,
@@ -36,7 +37,7 @@ export class ExecutorController {
 	@AllowAnonymous()
 	async accept(
 		@Headers("authorization") authorization: string | undefined,
-		@Body() body: unknown,
+		@Body() body: z.input<typeof executorAcceptInput>,
 	) {
 		this.authorize(authorization);
 		return this.executor.accept(executorAcceptInput.parse(body));
@@ -58,7 +59,7 @@ export class ExecutorController {
 	@AllowAnonymous()
 	async saveCheckpoint(
 		@Headers("authorization") authorization: string | undefined,
-		@Body() body: unknown,
+		@Body() body: z.input<typeof executorCheckpointInput>,
 	) {
 		this.authorize(authorization);
 		return this.executor.checkpoint(executorCheckpointInput.parse(body));
@@ -76,7 +77,7 @@ export class ExecutorController {
 	async result(
 		@Headers("authorization") authorization: string | undefined,
 		@Param("id") id: string,
-		@Body() body: unknown,
+		@Body() body: z.input<typeof executorResultInput>,
 	) {
 		this.authorize(authorization);
 		return this.executor.recordResult(id, executorResultInput.parse(body));
@@ -87,7 +88,7 @@ export class ExecutorController {
 	async resultEmail(
 		@Headers("authorization") authorization: string | undefined,
 		@Param("id") id: string,
-		@Body() body: unknown,
+		@Body() body: z.input<typeof executorResultEmailInput>,
 	) {
 		this.authorize(authorization);
 		return this.executor.recordResultEmail(
@@ -101,7 +102,7 @@ export class ExecutorController {
 	async failure(
 		@Headers("authorization") authorization: string | undefined,
 		@Param("id") id: string,
-		@Body() body: unknown,
+		@Body() body: z.input<typeof executorFailureInput>,
 	) {
 		this.authorize(authorization);
 		return this.executor.recordFailure(id, executorFailureInput.parse(body));
@@ -112,7 +113,7 @@ export class ExecutorController {
 	async resultDeliveryFailure(
 		@Headers("authorization") authorization: string | undefined,
 		@Param("id") id: string,
-		@Body() body: unknown,
+		@Body() body: z.input<typeof executorFailureInput>,
 	) {
 		this.authorize(authorization);
 		return this.executor.markResultDeliveryFailure(

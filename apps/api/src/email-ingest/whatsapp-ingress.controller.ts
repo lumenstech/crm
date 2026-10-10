@@ -187,12 +187,11 @@ async function readRawBody(
 	request: IncomingMessage,
 	limit: number,
 ): Promise<Buffer | null> {
-	const maybeBody = request as IncomingMessage & { body?: unknown };
-	if (Buffer.isBuffer(maybeBody.body)) {
-		return maybeBody.body.length <= limit ? maybeBody.body : null;
-	}
-	if (typeof maybeBody.body === "string") {
-		const body = Buffer.from(maybeBody.body);
+	const maybeBody = request as IncomingMessage & { body?: Buffer | string };
+	if (maybeBody.body !== undefined) {
+		const body = Buffer.isBuffer(maybeBody.body)
+			? maybeBody.body
+			: Buffer.from(maybeBody.body);
 		return body.length <= limit ? body : null;
 	}
 	return new Promise((resolve) => {

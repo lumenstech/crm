@@ -98,7 +98,12 @@ function row(overrides: Partial<TestRow> = {}): TestRow {
 
 type MailboxHistoryRow = {
 	sentAt: Date;
-	thread: { contactId: string | null };
+	rfcMessageId?: string;
+	fromEmail?: string;
+	thread: {
+		contactId: string | null;
+		activity?: { meta: Prisma.JsonValue | null } | null;
+	};
 };
 
 function serviceWithHistory(
@@ -116,12 +121,15 @@ function serviceWithHistory(
 	let claimed = false;
 	let created = 0;
 	const db = {
+		$transaction: async <T>(callback: (tx: typeof db) => Promise<T>) =>
+			callback(db),
+		$executeRaw: async () => 0,
 		businessUnit: {
 			findUnique: async ({
 				where,
 			}: {
 				where: { key?: string; id?: string };
-			}) => (where.key ? dataGear : dataGear),
+			}) => (where.key === otherUnit.key ? otherUnit : dataGear),
 		},
 		company: {
 			findUnique: async () => resolvedCompany,
@@ -268,6 +276,7 @@ describe("outreach safety", () => {
 			mailboxMessages: [
 				{
 					sentAt: new Date("2026-09-27T16:14:26.000Z"),
+					fromEmail: "sales@data-gear.com",
 					thread: { contactId: "old-contact" },
 				},
 			],
@@ -280,20 +289,33 @@ describe("outreach safety", () => {
 			count: 1,
 			latestSentAt: "2026-09-27T16:14:26.000Z",
 			contactIds: ["old-contact"],
+			businessUnitKeys: ["data-gear"],
+			unattributedCount: 0,
 		});
 		expect(getCreated()).toBe(0);
 	});
 
 	it("requires cross-business review for prior canonical mailbox contact", async () => {
-		const { service } = serviceWithHistory([], {
-			associations: [{ targetBusinessUnit: otherUnit }],
-			mailboxMessages: [
-				{
-					sentAt: new Date("2026-09-27T16:14:26.000Z"),
-					thread: { contactId: "old-contact" },
-				},
+		const { service } = serviceWithHistory(
+			[
+				row({
+					businessUnitId: otherUnit.id,
+					businessUnit: otherUnit,
+					providerMessageId: "prior-message",
+				}),
 			],
-		});
+			{
+				associations: [{ targetBusinessUnit: otherUnit }],
+				mailboxMessages: [
+					{
+						sentAt: new Date("2026-09-27T16:14:26.000Z"),
+						rfcMessageId: "prior-message",
+						fromEmail: "sales@data-gear.com",
+						thread: { contactId: "old-contact" },
+					},
+				],
+			},
+		);
 		const result = await service.preflight(input());
 
 		expect(result.status).toBe("CROSS_BUSINESS_CONTACT");

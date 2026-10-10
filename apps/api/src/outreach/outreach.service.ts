@@ -10,6 +10,10 @@ import { jsonObject } from "@crm/db/json";
 import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
+import {
+	sendingBusinessUnitEvidence,
+	verifiedSendingBusinessUnitKey,
+} from "../mailbox/email-provenance";
 import type {
 	FinalizeOutreachInput,
 	ListCompanyOutreachHistoryInput,
@@ -72,6 +76,18 @@ type PriorMailboxHistory = {
 	count: number;
 	latestSentAt: string | null;
 	contactIds: string[];
+	businessUnitKeys: string[];
+	unattributedCount: number;
+};
+
+type PriorMailboxMessage = {
+	sentAt: Date;
+	rfcMessageId: string;
+	fromEmail: string;
+	thread: {
+		contactId: string | null;
+		activity?: { meta: Prisma.JsonValue | null } | null;
+	};
 };
 
 @Injectable()
@@ -188,7 +204,14 @@ export class OutreachService {
 					},
 					select: {
 						sentAt: true,
-						thread: { select: { contactId: true } },
+						rfcMessageId: true,
+						fromEmail: true,
+						thread: {
+							select: {
+								contactId: true,
+								activity: { select: { meta: true } },
+							},
+						},
 					},
 					orderBy: { sentAt: "desc" },
 					take: 100,
@@ -220,17 +243,10 @@ export class OutreachService {
 			const otherBusinessActivity = history.some(
 				(row) => row.businessUnitId !== target.id,
 			);
-			const priorCanonicalMailboxContact = {
-				count: canonicalMailboxMessages.length,
-				latestSentAt: canonicalMailboxMessages[0]?.sentAt.toISOString() ?? null,
-				contactIds: [
-					...new Set(
-						canonicalMailboxMessages
-							.map((message) => message.thread.contactId)
-							.filter((contactId): contactId is string => contactId !== null),
-					),
-				],
-			};
+			const priorCanonicalMailboxContact = priorMailboxHistory(
+				canonicalMailboxMessages,
+				history,
+			);
 			const retryPermitted = Boolean(
 				originalReservation &&
 					originalReservation.companyId === resolution.company.id &&
@@ -315,10 +331,23 @@ export class OutreachService {
 			}
 
 			if (priorCanonicalMailboxContact.count > 0) {
-				const targetOwnsCompany = existingBusinessUnitAssociations.some(
-					(unit) => unit.id === target.id,
-				);
-				if (targetOwnsCompany) {
+				if (priorCanonicalMailboxContact.unattributedCount > 0) {
+					return this.decision(
+						"OUTBOUND_DISABLED",
+						resolution,
+						matchedIdentifiers(resolution, input),
+						existingBusinessUnitAssociations,
+						previousOutreach,
+						false,
+						"Canonical outbound mailbox history has no verified sending business unit.",
+						"Verify the sending business unit before any outreach.",
+						identity,
+						priorCanonicalMailboxContact,
+					);
+				}
+				if (
+					priorCanonicalMailboxContact.businessUnitKeys.includes(target.key)
+				) {
 					return this.decision(
 						"FOLLOW_UP_REQUIRED",
 						resolution,
@@ -326,13 +355,13 @@ export class OutreachService {
 						existingBusinessUnitAssociations,
 						previousOutreach,
 						false,
-						"Canonical outbound mailbox history shows prior contact with this company.",
-						"Review the existing canonical mailbox thread before any new outreach.",
+						"Verified canonical outbound history exists in the target business unit.",
+						"Use FOLLOW_UP with the existing canonical mailbox thread.",
 						identity,
 						priorCanonicalMailboxContact,
 					);
 				}
-				if (existingBusinessUnitAssociations.length > 0) {
+				if (priorCanonicalMailboxContact.businessUnitKeys.length > 0) {
 					return this.decision(
 						"CROSS_BUSINESS_CONTACT",
 						resolution,
@@ -341,7 +370,7 @@ export class OutreachService {
 						previousOutreach,
 						input.outreachMode === "NEW_OUTREACH" &&
 							input.approvedCrossBusinessContact,
-						"Canonical outbound mailbox history exists under another business unit.",
+						"Verified canonical outbound history exists under another business unit.",
 						input.approvedCrossBusinessContact
 							? null
 							: "Obtain explicit cross-business review before reserving new outreach.",
@@ -356,8 +385,8 @@ export class OutreachService {
 					existingBusinessUnitAssociations,
 					previousOutreach,
 					false,
-					"Canonical outbound mailbox history has no business-unit ownership.",
-					"Assign the canonical company to a business unit through the approved CRM workflow before outreach.",
+					"Canonical outbound mailbox history has no verified business unit.",
+					"Verify the sending business unit before any outreach.",
 					identity,
 					priorCanonicalMailboxContact,
 				);
@@ -459,55 +488,172 @@ export class OutreachService {
 		}
 
 		try {
-			const company = await this.db.company.findUnique({
-				where: { id: preflight.canonicalCompanyId ?? "" },
-				select: { id: true },
-			});
-			const target = await this.db.businessUnit.findUnique({
-				where: { key: input.targetBusinessUnit },
-				select: { id: true, key: true },
-			});
-			if (!company || !target)
+			const companyId = preflight.canonicalCompanyId;
+			if (!companyId) {
 				return this.disabled("CRM state changed before reservation.");
+			}
+			const result = await this.db.$transaction(async (tx) => {
+				await this.lockCompany(tx, companyId);
+				const company = await tx.company.findUnique({
+					where: { id: companyId },
+					select: { id: true },
+				});
+				const target = await tx.businessUnit.findUnique({
+					where: { key: input.targetBusinessUnit },
+					select: { id: true, key: true },
+				});
+				if (!company || !target) {
+					return {
+						kind: "blocked" as const,
+						status: "OUTBOUND_DISABLED" as const,
+						reason: "CRM state changed before reservation.",
+						requiredNextAction:
+							"Do not send. Restore CRM availability and rerun the reservation.",
+					};
+				}
 
-			const sender = preflight.senderIdentity ?? input.senderIdentity ?? "";
-			const reservationKey = `outreach:${target.key}:${company.id}:${input.outreachMode}:${idempotencyKey}`;
-			const row = await this.db.outreachLedger.create({
-				data: {
-					companyId: company.id,
-					contactId: input.contactId ?? null,
-					businessUnitId: target.id,
-					outreachMode: input.outreachMode,
-					campaignType: input.campaignType ?? null,
-					purpose: input.purpose ?? null,
-					senderIdentity: sender,
-					recipientEmail: input.recipientEmail?.toLowerCase() ?? "",
-					subject: input.subject,
-					status: OutreachStatus.RESERVED,
-					provider: input.provider,
-					reservationKey,
-					idempotencyKey,
-					metadata: input.metadata
-						? (input.metadata as Prisma.InputJsonValue)
-						: undefined,
-					notes: input.notes ?? null,
-				},
-				include: historyInclude,
+				if (input.outreachMode === "NEW_OUTREACH") {
+					const existing = await tx.outreachLedger.findFirst({
+						where: {
+							companyId,
+							businessUnitId: target.id,
+							outreachMode: OutreachMode.NEW_OUTREACH,
+							status: { in: [...INITIAL_HISTORY_STATUSES] },
+						},
+						include: historyInclude,
+						orderBy: { createdAt: "asc" },
+					});
+					if (existing) {
+						return { kind: "duplicate" as const, row: existing };
+					}
+
+					const [currentHistory, currentMessages] = await Promise.all([
+						tx.outreachLedger.findMany({
+							where: { companyId },
+							include: historyInclude,
+							orderBy: { createdAt: "asc" },
+						}),
+						tx.emailMessage.findMany({
+							where: {
+								direction: EmailDirection.OUTBOUND,
+								thread: { companyId },
+							},
+							select: {
+								sentAt: true,
+								rfcMessageId: true,
+								fromEmail: true,
+								thread: {
+									select: {
+										contactId: true,
+										activity: { select: { meta: true } },
+									},
+								},
+							},
+							orderBy: { sentAt: "desc" },
+						}),
+					]);
+					const mailboxHistory = priorMailboxHistory(
+						currentMessages,
+						currentHistory,
+					);
+					if (mailboxHistory.unattributedCount > 0) {
+						return {
+							kind: "blocked" as const,
+							status: "OUTBOUND_DISABLED" as const,
+							reason:
+								"Canonical outbound mailbox history has no verified sending business unit.",
+							requiredNextAction:
+								"Verify the sending business unit before any outreach.",
+						};
+					}
+					if (mailboxHistory.businessUnitKeys.includes(target.key)) {
+						return {
+							kind: "blocked" as const,
+							status: "FOLLOW_UP_REQUIRED" as const,
+							reason:
+								"Verified canonical outbound history exists in the target business unit.",
+							requiredNextAction:
+								"Use FOLLOW_UP with the existing canonical mailbox thread.",
+						};
+					}
+					if (
+						mailboxHistory.businessUnitKeys.length > 0 &&
+						!input.approvedCrossBusinessContact
+					) {
+						return {
+							kind: "blocked" as const,
+							status: "CROSS_BUSINESS_CONTACT" as const,
+							reason:
+								"Verified canonical outbound history exists under another business unit.",
+							requiredNextAction:
+								"Obtain explicit cross-business review before reserving new outreach.",
+						};
+					}
+				}
+
+				const sender = preflight.senderIdentity ?? input.senderIdentity ?? "";
+				const reservationKey = `outreach:${target.key}:${company.id}:${input.outreachMode}:${idempotencyKey}`;
+				const row = await tx.outreachLedger.create({
+					data: {
+						companyId: company.id,
+						contactId: input.contactId ?? null,
+						businessUnitId: target.id,
+						outreachMode: input.outreachMode,
+						campaignType: input.campaignType ?? null,
+						purpose: input.purpose ?? null,
+						senderIdentity: sender,
+						recipientEmail: input.recipientEmail?.toLowerCase() ?? "",
+						subject: input.subject,
+						status: OutreachStatus.RESERVED,
+						provider: input.provider,
+						reservationKey,
+						idempotencyKey,
+						metadata: input.metadata
+							? (input.metadata as Prisma.InputJsonValue)
+							: undefined,
+						notes: input.notes ?? null,
+					},
+					include: historyInclude,
+				});
+				return { kind: "created" as const, row };
 			});
+			if (result.kind === "blocked") {
+				return {
+					status: result.status,
+					reservationId: null,
+					reservationKey: null,
+					idempotencyKey,
+					canonicalCompanyId: preflight.canonicalCompanyId,
+					canonicalCompanyName: preflight.canonicalCompanyName,
+					senderIdentity: preflight.senderIdentity,
+					template: preflight.template,
+					duplicate: false,
+					reason: result.reason,
+					requiredNextAction: result.requiredNextAction,
+					reservation: null,
+				};
+			}
+			if (result.kind === "duplicate") {
+				return this.duplicate(
+					result.row,
+					idempotencyKey,
+					"A concurrent or existing reservation already claims this company.",
+				);
+			}
 			return {
 				status: "RESERVED" as const,
-				reservationId: row.id,
-				reservationKey: row.reservationKey,
+				reservationId: result.row.id,
+				reservationKey: result.row.reservationKey,
 				idempotencyKey,
-				canonicalCompanyId: row.companyId,
+				canonicalCompanyId: result.row.companyId,
 				canonicalCompanyName: preflight.canonicalCompanyName,
-				senderIdentity: row.senderIdentity,
+				senderIdentity: result.row.senderIdentity,
 				template: preflight.template,
 				duplicate: false,
 				reason: "Atomic outreach reservation created.",
 				requiredNextAction:
 					"Submit the approved payload, then finalize this reservation.",
-				reservation: this.serialize(row),
+				reservation: this.serialize(result.row),
 			};
 		} catch (error) {
 			if (
@@ -529,12 +675,13 @@ export class OutreachService {
 					include: historyInclude,
 					orderBy: { createdAt: "asc" },
 				});
-				if (existing)
+				if (existing) {
 					return this.duplicate(
 						existing,
 						idempotencyKey,
 						"A concurrent or existing reservation already claims this company.",
 					);
+				}
 			}
 			this.logger.error(
 				{ message: "Outreach reservation failed closed" },
@@ -559,70 +706,84 @@ export class OutreachService {
 	}
 
 	async finalize(input: FinalizeOutreachInput) {
-		const existing = await this.db.outreachLedger.findUnique({
-			where: { id: input.reservationId },
-			include: historyInclude,
-		});
-		if (!existing)
-			throw new ConflictException("The outreach reservation does not exist.");
-		if (
-			input.recipientEmail &&
-			input.recipientEmail.toLowerCase() !== existing.recipientEmail
-		) {
-			throw new ConflictException(
-				"The finalized recipient differs from the reserved recipient.",
-			);
-		}
-		if (
-			existing.providerMessageId &&
-			input.providerMessageId &&
-			existing.providerMessageId !== input.providerMessageId
-		) {
-			throw new ConflictException(
-				"The reservation already has a different provider message ID.",
-			);
-		}
-		if (isTerminal(existing.status) && existing.status !== input.status) {
-			throw new ConflictException(
-				"The reservation already has a terminal status.",
-			);
-		}
-
-		const now = new Date();
-		const data: Prisma.OutreachLedgerUpdateInput = {
-			status: input.status,
-			provider: input.provider ?? existing.provider,
-			providerMessageId: input.providerMessageId ?? existing.providerMessageId,
-			queuedAt: dateOrNow(
-				input.queuedAt,
-				input.status === "QUEUED" ? now : existing.queuedAt,
-			),
-			sentAt: dateOrNow(
-				input.sentAt,
-				input.status === "SENT" ? now : existing.sentAt,
-			),
-			deliveredAt: dateOrNow(
-				input.deliveredAt,
-				input.status === "DELIVERED" ? now : existing.deliveredAt,
-			),
-			bouncedAt: dateOrNow(
-				input.bouncedAt,
-				input.status === "BOUNCED" ? now : existing.bouncedAt,
-			),
-			failedAt: dateOrNow(
-				input.failedAt,
-				input.status === "FAILED" ? now : existing.failedAt,
-			),
-			errorReason: input.failureReason ?? existing.errorReason,
-			metadata: input.metadata
-				? (input.metadata as Prisma.InputJsonValue)
-				: (existing.metadata ?? undefined),
-		};
 		try {
-			const row = await this.db.outreachLedger.update({
-				where: { id: existing.id },
-				data,
-				include: historyInclude,
+			const row = await this.db.$transaction(async (tx) => {
+				const identity = await tx.outreachLedger.findUnique({
+					where: { id: input.reservationId },
+					select: { companyId: true },
+				});
+				if (!identity)
+					throw new ConflictException(
+						"The outreach reservation does not exist.",
+					);
+				await this.lockCompany(tx, identity.companyId);
+				const existing = await tx.outreachLedger.findUnique({
+					where: { id: input.reservationId },
+					include: historyInclude,
+				});
+				if (!existing)
+					throw new ConflictException(
+						"The outreach reservation does not exist.",
+					);
+				if (
+					input.recipientEmail &&
+					input.recipientEmail.toLowerCase() !== existing.recipientEmail
+				) {
+					throw new ConflictException(
+						"The finalized recipient differs from the reserved recipient.",
+					);
+				}
+				if (
+					existing.providerMessageId &&
+					input.providerMessageId &&
+					existing.providerMessageId !== input.providerMessageId
+				) {
+					throw new ConflictException(
+						"The reservation already has a different provider message ID.",
+					);
+				}
+				if (isTerminal(existing.status) && existing.status !== input.status) {
+					throw new ConflictException(
+						"The reservation already has a terminal status.",
+					);
+				}
+
+				const now = new Date();
+				const data: Prisma.OutreachLedgerUpdateInput = {
+					status: input.status,
+					provider: input.provider ?? existing.provider,
+					providerMessageId:
+						input.providerMessageId ?? existing.providerMessageId,
+					queuedAt: dateOrNow(
+						input.queuedAt,
+						input.status === "QUEUED" ? now : existing.queuedAt,
+					),
+					sentAt: dateOrNow(
+						input.sentAt,
+						input.status === "SENT" ? now : existing.sentAt,
+					),
+					deliveredAt: dateOrNow(
+						input.deliveredAt,
+						input.status === "DELIVERED" ? now : existing.deliveredAt,
+					),
+					bouncedAt: dateOrNow(
+						input.bouncedAt,
+						input.status === "BOUNCED" ? now : existing.bouncedAt,
+					),
+					failedAt: dateOrNow(
+						input.failedAt,
+						input.status === "FAILED" ? now : existing.failedAt,
+					),
+					errorReason: input.failureReason ?? existing.errorReason,
+					metadata: input.metadata
+						? (input.metadata as Prisma.InputJsonValue)
+						: (existing.metadata ?? undefined),
+				};
+				return tx.outreachLedger.update({
+					where: { id: existing.id },
+					data,
+					include: historyInclude,
+				});
 			});
 			return this.serialize(row);
 		} catch (error) {
@@ -635,7 +796,8 @@ export class OutreachService {
 					where: { providerMessageId: input.providerMessageId },
 					include: historyInclude,
 				});
-				if (duplicate?.id === existing.id) return this.serialize(duplicate);
+				if (duplicate?.id === input.reservationId)
+					return this.serialize(duplicate);
 			}
 			throw error;
 		}
@@ -665,6 +827,15 @@ export class OutreachService {
 			template: DATAGEAR_OUTBOUND_V1,
 			text: dataGearOutboundBody(body),
 		};
+	}
+
+	private async lockCompany(
+		tx: Prisma.TransactionClient,
+		companyId: string,
+	): Promise<void> {
+		await tx.$executeRaw(
+			Prisma.sql`SELECT "id" FROM "company" WHERE "id" = ${companyId} FOR UPDATE`,
+		);
 	}
 
 	private async findCompany(
@@ -795,7 +966,7 @@ export class OutreachService {
 			);
 		}
 		if (input.outreachMode === "FOLLOW_UP")
-			return status === "EXISTING_ACCOUNT";
+			return status === "EXISTING_ACCOUNT" || status === "FOLLOW_UP_REQUIRED";
 		return (
 			status === "BOUNCED_PREVIOUSLY" &&
 			retryPermitted &&
@@ -986,5 +1157,50 @@ function isTerminal(status: OutreachStatus): boolean {
 }
 
 function emptyMailboxHistory(): PriorMailboxHistory {
-	return { count: 0, latestSentAt: null, contactIds: [] as string[] };
+	return {
+		count: 0,
+		latestSentAt: null,
+		contactIds: [],
+		businessUnitKeys: [],
+		unattributedCount: 0,
+	};
+}
+
+function priorMailboxHistory(
+	messages: PriorMailboxMessage[],
+	history: {
+		providerMessageId: string | null;
+		businessUnit: { key: string };
+	}[],
+): PriorMailboxHistory {
+	const businessUnitKeys = new Set<string>();
+	let unattributedCount = 0;
+	for (const message of messages) {
+		const activityEvidence = sendingBusinessUnitEvidence(
+			message.thread.activity?.meta,
+		);
+		const ledgerEvidence = history.find(
+			(row) => row.providerMessageId === message.rfcMessageId,
+		)?.businessUnit.key;
+		const key =
+			activityEvidence?.key ??
+			ledgerEvidence ??
+			verifiedSendingBusinessUnitKey(message.fromEmail ?? "");
+		if (key) businessUnitKeys.add(key);
+		else unattributedCount += 1;
+	}
+
+	return {
+		count: messages.length,
+		latestSentAt: messages[0]?.sentAt.toISOString() ?? null,
+		contactIds: [
+			...new Set(
+				messages
+					.map((message) => message.thread.contactId)
+					.filter((contactId): contactId is string => contactId !== null),
+			),
+		],
+		businessUnitKeys: [...businessUnitKeys],
+		unattributedCount,
+	};
 }

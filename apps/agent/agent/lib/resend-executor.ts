@@ -2,6 +2,7 @@ import "@crm/env/load";
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import type { JsonObject, JsonValue } from "@crm/db/json";
 import {
 	executorEnvelope,
 	PARTWALL_COMPARISON_TASK,
@@ -52,6 +53,14 @@ const resendEmail = z.object({
 });
 
 const resendSend = z.object({ id: z.string() });
+const searchHit = z
+	.object({
+		kind: z.string().optional(),
+		id: z.string().optional(),
+	})
+	.catchall(z.json());
+
+type SearchHit = JsonObject & { kind?: string; id?: string };
 
 type ListedEmail = z.infer<typeof resendList>["data"][number];
 type Job = {
@@ -61,8 +70,8 @@ type Job = {
 	taskRef: string;
 	payloadHash: string;
 	sourceEmailId: string;
-	result: Record<string, unknown> | null;
-	receipt: Record<string, unknown> | null;
+	result: JsonObject | null;
+	receipt: JsonObject | null;
 	errorCode: string | null;
 	errorMessage: string | null;
 	resultEmailId: string | null;
@@ -182,7 +191,11 @@ async function runDurableJobsWithConfig(config: CoreConfig): Promise<{
 			completed += 1;
 		} catch (error) {
 			failed += 1;
-			await recordFailure(job.id, config, error);
+			await recordFailure(
+				job.id,
+				config,
+				error instanceof Error ? error.message : String(error),
+			);
 		}
 	}
 
@@ -420,16 +433,16 @@ export async function comparePartWall(config: CoreConfig) {
 	for (const candidate of candidates) {
 		const identifiers = [candidate.name, candidate.domain];
 		if (candidate.email) identifiers.push(candidate.email);
-		const hits = new Map<string, Record<string, unknown>>();
+		const hits = new Map<string, SearchHit>();
 		for (const identifier of identifiers) {
-			const response = await crmJson<{ hits: Record<string, unknown>[] }>(
+			const response = await crmJson<{ hits: JsonValue[] }>(
 				config,
 				`/rest/search?q=${encodeURIComponent(identifier)}`,
 			);
 			searchRequests += 1;
-			for (const hit of response.hits ?? []) {
-				const kind = typeof hit.kind === "string" ? hit.kind : "unknown";
-				const id = typeof hit.id === "string" ? hit.id : JSON.stringify(hit);
+			for (const hit of parseSearchHits(response.hits ?? [])) {
+				const kind = hit.kind ?? "unknown";
+				const id = hit.id ?? JSON.stringify(hit);
 				hits.set(`${kind}:${id}`, hit);
 			}
 		}
@@ -438,9 +451,9 @@ export async function comparePartWall(config: CoreConfig) {
 		const associations = [];
 		for (const hit of allHits) {
 			if (hit.kind !== "company" && hit.kind !== "contact") continue;
-			const recordId = typeof hit.id === "string" ? hit.id : null;
+			const recordId = hit.id ?? null;
 			if (!recordId) continue;
-			const association = await crmJson<unknown[]>(
+			const association = await crmJson<JsonValue[]>(
 				config,
 				`/rest/business-units/associations?recordType=${encodeURIComponent(String(hit.kind))}&recordId=${encodeURIComponent(recordId)}`,
 			);
@@ -474,7 +487,7 @@ export async function comparePartWall(config: CoreConfig) {
 		{ name: "Verkada", status: "tracked" },
 		{ name: "Arthur G. Russell", status: "hold" },
 	]) {
-		const response = await crmJson<{ hits: Record<string, unknown>[] }>(
+		const response = await crmJson<{ hits: JsonValue[] }>(
 			config,
 			`/rest/search?q=${encodeURIComponent(trackedRecord.name)}`,
 		);
@@ -482,7 +495,7 @@ export async function comparePartWall(config: CoreConfig) {
 		tracked.push({
 			name: trackedRecord.name,
 			status: trackedRecord.status,
-			hits: response.hits ?? [],
+			hits: parseSearchHits(response.hits ?? []),
 			preserved: true,
 		});
 	}
@@ -523,7 +536,7 @@ export async function comparePartWall(config: CoreConfig) {
 
 async function sendResultEmail(
 	jobId: string,
-	result: Record<string, unknown>,
+	result: JsonObject,
 	config: ResultNotificationConfig,
 ) {
 	const response = await resendFetch("/emails", config.apiKey, {
@@ -544,13 +557,13 @@ async function sendResultEmail(
 async function recordFailure(
 	jobId: string,
 	config: CoreConfig,
-	error: unknown,
+	error: Error | string,
 ) {
 	await internalFetch(`/internal/executor/jobs/${jobId}/failure`, config, {
 		method: "POST",
 		body: JSON.stringify({
 			code: "EXECUTOR_RUN_FAILED",
-			message: error instanceof Error ? error.message : String(error),
+			message: error instanceof Error ? error.message : error,
 		}),
 	});
 }
@@ -655,15 +668,22 @@ function cell(
 	return index === undefined ? "" : (row[index] ?? "");
 }
 
-function canonicalJson(value: unknown): string {
+function canonicalJson(value: JsonValue): string {
 	if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-	if (value && typeof value === "object") {
-		return `{${Object.entries(value as Record<string, unknown>)
+	if (value instanceof Object) {
+		return `{${Object.entries(value)
 			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+			.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry ?? null)}`)
 			.join(",")}}`;
 	}
-	return JSON.stringify(value);
+	return JSON.stringify(value) ?? "null";
+}
+
+function parseSearchHits(values: JsonValue[]): SearchHit[] {
+	return values.flatMap((value) => {
+		const parsed = searchHit.safeParse(value);
+		return parsed.success ? [parsed.data as SearchHit] : [];
+	});
 }
 
 function parseCsv(text: string): string[][] {

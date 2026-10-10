@@ -1,3 +1,4 @@
+import type { Prisma } from "@crm/db";
 import { Inject } from "@nestjs/common";
 import { TRPCError } from "@trpc/server";
 import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
@@ -88,8 +89,7 @@ function serializeJob(job: Awaited<ReturnType<ExecutorService["get"]>>) {
 	};
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
+function asRecord(value: Prisma.JsonValue | null): Prisma.JsonObject | null {
+	const parsed = z.record(z.string(), z.json()).safeParse(value);
+	return parsed.success ? parsed.data : null;
 }
