@@ -6,6 +6,7 @@ import {
 	OutreachStatus,
 	Prisma,
 } from "@crm/db";
+import { jsonObject } from "@crm/db/json";
 import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
@@ -509,7 +510,10 @@ export class OutreachService {
 				reservation: this.serialize(row),
 			};
 		} catch (error) {
-			if (this.isUniqueViolation(error)) {
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === "P2002"
+			) {
 				const existing = await this.db.outreachLedger.findFirst({
 					where: {
 						OR: [
@@ -622,7 +626,11 @@ export class OutreachService {
 			});
 			return this.serialize(row);
 		} catch (error) {
-			if (this.isUniqueViolation(error) && input.providerMessageId) {
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === "P2002" &&
+				input.providerMessageId
+			) {
 				const duplicate = await this.db.outreachLedger.findUnique({
 					where: { providerMessageId: input.providerMessageId },
 					include: historyInclude,
@@ -634,13 +642,14 @@ export class OutreachService {
 	}
 
 	async history(input: ListCompanyOutreachHistoryInput) {
+		const where: Prisma.OutreachLedgerWhereInput = {
+			companyId: input.companyId,
+		};
+		if (input.targetBusinessUnit) {
+			where.businessUnit = { key: input.targetBusinessUnit };
+		}
 		const rows = await this.db.outreachLedger.findMany({
-			where: {
-				companyId: input.companyId,
-				...(input.targetBusinessUnit
-					? { businessUnit: { key: input.targetBusinessUnit } }
-					: {}),
-			},
+			where,
 			include: historyInclude,
 			orderBy: { createdAt: "asc" },
 		});
@@ -881,7 +890,7 @@ export class OutreachService {
 		providerMessageId: string | null;
 		reservationKey: string;
 		idempotencyKey: string;
-		metadata: unknown;
+		metadata: Prisma.JsonValue | null;
 		notes: string | null;
 		errorReason: string | null;
 		createdAt: Date;
@@ -909,7 +918,7 @@ export class OutreachService {
 			providerMessageId: row.providerMessageId,
 			reservationKey: row.reservationKey,
 			idempotencyKey: row.idempotencyKey,
-			metadata: asObject(row.metadata),
+			metadata: jsonObject(row.metadata ?? undefined),
 			notes: row.notes,
 			errorReason: row.errorReason,
 			createdAt: row.createdAt.toISOString(),
@@ -942,12 +951,6 @@ export class OutreachService {
 			.digest("hex")}`;
 	}
 
-	private isUniqueViolation(error: unknown): boolean {
-		return (
-			error instanceof Prisma.PrismaClientKnownRequestError &&
-			error.code === "P2002"
-		);
-	}
 }
 
 function matchedIdentifiers(
@@ -962,12 +965,6 @@ function matchedIdentifiers(
 		identifiers.push({ kind: "companyId", value: input.companyId });
 	}
 	return identifiers;
-}
-
-function asObject(value: unknown): Record<string, unknown> | null {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
 }
 
 function dateOrNow(

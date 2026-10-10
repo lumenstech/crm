@@ -30,7 +30,38 @@ const company = {
 	businessUnit: null,
 };
 
-function row(overrides: Partial<Record<string, unknown>> = {}) {
+type TestRow = {
+	id: string;
+	companyId: string;
+	contactId: string | null;
+	businessUnitId: string;
+	businessUnit: typeof dataGear | typeof otherUnit;
+	company: { id: string; name: string };
+	outreachMode: OutreachMode;
+	campaignType: string | null;
+	purpose: string | null;
+	senderIdentity: string;
+	recipientEmail: string;
+	subject: string;
+	status: OutreachStatus;
+	provider: string;
+	providerMessageId: string | null;
+	reservationKey: string;
+	idempotencyKey: string;
+	metadata: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | null;
+	notes: string | null;
+	errorReason: string | null;
+	createdAt: Date;
+	reservedAt: Date;
+	queuedAt: Date | string | null;
+	sentAt: Date | string | null;
+	deliveredAt: Date | string | null;
+	bouncedAt: Date | string | null;
+	failedAt: Date | string | null;
+	updatedAt: Date;
+};
+
+function row(overrides: Partial<TestRow> = {}): TestRow {
 	const now = new Date("2026-10-07T12:00:00.000Z");
 	return {
 		id: "reservation-1",
@@ -118,7 +149,11 @@ function serviceWithHistory(
 				history.find((item) => item.idempotencyKey === where.idempotencyKey) ??
 				null,
 			findFirst: async () => history[0] ?? null,
-			create: async ({ data }: { data: Record<string, unknown> }) => {
+			create: async ({
+				data,
+			}: {
+				data: Prisma.OutreachLedgerUncheckedCreateInput;
+			}) => {
 				if (claimed) {
 					throw new Prisma.PrismaClientKnownRequestError("duplicate", {
 						code: "P2002",
@@ -151,25 +186,51 @@ function serviceWithHistory(
 	};
 }
 
-function input(overrides: Record<string, unknown> = {}) {
+type TestInput = {
+	companyId: string;
+	companyName: string;
+	domain: string;
+	contactId: string | null;
+	recipientEmail: string;
+	targetBusinessUnit: string;
+	outreachMode: "NEW_OUTREACH";
+	senderIdentity: string;
+	campaignType: string;
+	purpose: string;
+	subject: string;
+	provider: string;
+	idempotencyKey: string | null;
+	originalReservationId: string | null;
+	approvedCrossBusinessContact: boolean;
+	jobId: string | null;
+	metadata: Prisma.JsonObject | null;
+	notes: string | null;
+};
+
+const baseInput: TestInput = {
+	companyId: company.id,
+	companyName: company.name,
+	domain: company.domain,
+	contactId: null,
+	recipientEmail: "enterprise@lambda.ai",
+	targetBusinessUnit: "data-gear",
+	outreachMode: "NEW_OUTREACH" as const,
+	senderIdentity: DATAGEAR_SENDER,
+	campaignType: "test",
+	purpose: "safety test",
+	subject: "Test subject",
+	provider: "resend",
+	idempotencyKey: null,
+	originalReservationId: null,
+	approvedCrossBusinessContact: false,
+	jobId: null,
+	metadata: null,
+	notes: null,
+};
+
+function input(overrides: Partial<TestInput> = {}) {
 	return {
-		companyId: company.id,
-		companyName: company.name,
-		domain: company.domain,
-		contactId: null,
-		recipientEmail: "enterprise@lambda.ai",
-		targetBusinessUnit: "data-gear",
-		outreachMode: "NEW_OUTREACH" as const,
-		senderIdentity: DATAGEAR_SENDER,
-		campaignType: "test",
-		purpose: "safety test",
-		subject: "Test subject",
-		provider: "resend",
-		originalReservationId: null,
-		approvedCrossBusinessContact: false,
-		jobId: null,
-		metadata: null,
-		notes: null,
+		...baseInput,
 		...overrides,
 	};
 }
