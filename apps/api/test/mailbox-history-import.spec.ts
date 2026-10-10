@@ -19,12 +19,15 @@ const mailbox = `history-${suffix}@example.test`;
 const userId = `history-user-${suffix}`;
 const firstDomain = `history-a-${suffix}.test`;
 const secondDomain = `history-b-${suffix}.test`;
+const archivedDomain = `history-archived-${suffix}.test`;
 const firstEmail = `buyer@${firstDomain}`;
 const secondEmail = `buyer@${secondDomain}`;
+const archivedEmail = `buyer@${archivedDomain}`;
 const roots = [
 	`<history-outbound-${suffix}@mail.test>`,
 	`<history-inbound-${suffix}@mail.test>`,
 	`<history-ambiguous-${suffix}@mail.test>`,
+	`<history-archived-${suffix}@mail.test>`,
 ];
 
 const agent = {
@@ -67,10 +70,12 @@ function message(overrides: Partial<HistoricalEmailImportInput> = {}) {
 async function clean() {
 	await db.emailThread.deleteMany({ where: { rootMessageId: { in: roots } } });
 	await db.contact.deleteMany({
-		where: { email: { in: [firstEmail, secondEmail] } },
+		where: { email: { in: [firstEmail, secondEmail, archivedEmail] } },
 	});
 	await db.company.deleteMany({
-		where: { domain: { in: [firstDomain, secondDomain] } },
+		where: {
+			domain: { in: [firstDomain, secondDomain, archivedDomain] },
+		},
 	});
 	await db.user.deleteMany({ where: { id: userId } });
 }
@@ -107,6 +112,22 @@ beforeAll(async () => {
 			companyId: secondCompany.id,
 		},
 	});
+	const archivedCompany = await db.company.create({
+		data: {
+			name: "Archived Company",
+			domain: archivedDomain,
+			archivedAt: new Date("2026-01-01T00:00:00.000Z"),
+		},
+		select: { id: true },
+	});
+	await db.contact.create({
+		data: {
+			firstName: "Archived",
+			lastName: "Buyer",
+			email: archivedEmail,
+			companyId: archivedCompany.id,
+		},
+	});
 });
 
 afterAll(clean);
@@ -121,6 +142,22 @@ describe("historical mailbox import", () => {
 		expect(imported.companyId).toBe(firstCompanyId);
 		expect(imported.contactId).toBe(firstContactId);
 		expect(imported.originalSentAt).toBe("2026-09-27T16:14:26.000Z");
+		expect(
+			(
+				await db.company.findUnique({
+					where: { id: firstCompanyId },
+					select: { lastActivityAt: true },
+				})
+			)?.lastActivityAt?.toISOString(),
+		).toBe(input.sentAt);
+		expect(
+			(
+				await db.contact.findUnique({
+					where: { id: firstContactId },
+					select: { lastActivityAt: true },
+				})
+			)?.lastActivityAt?.toISOString(),
+		).toBe(input.sentAt);
 
 		const stored = await db.emailMessage.findUnique({
 			where: { rfcMessageId: input.rfcMessageId },
@@ -153,6 +190,40 @@ describe("historical mailbox import", () => {
 				where: { rfcMessageId: input.rfcMessageId },
 			}),
 		).toBe(1);
+	});
+
+	it("allows distinct messages in the same provider thread", async () => {
+		const input = message({
+			providerMessageId: `provider-reply-${suffix}`,
+			rfcMessageId: `<rfc-reply-${suffix}@mail.test>`,
+			sentAt: "2026-09-27T17:14:26.000Z",
+			body: "Historical reply body",
+		});
+		const imported = await history.import(input, userId, mailbox);
+
+		expect(imported.status).toBe("imported");
+		expect(imported.emailThreadId).toBeTruthy();
+		expect(
+			await db.emailMessage.count({
+				where: { threadId: imported.emailThreadId ?? undefined },
+			}),
+		).toBe(2);
+	});
+
+	it("blocks a provider thread reused by a different canonical thread", async () => {
+		const input = message({
+			providerMessageId: `provider-cross-thread-${suffix}`,
+			rfcMessageId: `<rfc-cross-thread-${suffix}@mail.test>`,
+			rootMessageId: `<history-cross-thread-${suffix}@mail.test>`,
+		});
+		const result = await history.import(input, userId, mailbox);
+
+		expect(result.status).toBe("conflict");
+		expect(
+			await db.emailMessage.count({
+				where: { rfcMessageId: input.rfcMessageId },
+			}),
+		).toBe(0);
 	});
 
 	it("derives inbound direction from the authenticated mailbox", async () => {
@@ -192,6 +263,26 @@ describe("historical mailbox import", () => {
 
 		expect(result.status).toBe("ambiguous");
 		expect(result.candidates).toHaveLength(2);
+		expect(
+			await db.emailMessage.count({
+				where: { rfcMessageId: input.rfcMessageId },
+			}),
+		).toBe(0);
+	});
+
+	it("does not import through a contact on an archived company", async () => {
+		const input = message({
+			providerMessageId: `provider-archived-${suffix}`,
+			providerThreadId: `thread-archived-${suffix}`,
+			rfcMessageId: `<rfc-archived-${suffix}@mail.test>`,
+			rootMessageId: roots[3],
+			recipients: [
+				{ email: archivedEmail, name: "Archived Buyer", kind: "to" },
+		],
+		});
+		const result = await history.import(input, userId, mailbox);
+
+		expect(result.status).toBe("unresolved");
 		expect(
 			await db.emailMessage.count({
 				where: { rfcMessageId: input.rfcMessageId },

@@ -202,7 +202,11 @@ export class MailboxMatchService {
 		];
 		const [contacts, companies] = await Promise.all([
 			this.db.contact.findMany({
-				where: { email: { in: emails }, archivedAt: null },
+				where: {
+					email: { in: emails },
+					archivedAt: null,
+					company: { archivedAt: null },
+				},
 				select: {
 					id: true,
 					email: true,

@@ -266,7 +266,7 @@ export class ThreadWriterService {
 					origin: options.origin,
 				});
 			});
-			occurredAt = projection.createdAt;
+			occurredAt = projection.occurredAt;
 			activityId = projection.id;
 		} catch (error) {
 			if (await this.storedElsewhere(error, parsed.rfcMessageId)) {
@@ -283,7 +283,7 @@ export class ThreadWriterService {
 		await this.touch({ companyId, contactId }, occurredAt, parsed.rfcMessageId);
 
 		return {
-			status: "stored",
+			status: repair ? "duplicate" : "stored",
 			activityId,
 			companyId,
 			contactId,
@@ -353,7 +353,7 @@ export class ThreadWriterService {
 			contactId: string | null;
 			origin: SyncSource;
 		},
-	): Promise<{ id: string; createdAt: Date }> {
+	): Promise<{ id: string; occurredAt: Date }> {
 		const activity = await tx.activity.upsert({
 			where: { emailThreadId },
 			create: {
@@ -371,9 +371,12 @@ export class ThreadWriterService {
 				body: summary.snippet,
 				occurredAt: summary.lastMessageAt,
 			},
-			select: { id: true, createdAt: true },
+			select: { id: true, occurredAt: true },
 		});
 
-		return activity;
+		return {
+			id: activity.id,
+			occurredAt: activity.occurredAt ?? summary.lastMessageAt,
+		};
 	}
 }

@@ -305,6 +305,9 @@ export class HistoricalEmailImportService {
 			};
 		}
 		if (byProviderThread) {
+			if (byProviderThread.rootMessageId === input.rootMessageId) {
+				return { status: "new" as const };
+			}
 			return {
 				status: "conflict" as const,
 				thread: byProviderThread,
