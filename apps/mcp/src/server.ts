@@ -175,7 +175,7 @@ export function createCrmMcpServer(client: CrmClient): McpServer {
 		"import_historical_email",
 		{
 			description:
-				"Import one verified historical Gmail or Outlook message into canonical CRM mailbox history. Requires exact provider, message, thread, and RFC IDs plus a mailbox matching the authenticated CRM user. Never creates contacts or outreach ledger rows; unresolved and conflicting matches return for review.",
+				"Import one verified historical Gmail, Outlook, or Purelymail message into canonical CRM mailbox history. Requires exact source, message, thread, and RFC identities plus a strictly bound mailbox matching the authenticated CRM user. Purelymail identities must carry immutable IMAP folder/UIDVALIDITY/UID evidence or verified RFC evidence. Never creates contacts or outreach ledger rows; unresolved and conflicting matches return for review.",
 			inputSchema: historicalEmailImportInput.shape,
 		},
 		async (input) =>

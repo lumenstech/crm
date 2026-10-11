@@ -1,6 +1,10 @@
 import { z } from "zod";
+import {
+	isPurelymailProviderMessageId,
+	isPurelymailProviderThreadId,
+} from "./purelymail-identity";
 
-export const historicalEmailSource = z.enum(["gmail", "outlook"]);
+export const historicalEmailSource = z.enum(["gmail", "outlook", "purelymail"]);
 
 const participant = z
 	.object({
@@ -36,7 +40,33 @@ export const historicalEmailImportInput = z
 		sentAt: z.iso.datetime({ offset: true }),
 		outlookWebLink: z.url().max(2_000).nullable().optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((input, ctx) => {
+		if (input.source !== "purelymail") return;
+		if (
+			!isPurelymailProviderMessageId(input.providerMessageId, {
+				mailbox: input.mailbox,
+				rfcMessageId: input.rfcMessageId,
+			})
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["providerMessageId"],
+				message:
+					"Purelymail providerMessageId must contain immutable IMAP UIDVALIDITY+UID/folder identity or verified RFC evidence.",
+			});
+		}
+		if (
+			!isPurelymailProviderThreadId(input.providerThreadId, input.rootMessageId)
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["providerThreadId"],
+				message:
+					"Purelymail providerThreadId must be derived from the verified root Message-ID.",
+			});
+		}
+	});
 
 export const historicalEmailMatchCandidate = z.object({
 	contactId: z.string().nullable(),
