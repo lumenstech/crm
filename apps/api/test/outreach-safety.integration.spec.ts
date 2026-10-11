@@ -61,7 +61,12 @@ async function createCompany(
 
 async function createOutboundHistory(
 	companyId: string,
-	options: { evidenceKey?: string; fromEmail?: string; suffix: string },
+	options: {
+		evidenceKey?: string;
+		extraFromEmail?: string;
+		fromEmail?: string;
+		suffix: string;
+	},
 ) {
 	const sentAt = new Date("2026-09-27T16:14:26.000Z");
 	const evidence = options.evidenceKey
@@ -71,7 +76,7 @@ async function createOutboundHistory(
 				immutable: true,
 			}
 		: undefined;
-	return db.emailThread.create({
+	const thread = await db.emailThread.create({
 		data: {
 			rootMessageId: `<history-${options.suffix}@example.test>`,
 			provider: "gmail",
@@ -106,6 +111,22 @@ async function createOutboundHistory(
 		},
 		select: { id: true },
 	});
+	if (options.extraFromEmail) {
+		await db.emailMessage.create({
+			data: {
+				threadId: thread.id,
+				rfcMessageId: `<message-${options.suffix}-extra@example.test>`,
+				direction: EmailDirection.OUTBOUND,
+				fromEmail: options.extraFromEmail,
+				recipients: [{ email: "buyer@example.test", kind: "to" }],
+				subject: "Historical outbound message",
+				snippet: "Historical body",
+				body: "Historical body",
+				sentAt: new Date("2026-09-27T16:15:26.000Z"),
+			},
+		});
+	}
+	return thread;
 }
 
 async function clean() {
@@ -201,6 +222,28 @@ describe("outreach history safety against the isolated database", () => {
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
+		expect(result.priorCanonicalMailboxContact.unattributedCount).toBe(1);
+	});
+
+	it("fails closed for a mixed-sender thread", async () => {
+		const company = await createCompany(
+			"History Safety Mixed Sender",
+			`history-safety-${suffix}-mixed.test`,
+			otherUnitId,
+		);
+		await createOutboundHistory(company.id, {
+			extraFromEmail: "legacy@unknown.example",
+			evidenceKey: dataGearKey,
+			suffix: `${suffix}-mixed`,
+		});
+
+		const result = await service.preflight(input(company));
+
+		expect(result.status).toBe("OUTBOUND_DISABLED");
+		expect(result.priorCanonicalMailboxContact.count).toBe(2);
+		expect(result.priorCanonicalMailboxContact.businessUnitKeys).toEqual([
+			dataGearKey,
+		]);
 		expect(result.priorCanonicalMailboxContact.unattributedCount).toBe(1);
 	});
 

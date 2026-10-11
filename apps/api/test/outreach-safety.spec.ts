@@ -295,7 +295,7 @@ describe("outreach safety", () => {
 		expect(getCreated()).toBe(0);
 	});
 
-	it("requires cross-business review for prior canonical mailbox contact", async () => {
+	it("fails closed when legacy ledger ownership conflicts with the sender", async () => {
 		const { service } = serviceWithHistory(
 			[
 				row({
@@ -318,9 +318,11 @@ describe("outreach safety", () => {
 		);
 		const result = await service.preflight(input());
 
-		expect(result.status).toBe("CROSS_BUSINESS_CONTACT");
+		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
 		expect(result.priorCanonicalMailboxContact.count).toBe(1);
+		expect(result.priorCanonicalMailboxContact.businessUnitKeys).toEqual([]);
+		expect(result.priorCanonicalMailboxContact.unattributedCount).toBe(1);
 	});
 
 	it("fails closed when prior canonical mailbox contact has no unit owner", async () => {

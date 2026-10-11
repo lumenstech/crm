@@ -19,12 +19,14 @@ export type SendingBusinessUnitEvidence = z.infer<
 	typeof sendingBusinessUnitEvidenceSchema
 >;
 
-export function verifiedSendingBusinessUnitKey(email: string): string | null {
-	return email.toLowerCase() === "sales@data-gear.com" ? "data-gear" : null;
+export function verifiedSendingBusinessUnitKey(
+	email: string | null | undefined,
+): string | null {
+	return email?.toLowerCase() === "sales@data-gear.com" ? "data-gear" : null;
 }
 
 export function evidenceForSender(
-	email: string,
+	email: string | null | undefined,
 ): SendingBusinessUnitEvidence | null {
 	const key = verifiedSendingBusinessUnitKey(email);
 	return key ? { key, source: "verified-sender", immutable: true } : null;

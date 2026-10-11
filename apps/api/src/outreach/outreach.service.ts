@@ -1176,18 +1176,25 @@ function priorMailboxHistory(
 	const businessUnitKeys = new Set<string>();
 	let unattributedCount = 0;
 	for (const message of messages) {
+		const senderEvidence = verifiedSendingBusinessUnitKey(message.fromEmail);
 		const activityEvidence = sendingBusinessUnitEvidence(
 			message.thread.activity?.meta,
 		);
 		const ledgerEvidence = history.find(
 			(row) => row.providerMessageId === message.rfcMessageId,
 		)?.businessUnit.key;
-		const key =
-			activityEvidence?.key ??
-			ledgerEvidence ??
-			verifiedSendingBusinessUnitKey(message.fromEmail ?? "");
-		if (key) businessUnitKeys.add(key);
-		else unattributedCount += 1;
+		const hasConflictingEvidence =
+			(senderEvidence !== null &&
+				activityEvidence !== null &&
+				activityEvidence.key !== senderEvidence) ||
+			(senderEvidence !== null &&
+				ledgerEvidence !== undefined &&
+				ledgerEvidence !== senderEvidence);
+		if (senderEvidence === null || hasConflictingEvidence) {
+			unattributedCount += 1;
+			continue;
+		}
+		businessUnitKeys.add(senderEvidence);
 	}
 
 	return {
