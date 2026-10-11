@@ -1,5 +1,6 @@
 import type { JsonValue } from "@crm/db/json";
 import { z } from "zod";
+import { parseVerifiedSenderBusinessUnits } from "../config/mailbox-identity";
 
 const sendingBusinessUnitEvidenceSchema = z
 	.object({
@@ -22,7 +23,13 @@ export type SendingBusinessUnitEvidence = z.infer<
 export function verifiedSendingBusinessUnitKey(
 	email: string | null | undefined,
 ): string | null {
-	return email?.toLowerCase() === "sales@data-gear.com" ? "data-gear" : null;
+	if (!email) return null;
+	const normalized = email.trim().toLowerCase();
+	return (
+		parseVerifiedSenderBusinessUnits(
+			process.env.CRM_VERIFIED_SENDER_BUSINESS_UNITS_JSON,
+		).find((row) => row.email === normalized)?.businessUnit ?? null
+	);
 }
 
 export function evidenceForSender(

@@ -4,6 +4,10 @@ import {
 	ForbiddenException,
 	Injectable,
 } from "@nestjs/common";
+import {
+	isHistoricalMailboxAuthorized,
+	parseHistoricalMailboxBindings,
+} from "../config/mailbox-identity";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	type HistoricalEmailImportInput,
@@ -28,10 +32,20 @@ export class HistoricalEmailImportService {
 		userId: string,
 		userEmail: string,
 	): Promise<HistoricalEmailImportOutput> {
-		const mailbox = userEmail.toLowerCase();
-		if (input.mailbox !== mailbox) {
+		const mailbox = input.mailbox.toLowerCase();
+		const bindings = parseHistoricalMailboxBindings(
+			process.env.CRM_HISTORICAL_MAILBOX_BINDINGS_JSON,
+		);
+		if (
+			!isHistoricalMailboxAuthorized(bindings, {
+				userId,
+				userEmail,
+				source: input.source,
+				mailbox,
+			})
+		) {
 			throw new ForbiddenException(
-				"The historical mailbox must match the authenticated CRM user.",
+				"The historical mailbox is not authorized for the authenticated CRM user.",
 			);
 		}
 

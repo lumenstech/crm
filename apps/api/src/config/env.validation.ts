@@ -10,6 +10,10 @@ import {
 	MinLength,
 	validateSync,
 } from "class-validator";
+import {
+	parseHistoricalMailboxBindings,
+	parseVerifiedSenderBusinessUnits,
+} from "./mailbox-identity";
 
 export enum NodeEnv {
 	Development = "development",
@@ -107,6 +111,14 @@ export class EnvironmentVariables {
 	@IsOptional()
 	@IsString()
 	CRM_CHANNEL_ROUTES_JSON?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_HISTORICAL_MAILBOX_BINDINGS_JSON?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_VERIFIED_SENDER_BUSINESS_UNITS_JSON?: string;
 
 	@IsOptional()
 	@IsString()
@@ -214,6 +226,11 @@ export function validateEnv(config: RawEnvironment): EnvironmentVariables {
 			`Invalid environment configuration:\n  - ${details}\n\nSee .env.example at the root of the repo.`,
 		);
 	}
+
+	parseHistoricalMailboxBindings(config.CRM_HISTORICAL_MAILBOX_BINDINGS_JSON);
+	parseVerifiedSenderBusinessUnits(
+		config.CRM_VERIFIED_SENDER_BUSINESS_UNITS_JSON,
+	);
 
 	return validated;
 }
