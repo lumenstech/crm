@@ -88,9 +88,41 @@ try {
 		`INSERT INTO "install" ("id", "uuid", "version", "updatedAt") VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT ("id") DO NOTHING`,
 		["install", randomUUID(), "unknown"],
 	);
+	for (const [key, name, description] of [
+		[
+			"516labs",
+			"516 Labs",
+			"Concrete testing and laboratory services outreach.",
+		],
+		[
+			"partwall",
+			"PartWall",
+			"Trade show booths, branded displays, walls, and fabrication.",
+		],
+		[
+			"lumens-technology",
+			"Lumens Technology",
+			"MEP, electrical, controls, elevators, network, and systems integration.",
+		],
+		[
+			"data-gear",
+			"Data-Gear",
+			"GPU servers, data center hardware, infrastructure, and related services.",
+		],
+		[
+			"energybms",
+			"EnergyBMS",
+			"EnergyBMS building energy management, controls, metering, optimization, and LL97-related opportunities.",
+		],
+	] as const) {
+		await client.query(
+			`INSERT INTO "business_unit" ("id", "key", "name", "description", "enabled", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT ("key") DO UPDATE SET "name" = EXCLUDED."name", "description" = EXCLUDED."description", "enabled" = true, "updatedAt" = CURRENT_TIMESTAMP`,
+			[randomUUID(), key, name, description],
+		);
+	}
 
 	console.log(
-		`Fresh CI bootstrap applied the current schema and install row to ${databaseName}; migration deploy is validated separately.`,
+		`Fresh CI bootstrap applied the current schema, install row, and business units to ${databaseName}; migration deploy is validated separately.`,
 	);
 } finally {
 	await client.end();
