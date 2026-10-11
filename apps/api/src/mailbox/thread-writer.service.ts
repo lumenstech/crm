@@ -36,6 +36,7 @@ export type IncomingMessage = {
 	sentAt: Date;
 	gmailMessageId?: string | null;
 	outlookMessageId?: string | null;
+	purelymailMessageId?: string | null;
 	outlookWebLink?: string | null;
 };
 
@@ -319,6 +320,7 @@ export class ThreadWriterService {
 							syncedByUserId: row.userId,
 							gmailMessageId: parsed.gmailMessageId ?? null,
 							outlookMessageId: parsed.outlookMessageId ?? null,
+							purelymailMessageId: parsed.purelymailMessageId ?? null,
 							outlookWebLink: parsed.outlookWebLink ?? null,
 							direction: outbound
 								? EmailDirection.OUTBOUND
@@ -421,7 +423,9 @@ export class ThreadWriterService {
 		const providerMessageId =
 			options.origin === "gmail"
 				? parsed.gmailMessageId
-				: parsed.outlookMessageId;
+				: options.origin === "outlook"
+					? parsed.outlookMessageId
+					: parsed.purelymailMessageId;
 		if (!providerMessageId) return;
 		const lockKey = JSON.stringify([
 			options.origin,
@@ -552,6 +556,9 @@ function providerMessageWhere(
 	}
 	if (options.origin === "outlook" && parsed.outlookMessageId) {
 		return { outlookMessageId: parsed.outlookMessageId };
+	}
+	if (options.origin === "purelymail" && parsed.purelymailMessageId) {
+		return { purelymailMessageId: parsed.purelymailMessageId };
 	}
 	return null;
 }

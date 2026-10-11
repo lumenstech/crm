@@ -188,7 +188,7 @@ export type ListRecordInteractionsInput = z.infer<
 	typeof listRecordInteractionsInput
 >;
 
-export const historicalEmailSource = z.enum(["gmail", "outlook"]);
+export const historicalEmailSource = z.enum(["gmail", "outlook", "purelymail"]);
 const historicalEmailParticipant = z
 	.object({
 		email: z

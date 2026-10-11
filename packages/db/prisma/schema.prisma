@@ -1450,6 +1450,7 @@ model EmailMessage {
   syncedByUserId   String?
   gmailMessageId   String?
   outlookMessageId String?
+  purelymailMessageId String? @unique
   outlookWebLink   String?
 
   direction  EmailDirection
