@@ -673,7 +673,10 @@ function canonicalJson(value: JsonValue): string {
 	if (value instanceof Object) {
 		return `{${Object.entries(value)
 			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry ?? null)}`)
+			.map(
+				([key, entry]) =>
+					`${JSON.stringify(key)}:${canonicalJson(entry ?? null)}`,
+			)
 			.join(",")}}`;
 	}
 	return JSON.stringify(value) ?? "null";
