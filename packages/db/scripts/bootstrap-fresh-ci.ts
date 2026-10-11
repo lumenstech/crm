@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -83,9 +84,13 @@ try {
 			`Fresh CI bootstrap is missing tables: ${missing.join(", ")}`,
 		);
 	}
+	await client.query(
+		`INSERT INTO "install" ("id", "uuid", "version", "updatedAt") VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT ("id") DO NOTHING`,
+		["install", randomUUID(), "unknown"],
+	);
 
 	console.log(
-		`Fresh CI bootstrap applied the current schema to ${databaseName}; migration deploy is validated separately.`,
+		`Fresh CI bootstrap applied the current schema and install row to ${databaseName}; migration deploy is validated separately.`,
 	);
 } finally {
 	await client.end();
