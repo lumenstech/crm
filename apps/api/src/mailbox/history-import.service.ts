@@ -88,9 +88,13 @@ export class HistoricalEmailImportService {
 		}
 
 		const context = await this.threads.context();
+		const historicalContext = {
+			...context,
+			ourAddresses: new Set([...context.ourAddresses, mailbox]),
+		};
 		const match = await this.match.resolveHistorical(
 			[input.from, ...input.recipients],
-			context,
+			historicalContext,
 		);
 		if (match.status !== "resolved") {
 			return this.result(input, direction, originalSentAt, {
@@ -141,6 +145,8 @@ export class HistoricalEmailImportService {
 			gmailMessageId: input.source === "gmail" ? input.providerMessageId : null,
 			outlookMessageId:
 				input.source === "outlook" ? input.providerMessageId : null,
+			purelymailMessageId:
+				input.source === "purelymail" ? input.providerMessageId : null,
 			outlookWebLink: input.outlookWebLink ?? null,
 		};
 
@@ -155,7 +161,7 @@ export class HistoricalEmailImportService {
 					match: match.match,
 				},
 				parsed,
-				context,
+				historicalContext,
 			);
 			if (stored.status === "unresolved") {
 				return this.result(input, direction, originalSentAt, {
@@ -254,6 +260,7 @@ export class HistoricalEmailImportService {
 					threadId: true,
 					gmailMessageId: true,
 					outlookMessageId: true,
+					purelymailMessageId: true,
 					thread: {
 						select: {
 							id: true,
@@ -275,13 +282,21 @@ export class HistoricalEmailImportService {
 									mailbox: input.mailbox,
 								},
 							}
-						: {
-								outlookMessageId: input.providerMessageId,
-								thread: {
-									provider: input.source,
-									mailbox: input.mailbox,
+						: input.source === "outlook"
+							? {
+									outlookMessageId: input.providerMessageId,
+									thread: {
+										provider: input.source,
+										mailbox: input.mailbox,
+									},
+								}
+							: {
+									purelymailMessageId: input.providerMessageId,
+									thread: {
+										provider: input.source,
+										mailbox: input.mailbox,
+									},
 								},
-							},
 				select: {
 					rfcMessageId: true,
 					thread: {
@@ -318,7 +333,9 @@ export class HistoricalEmailImportService {
 				(input.source === "gmail" &&
 					byRfc.gmailMessageId === input.providerMessageId) ||
 				(input.source === "outlook" &&
-					byRfc.outlookMessageId === input.providerMessageId);
+					byRfc.outlookMessageId === input.providerMessageId) ||
+				(input.source === "purelymail" &&
+					byRfc.purelymailMessageId === input.providerMessageId);
 			if (
 				sameProvider &&
 				byRfc.thread.rootMessageId === input.rootMessageId &&

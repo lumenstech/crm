@@ -18,6 +18,10 @@ import type { EnvironmentVariables } from "../config/env.validation";
 import { InjectDatabase } from "../database/database.constants";
 import { normaliseMessageId, rootMessageIdFrom } from "./message-text";
 import { type Participant, parseAddress } from "./participants";
+import {
+	purelymailImapMessageId,
+	purelymailProviderThreadId,
+} from "./purelymail-identity";
 import { PURELYMAIL_IMAP } from "./purelymail-imap.config";
 import { SyncStateService } from "./sync-state.service";
 import {
@@ -274,10 +278,20 @@ export class PurelymailImapService
 			uidValidity,
 			message.internalDate,
 		);
+		const providerMessageId = purelymailImapMessageId({
+			mailbox: PURELYMAIL_IMAP.mailbox,
+			folder,
+			uidValidity,
+			uid: message.uid,
+		});
 		const result = await this.writer.storeDetailed(
 			row,
-			{ mailbox: PURELYMAIL_IMAP.mailbox, origin: PURELYMAIL_IMAP.source },
-			incoming,
+			{
+				mailbox: PURELYMAIL_IMAP.mailbox,
+				origin: PURELYMAIL_IMAP.source,
+				providerThreadId: purelymailProviderThreadId(incoming.rootId),
+			},
+			{ ...incoming, purelymailMessageId: providerMessageId },
 			context,
 		);
 		const evidence: PurelymailMessageEvidence = {

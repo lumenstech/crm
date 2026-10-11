@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.18.0](https://github.com/lumenstech/crm/compare/v1.17.0...v1.18.0) (2026-10-11)
+
+
+### Features
+
+* **mailbox:** support scoped aliases and Purelymail history ([9563754](https://github.com/lumenstech/crm/commit/956375455f50c5de2e2be6b9c42110ac6e965759))
+* **mailbox:** support scoped aliases and Purelymail history ([a015ae8](https://github.com/lumenstech/crm/commit/a015ae834ba03d200dc9de1d5d31c5f26bfbd9d8))
+
 ## [1.17.0](https://github.com/lumenstech/crm/compare/v1.16.0...v1.17.0) (2026-10-11)
 
 

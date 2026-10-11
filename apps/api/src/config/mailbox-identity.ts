@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const historicalMailboxSource = z.enum(["gmail", "outlook"]);
+const historicalMailboxSource = z.enum(["gmail", "outlook", "purelymail"]);
 
 const exactEmail = z
 	.string()
