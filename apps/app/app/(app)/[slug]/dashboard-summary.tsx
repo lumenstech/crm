@@ -310,7 +310,7 @@ export function DashboardSummary() {
 								<TableCell
 									className={`${CELL} hidden truncate text-muted-foreground md:table-cell`}
 								>
-									{entry.createdBy.name}
+									{entry.createdBy?.name ?? "COMP CRM automated ingress"}
 								</TableCell>
 								<TableCell
 									className={`${CELL} text-right text-muted-foreground`}

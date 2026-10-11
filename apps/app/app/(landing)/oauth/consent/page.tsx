@@ -7,6 +7,8 @@ export const metadata: Metadata = {
 	title: "Authorize COMP CRM",
 };
 
+export const instant = false;
+
 export default async function OAuthConsentPage({
 	searchParams,
 }: PageProps<"/oauth/consent">) {
@@ -23,10 +25,10 @@ export default async function OAuthConsentPage({
 		);
 	}
 
-	const clientId = verified.get("client_id") ?? "";
-	const scope = verified.get("scope") ?? "";
-	const redirectUri = verified.get("redirect_uri") ?? "";
-	let redirectHost = "claude.ai";
+	const clientId = verified.params.get("client_id") ?? "";
+	const scope = verified.params.get("scope") ?? "";
+	const redirectUri = verified.params.get("redirect_uri") ?? "";
+	let redirectHost = "the requesting application";
 	try {
 		redirectHost = new URL(redirectUri).hostname;
 	} catch {}
@@ -35,10 +37,11 @@ export default async function OAuthConsentPage({
 		<AuthShell>
 			<AuthHeading
 				title="Authorize COMP CRM"
-				description="Review the access Claude is requesting before continuing."
+				description="Review the access this application is requesting before continuing."
 			/>
 			<OAuthConsent
 				clientId={clientId}
+				oauthQuery={verified.oauthQuery}
 				scope={scope}
 				redirectHost={redirectHost}
 			/>

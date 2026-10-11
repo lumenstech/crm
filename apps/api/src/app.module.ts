@@ -21,6 +21,7 @@ import { DatabaseModule } from "./database/database.module";
 import { DealsModule } from "./deals/deals.module";
 import { EnrichmentModule } from "./enrichment/enrichment.module";
 import { EmailIngestModule } from "./email-ingest/email-ingest.module";
+import { ExecutorModule } from "./executor/executor.module";
 import { FieldsModule } from "./fields/fields.module";
 import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
@@ -29,6 +30,7 @@ import { LoggingModule } from "./logging/logging.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
 import { MailboxModule } from "./mailbox/mailbox.module";
 import { MicrosoftModule } from "./microsoft/microsoft.module";
+import { OutreachModule } from "./outreach/outreach.module";
 import { SavedViewsModule } from "./saved-views/saved-views.module";
 import { SearchModule } from "./search/search.module";
 import { SettingsModule } from "./settings/settings.module";
@@ -69,11 +71,13 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		AgentModule,
 		EnrichmentModule,
 		EmailIngestModule,
+		ExecutorModule,
 		DashboardModule,
 		SearchModule,
 		MailboxModule,
 		GoogleModule,
 		MicrosoftModule,
+		OutreachModule,
 		SyncModule,
 		SettingsModule,
 		WorkspaceModule,

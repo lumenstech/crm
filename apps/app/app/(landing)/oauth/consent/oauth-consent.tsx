@@ -7,14 +7,16 @@ import { toast } from "sonner";
 
 export function OAuthConsent({
 	clientId,
+	oauthQuery,
 	scope,
 	redirectHost,
 }: {
 	clientId: string;
+	oauthQuery: string;
 	scope: string;
 	redirectHost: string;
 }) {
-	const [clientName, setClientName] = useState("Claude");
+	const [clientName, setClientName] = useState("the requesting application");
 	const [pending, setPending] = useState(false);
 
 	useEffect(() => {
@@ -32,6 +34,7 @@ export function OAuthConsent({
 		try {
 			const result = await authClient.oauth2.consent({
 				accept,
+				oauth_query: oauthQuery,
 				scope: scope || undefined,
 			});
 			if (result.error) {
@@ -77,7 +80,7 @@ export function OAuthConsent({
 					disabled={pending}
 					onClick={() => void submit(true)}
 				>
-					{pending ? "Please wait…" : "Authorize Claude"}
+					{pending ? "Please wait…" : "Authorize"}
 				</Button>
 			</div>
 		</div>

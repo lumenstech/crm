@@ -91,7 +91,14 @@ trap rollback ERR
 
 git checkout --detach "$target_sha"
 bun install --frozen-lockfile
-bun run db:deploy
+if ! bun run db:deploy; then
+	status_output="$(cd packages/db && bunx prisma migrate status)"
+	if ! grep -q "Database schema is up to date" <<<"$status_output"; then
+		echo "Migration deployment failed and the database is not confirmed up to date."
+		exit 4
+	fi
+	echo "Migration deployment lock was unavailable; migration status is up to date."
+fi
 bun run build
 restart_services
 sleep 3

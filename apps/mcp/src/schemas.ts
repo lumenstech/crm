@@ -1,6 +1,74 @@
 import { z } from "zod";
 export const businessUnitKey = z.string().trim().min(1).max(96);
 
+export const outreachMode = z.enum([
+	"NEW_OUTREACH",
+	"FOLLOW_UP",
+	"RETRY_BOUNCED_ROUTE",
+]);
+
+export const outreachResolutionInput = z.object({
+	companyId: z.string().trim().min(1).max(160).nullable().optional(),
+	companyName: z.string().trim().min(1).max(320).nullable().optional(),
+	domain: z.string().trim().max(320).nullable().optional(),
+	contactId: z.string().trim().min(1).max(160).nullable().optional(),
+	recipientEmail: z.string().email().max(320).nullable().optional(),
+	targetBusinessUnit: businessUnitKey,
+	outreachMode: outreachMode.default("NEW_OUTREACH"),
+	senderIdentity: z.string().trim().max(320).nullable().optional(),
+	campaignType: z.string().trim().max(160).nullable().optional(),
+	purpose: z.string().trim().max(400).nullable().optional(),
+	subject: z.string().trim().min(1).max(998),
+	provider: z.string().trim().min(1).max(80).default("resend"),
+	originalReservationId: z
+		.string()
+		.trim()
+		.min(1)
+		.max(160)
+		.nullable()
+		.optional(),
+	approvedCrossBusinessContact: z.boolean().default(false),
+	jobId: z.string().trim().min(1).max(160).nullable().optional(),
+	metadata: z.record(z.string(), z.json()).nullable().optional(),
+	notes: z.string().trim().max(4000).nullable().optional(),
+});
+
+export const preflightOutreachInput = outreachResolutionInput;
+export const reserveOutreachInput = outreachResolutionInput.extend({
+	idempotencyKey: z.string().trim().min(1).max(320).nullable().optional(),
+});
+export const finalizeOutreachInput = z.object({
+	reservationId: z.string().trim().min(1).max(160),
+	status: z.enum([
+		"QUEUED",
+		"SENT",
+		"DELIVERED",
+		"BOUNCED",
+		"FAILED",
+		"CANCELED",
+	]),
+	provider: z.string().trim().min(1).max(80).optional(),
+	providerMessageId: z.string().trim().min(1).max(320).nullable().optional(),
+	recipientEmail: z.string().email().max(320).nullable().optional(),
+	queuedAt: z.string().datetime({ offset: true }).nullable().optional(),
+	sentAt: z.string().datetime({ offset: true }).nullable().optional(),
+	deliveredAt: z.string().datetime({ offset: true }).nullable().optional(),
+	bouncedAt: z.string().datetime({ offset: true }).nullable().optional(),
+	failedAt: z.string().datetime({ offset: true }).nullable().optional(),
+	failureReason: z.string().trim().max(4000).nullable().optional(),
+	metadata: z.record(z.string(), z.json()).nullable().optional(),
+});
+export const listCompanyOutreachHistoryInput = z.object({
+	companyId: z.string().trim().min(1).max(160),
+	targetBusinessUnit: businessUnitKey.nullable().optional(),
+});
+export type PreflightOutreachInput = z.infer<typeof preflightOutreachInput>;
+export type ReserveOutreachInput = z.infer<typeof reserveOutreachInput>;
+export type FinalizeOutreachInput = z.infer<typeof finalizeOutreachInput>;
+export type ListCompanyOutreachHistoryInput = z.infer<
+	typeof listCompanyOutreachHistoryInput
+>;
+
 export const searchCrmInput = z.object({
 	q: z.string().trim().min(1).max(320),
 });
@@ -118,4 +186,42 @@ export const listRecordInteractionsInput = z
 export type RecordInteractionInput = z.infer<typeof recordInteractionInput>;
 export type ListRecordInteractionsInput = z.infer<
 	typeof listRecordInteractionsInput
+>;
+
+export const historicalEmailSource = z.enum(["gmail", "outlook"]);
+const historicalEmailParticipant = z
+	.object({
+		email: z
+			.string()
+			.email()
+			.max(320)
+			.transform((value) => value.toLowerCase()),
+		name: z.string().trim().max(320).nullable(),
+	})
+	.strict();
+const historicalEmailRecipient = historicalEmailParticipant.extend({
+	kind: z.enum(["to", "cc"]),
+});
+export const historicalEmailImportInput = z
+	.object({
+		source: historicalEmailSource,
+		mailbox: z
+			.string()
+			.email()
+			.max(320)
+			.transform((value) => value.toLowerCase()),
+		providerMessageId: z.string().trim().min(1).max(320),
+		providerThreadId: z.string().trim().min(1).max(320),
+		rfcMessageId: z.string().trim().min(1).max(500),
+		rootMessageId: z.string().trim().min(1).max(500),
+		subject: z.string().trim().max(998).nullable(),
+		body: z.string().max(200_000),
+		from: historicalEmailParticipant,
+		recipients: z.array(historicalEmailRecipient).min(1).max(100),
+		sentAt: z.iso.datetime({ offset: true }),
+		outlookWebLink: z.url().max(2_000).nullable().optional(),
+	})
+	.strict();
+export type HistoricalEmailImportInput = z.infer<
+	typeof historicalEmailImportInput
 >;

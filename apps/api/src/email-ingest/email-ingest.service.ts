@@ -48,7 +48,8 @@ export class EmailIngestService {
 
 		const items: EmailIngestItemResult[] = [];
 		for (let index = 0; index < batch.leads.length; index += 1) {
-			const lead = batch.leads[index]!;
+			const lead = batch.leads[index];
+			if (!lead) continue;
 			const sourceId =
 				lead.sourceId ??
 				createHash("sha256")
@@ -266,6 +267,7 @@ export class EmailIngestService {
 			},
 			select: { id: true },
 		});
+		if (existing) return false;
 		await this.businessUnits.associateRecord({
 			recordType,
 			recordId,
@@ -273,7 +275,7 @@ export class EmailIngestService {
 			useCase,
 			notes,
 		});
-		return !existing;
+		return true;
 	}
 }
 

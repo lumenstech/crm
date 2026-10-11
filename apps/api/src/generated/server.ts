@@ -24,12 +24,15 @@ import { currencySettingsOutput, setReportingCurrencyInput, setManualRateInput, 
 import { dashboardSummaryInput, dashboardSummaryOutput } from "../dashboard/dashboard.contracts";
 import { dealListInput, dealListOutput, dealIdInput, dealDetailOutput, dealCreateInput, dealCreateOutput, dealUpdateArgs, dealMutateOutput, setStageInput, dealSetStageOutput, dealContactsInput, dealContactOptionsOutput, dealAttachContactInput, dealContactLinkOutput, dealDetachContactInput, dealContactRoleInput, dealContactRoleOutput, dealBulkOwnerInput, dealBulkResultOutput, dealBulkStageInput, dealBulkInput } from "../deals/deals.contracts";
 import { enrichmentQueueInput } from "@crm/validation/enrichment-queue";
+import { executorAcceptInput, executorAcceptOutput } from "../executor/executor.contracts";
 import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput, fieldEntityInput, fieldFiltersOutput, fieldIdInput, fieldCoverageOutput, fieldCreateInput, fieldUpdateArgs, fieldReorderInput, fieldReorderOutput, fieldDeleteOutput, fieldBackfillOutput } from "../fields/fields.contracts";
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
 import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, startOutlookBackfillInput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
 import { ingestSignalInput, ingestSignalOutput, ingestSignalBatchInput, ingestSignalBatchOutput, signalInboxInput, signalInboxOutput, signalSourceRecordInput, signalCompanyCandidatesOutput, resolveSignalCompanyInput, resolveSignalCompanyOutput, qualifySignalInput, qualifySignalOutput, promoteSignalInput, promoteSignalOutput } from "../ingest/ingest.contracts";
 import { ingestGuyanaOpportunityInput, ingestGuyanaOpportunityOutput } from "../ingest/guyana-opportunity.contracts";
 import { evaluateOpportunityInput, evaluateOpportunityOutput, decideOpportunityInput, decideOpportunityOutput, opportunityReviewQueueInput, opportunityReviewQueueOutput } from "../ingest/opportunity-ops.contracts";
+import { historicalEmailImportInput, historicalEmailImportOutput } from "../mailbox/history-import.contracts";
+import { preflightOutreachInput, preflightOutreachOutput, reserveOutreachInput, reserveOutreachOutput, finalizeOutreachInput, finalizeOutreachOutput, listCompanyOutreachHistoryInput, listCompanyOutreachHistoryOutput } from "../outreach/outreach.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
 import { slackStatusOutput, slackMatchesOutput, slackChannelsInput, slackChannelsOutput, slackJoinChannelInput, slackJoinChannelOutput, slackRefreshPeopleOutput, slackCreateChannelInput, slackCreateChannelOutput, slackDisconnectOutput } from "../slack/slack.contracts";
@@ -503,6 +506,39 @@ const appRouter = t.router({
 }))
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
+  executor: t.router({
+    accept: publicProcedure
+      .input(executorAcceptInput)
+      .output(executorAcceptOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    get: publicProcedure
+      .input(z.object({ id: z.string().trim().min(1).max(160) }))
+      .output(z.object({
+	id: z.string(),
+	status: z.enum([
+		"ACCEPTED",
+		"QUEUED",
+		"RUNNING",
+		"COMPLETED",
+		"PARTIALLY_FAILED",
+		"FAILED",
+		"REJECTED",
+		"EXPIRED",
+	]),
+	operation: z.string(),
+	taskRef: z.string(),
+	payloadHash: z.string(),
+	result: z.record(z.string(), z.unknown()).nullable(),
+	receipt: z.record(z.string(), z.unknown()).nullable(),
+	errorCode: z.string().nullable(),
+	errorMessage: z.string().nullable(),
+	resultEmailId: z.string().nullable(),
+	createdAt: z.string(),
+	startedAt: z.string().nullable(),
+	finishedAt: z.string().nullable(),
+}))
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
   fields: t.router({
     list: publicProcedure
       .input(fieldListInput)
@@ -625,6 +661,12 @@ const appRouter = t.router({
       .output(promoteSignalOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
+  mailbox: t.router({
+    importEmail: publicProcedure
+      .input(historicalEmailImportInput)
+      .output(historicalEmailImportOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
   microsoft: t.router({
     status: publicProcedure
       .output(microsoftConnectionStatusOutput)
@@ -646,6 +688,24 @@ const appRouter = t.router({
       .input(setOutlookAutoCreateInput)
       .output(microsoftConnectionStatusOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
+  outreach: t.router({
+    preflight: publicProcedure
+      .input(preflightOutreachInput)
+      .output(preflightOutreachOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    reserve: publicProcedure
+      .input(reserveOutreachInput)
+      .output(reserveOutreachOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    finalize: publicProcedure
+      .input(finalizeOutreachInput)
+      .output(finalizeOutreachOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    history: publicProcedure
+      .input(listCompanyOutreachHistoryInput)
+      .output(listCompanyOutreachHistoryOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
   savedViews: t.router({
     list: publicProcedure

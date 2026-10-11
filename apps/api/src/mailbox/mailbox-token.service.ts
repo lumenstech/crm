@@ -41,6 +41,7 @@ export class MailboxTokenService {
 	}
 
 	async isConnected(userId: string, source: SyncSource): Promise<boolean> {
+		if (source === "purelymail") return false;
 		const scopes = await this.grantedScopes(
 			userId,
 			PROVIDER_FOR_SOURCE[source],
@@ -71,6 +72,12 @@ export class MailboxTokenService {
 		userId: string,
 		source: SyncSource,
 	): Promise<TokenResult> {
+		if (source === "purelymail") {
+			return {
+				outcome: "not-connected",
+				reason: "Purelymail uses its read-only IMAP credential.",
+			};
+		}
 		const providerId = PROVIDER_FOR_SOURCE[source];
 
 		if (!(await this.isConnected(userId, source))) {

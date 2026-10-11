@@ -19,6 +19,7 @@ const mailbox = `rep-${suffix}@example.test`;
 const person = `buyer@${domain}`;
 const rootId = `<root-${suffix}@mail.test>`;
 const movedRoot = `outlook-conversation:${suffix}`;
+const provenanceRoot = `<provenance-${suffix}@mail.test>`;
 
 const agent = {
 	contactCreated: async () => true,
@@ -38,12 +39,17 @@ const threads = new ThreadWriterService(db, match, stamp, emailIngest);
 
 let row: MailboxSync;
 
-function message(id: string, sentAt: Date, root = rootId): IncomingMessage {
+function message(
+	id: string,
+	sentAt: Date,
+	root = rootId,
+	fromEmail = mailbox,
+): IncomingMessage {
 	return {
 		rfcMessageId: id,
 		rootId: root,
 		subject: "Pricing",
-		from: { email: mailbox, name: "Test Rep" },
+		from: { email: fromEmail, name: "Test Rep" },
 		recipients: [{ email: person, name: "A Buyer", kind: "to" }],
 		body: "The numbers you asked for.",
 		sentAt,
@@ -55,7 +61,7 @@ function message(id: string, sentAt: Date, root = rootId): IncomingMessage {
 
 async function clean() {
 	await db.emailThread.deleteMany({
-		where: { rootMessageId: { in: [rootId, movedRoot] } },
+		where: { rootMessageId: { in: [rootId, movedRoot, provenanceRoot] } },
 	});
 	await db.contact.deleteMany({ where: { email: person } });
 	await db.company.deleteMany({ where: { domain } });
@@ -111,6 +117,35 @@ describe("storing a synced email", () => {
 
 		expect(thread?.messageCount).toBe(1);
 		expect(thread?.activity).not.toBeNull();
+	});
+
+	it("persists verified sending business-unit evidence on the activity", async () => {
+		const stored = await threads.store(
+			row,
+			{ mailbox, origin: "gmail" },
+			message(
+				`<provenance-${suffix}@mail.test>`,
+				new Date("2026-01-03T10:00:00Z"),
+				provenanceRoot,
+				"sales@data-gear.com",
+			),
+			await threads.context(),
+		);
+
+		expect(stored).toBe(true);
+		const thread = await db.emailThread.findUnique({
+			where: { rootMessageId: provenanceRoot },
+			select: { activity: { select: { meta: true } } },
+		});
+		expect(thread?.activity?.meta).toEqual({
+			synced: true,
+			source: "gmail",
+			sendingBusinessUnit: {
+				key: "data-gear",
+				source: "verified-sender",
+				immutable: true,
+			},
+		});
 	});
 
 	it("repairs a thread whose projection was lost rather than skipping it forever", async () => {

@@ -57,8 +57,15 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Apply migrations
-        run: bun run db:deploy
+      - name: Bootstrap fresh CI schema
+        env:
+          FRESH_CI_BOOTSTRAP: "true"
+        run: bun run --filter=@crm/db db:bootstrap-fresh-ci
+
+      - name: Verify legacy-first upgrade migrations
+        env:
+          MIGRATION_UPGRADE_VERIFY: "true"
+        run: bun run --filter=@crm/db db:verify-upgrade-ci
 
       - run: bun run check-types
 

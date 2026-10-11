@@ -8,11 +8,6 @@ import { createOAuthVerifier, isAuthorized, parseCallerTokens } from "./auth";
 import { CrmClient } from "./crmClient";
 import { safeError } from "./redact";
 import { createCrmMcpServer } from "./server";
-import {
-	processWhatsappWebhook,
-	verifyWhatsappChallenge,
-	verifyWhatsappSignature,
-} from "./whatsapp";
 
 function required(name: string): string {
 	const value = process.env[name]?.trim();
@@ -59,26 +54,11 @@ const crmApiKey = required("COMP_CRM_API_KEY");
 const rawCallerTokens = required("MCP_CALLER_TOKENS");
 const callerTokens = parseCallerTokens(rawCallerTokens);
 const oauth = createOAuthVerifier();
-const whatsappVerifyToken =
-	process.env.META_VERIFY_TOKEN?.trim() ||
-	process.env.WHATSAPP_VERIFY_TOKEN?.trim() ||
-	"";
-const whatsappAppSecret =
-	process.env.META_APP_SECRET?.trim() ||
-	process.env.WHATSAPP_APP_SECRET?.trim() ||
-	"";
-const whatsappBusinessUnit = process.env.WHATSAPP_BUSINESS_UNIT?.trim() || "";
 if (callerTokens.length === 0)
 	throw new Error("MCP_CALLER_TOKENS contains no usable token.");
 
 const client = new CrmClient(crmBaseUrl, crmApiKey);
-const secrets = [
-	crmApiKey,
-	rawCallerTokens,
-	...callerTokens,
-	whatsappVerifyToken,
-	whatsappAppSecret,
-].filter(Boolean);
+const secrets = [crmApiKey, rawCallerTokens, ...callerTokens].filter(Boolean);
 
 const server = createServer(async (req, res) => {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host ?? host}`);
@@ -100,42 +80,6 @@ const server = createServer(async (req, res) => {
 					crm: "unavailable",
 				});
 			}
-			return;
-		}
-
-		if (url.pathname === "/webhooks/whatsapp" && req.method === "GET") {
-			if (!whatsappVerifyToken) {
-				json(res, 503, { error: "whatsapp_not_configured" });
-				return;
-			}
-			const challenge = verifyWhatsappChallenge(url, whatsappVerifyToken);
-			if (challenge === null) {
-				json(res, 403, { error: "verification_failed" });
-				return;
-			}
-			res.statusCode = 200;
-			res.setHeader("content-type", "text/plain");
-			res.end(challenge);
-			return;
-		}
-
-		if (url.pathname === "/webhooks/whatsapp" && req.method === "POST") {
-			if (!(whatsappAppSecret && whatsappBusinessUnit)) {
-				json(res, 503, { error: "whatsapp_not_configured" });
-				return;
-			}
-			const rawBody = await readRawBody(req);
-			const signature = headerValue(req.headers["x-hub-signature-256"]);
-			if (!verifyWhatsappSignature(rawBody, signature, whatsappAppSecret)) {
-				json(res, 403, { error: "signature_invalid" });
-				return;
-			}
-			const result = await processWhatsappWebhook(rawBody, client, {
-				verifyToken: whatsappVerifyToken,
-				appSecret: whatsappAppSecret,
-				businessUnit: whatsappBusinessUnit,
-			});
-			json(res, 200, { ok: true, ...result });
 			return;
 		}
 

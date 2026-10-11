@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { EnvironmentVariables } from "../config/env.validation";
@@ -10,6 +11,7 @@ export class MailboxEmailIngestService {
 	private readonly logger = new Logger(MailboxEmailIngestService.name);
 	private readonly address: string | null;
 	private readonly allowedSenders: Set<string>;
+	private readonly commandToken: string | null;
 
 	constructor(
 		config: ConfigService<EnvironmentVariables, true>,
@@ -25,6 +27,8 @@ export class MailboxEmailIngestService {
 				.map((value) => normalizeEmail(value))
 				.filter((value): value is string => Boolean(value)),
 		);
+		this.commandToken =
+			config.get("CRM_EMAIL_INGEST_COMMAND_TOKEN", { infer: true }) ?? null;
 	}
 
 	async handle(message: IncomingMessage, mailbox?: string): Promise<boolean> {
@@ -49,30 +53,46 @@ export class MailboxEmailIngestService {
 			return true;
 		}
 
+		let batch: ReturnType<typeof parseCrmEmailBatch>;
 		try {
-			const batch = parseCrmEmailBatch(message.body);
-			const result = await this.ingest.process(batch);
-			this.logger.log({
-				message: "Processed CRM ingest mailbox message",
-				rfcMessageId: message.rfcMessageId,
-				batchId: result.batchId,
-				businessUnit: result.businessUnit,
-				submitted: result.submitted,
-				existing: result.existing,
-				created: result.created,
-				checked: result.checked,
-				failed: result.failed,
-			});
+			batch = parseCrmEmailBatch(message.body);
 		} catch (error) {
 			this.logger.warn({
 				message: "Rejected malformed CRM ingest mailbox message",
 				rfcMessageId: message.rfcMessageId,
 				error: error instanceof Error ? error.message : String(error),
 			});
+			return true;
 		}
+		if (!this.commandToken || !safeSecretEqual(this.commandToken, batch.commandToken)) {
+			this.logger.warn({
+				message: "Rejected structured CRM ingest without command authorization",
+				rfcMessageId: message.rfcMessageId,
+			});
+			return true;
+		}
+		const result = await this.ingest.process(batch);
+		this.logger.log({
+			message: "Processed CRM ingest mailbox message",
+			rfcMessageId: message.rfcMessageId,
+			batchId: result.batchId,
+			businessUnit: result.businessUnit,
+			submitted: result.submitted,
+			existing: result.existing,
+			created: result.created,
+			checked: result.checked,
+			failed: result.failed,
+		});
 
 		return true;
 	}
+}
+
+function safeSecretEqual(expected: string, actual?: string): boolean {
+	if (!actual) return false;
+	const a = Buffer.from(expected);
+	const b = Buffer.from(actual);
+	return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function normalizeEmail(value: string): string | null {

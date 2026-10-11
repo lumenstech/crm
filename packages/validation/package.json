@@ -12,6 +12,7 @@
 		"./enrichment-queue": "./src/enrichment-queue.ts",
 		"./eve-stream": "./src/eve-stream.ts",
 		"./eve-tool": "./src/eve-tool.ts",
+		"./executor": "./src/executor.ts",
 		"./field-backfill": "./src/field-backfill.ts",
 		"./field-templates": "./src/field-templates.ts",
 		"./saved-view": "./src/saved-view.ts"

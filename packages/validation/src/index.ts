@@ -6,6 +6,7 @@ import * as agents from "./agents";
 import * as builderQuestion from "./builder-question";
 import * as eveStream from "./eve-stream";
 import * as eveTool from "./eve-tool";
+import * as executor from "./executor";
 import * as slack from "./slack";
 
 export const schemas = {
@@ -16,6 +17,7 @@ export const schemas = {
 	builderQuestion,
 	eveStream,
 	eveTool,
+	executor,
 	slack,
 } as const;
 
@@ -56,6 +58,11 @@ export type {
 	EveToolOutcome,
 	EveToolOutput,
 } from "./eve-tool";
+export type {
+	ExecutorEnvelope,
+	ExecutorEnvelopePayload,
+	ExecutorJobStatus,
+} from "./executor";
 export type { AuthTest, JoinPayload, OauthAccess, Reply } from "./slack";
 
 export class InvalidInput extends Error {
