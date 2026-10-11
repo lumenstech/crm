@@ -153,7 +153,7 @@ export const activityEntryOutput = z.object({
 	completedAt: z.string().nullable(),
 	meta: activityMeta,
 	createdAt: z.string(),
-	createdBy: activityAuthorOutput,
+	createdBy: activityAuthorOutput.nullable(),
 	company: activityCompanyRefOutput,
 	contact: activityContactRefOutput,
 	deal: activityDealRefOutput,

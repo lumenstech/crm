@@ -7,8 +7,10 @@ function service(overrides?: { address?: string; senders?: string }) {
 		get(name: string) {
 			if (name === "CRM_EMAIL_INGEST_ADDRESS")
 				return overrides?.address ?? "leads@516labs.com";
-			if (name === "CRM_EMAIL_INGEST_ALLOWED_SENDERS")
-				return overrides?.senders ?? "trusted@example.com";
+		if (name === "CRM_EMAIL_INGEST_ALLOWED_SENDERS")
+			return overrides?.senders ?? "trusted@example.com";
+		if (name === "CRM_EMAIL_INGEST_COMMAND_TOKEN")
+			return "x".repeat(32);
 			return undefined;
 		},
 	};
@@ -40,7 +42,8 @@ const baseMessage = {
 	recipients: [{ email: "leads@516labs.com", name: null, kind: "to" as const }],
 	body: `COMP-CRM-INGEST-V1
 {
-  "batchId": "batch-1",
+	  "commandToken": "${"x".repeat(32)}",
+	  "batchId": "batch-1",
   "businessUnit": "data-gear",
   "mode": "INGEST",
   "leads": [{ "company": "Example AI" }]

@@ -90,6 +90,10 @@ export class EnvironmentVariables {
 
 	@IsOptional()
 	@IsString()
+	CRM_EMAIL_INGEST_COMMAND_TOKEN?: string;
+
+	@IsOptional()
+	@IsString()
 	CRM_EMAIL_INGEST_ADDRESS?: string;
 
 	@IsOptional()
@@ -99,6 +103,26 @@ export class EnvironmentVariables {
 	@IsOptional()
 	@IsString()
 	CRM_EMAIL_INGEST_RECEIPT_TO?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_CHANNEL_ROUTES_JSON?: string;
+
+	@IsOptional()
+	@IsString()
+	META_VERIFY_TOKEN?: string;
+
+	@IsOptional()
+	@IsString()
+	WHATSAPP_VERIFY_TOKEN?: string;
+
+	@IsOptional()
+	@IsString()
+	META_APP_SECRET?: string;
+
+	@IsOptional()
+	@IsString()
+	WHATSAPP_APP_SECRET?: string;
 
 	@IsOptional()
 	@IsString()
@@ -158,6 +182,14 @@ export class EnvironmentVariables {
 	@IsOptional()
 	@IsString()
 	CRM_TELEMETRY_DISABLED?: string;
+
+	@IsOptional()
+	@IsString()
+	PURELYMAIL_IMAP_PASSWORD?: string;
+
+	@IsOptional()
+	@IsString()
+	PURELYMAIL_SYNC_USER_EMAIL?: string;
 }
 
 export type RawEnvironment = Record<string, string | undefined>;

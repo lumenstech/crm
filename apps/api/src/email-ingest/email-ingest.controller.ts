@@ -15,6 +15,8 @@ import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
 import type { EnvironmentVariables } from "../config/env.validation";
 import { parseCrmEmailBatch } from "./email-ingest.contracts";
 import { EmailIngestService } from "./email-ingest.service";
+import { parseChannelRoutes, routeEmail } from "./channel-routes";
+import { InboundMessageService } from "./inbound-message.service";
 
 const MAX_BODY_BYTES = 512_000;
 const MAX_WEBHOOK_AGE_SECONDS = 300;
@@ -26,6 +28,11 @@ type ResendReceivedEvent = {
 		from?: string;
 		to?: string[];
 		subject?: string;
+		attachments?: Array<{
+			id: string;
+			filename?: string;
+			content_type?: string;
+		}>;
 	};
 };
 
@@ -43,6 +50,7 @@ export class EmailIngestController {
 
 	constructor(
 		private readonly ingest: EmailIngestService,
+		private readonly inbound: InboundMessageService,
 		private readonly config: ConfigService<EnvironmentVariables, true>,
 	) {}
 
@@ -78,7 +86,7 @@ export class EmailIngestController {
 			throw new UnauthorizedException("Invalid webhook signature.");
 		}
 
-		const event = JSON.parse(payload) as ResendReceivedEvent;
+		const event = JSON.parse(payload.toString("utf8")) as ResendReceivedEvent;
 		if (event.type !== "email.received" || !event.data.email_id) {
 			return { accepted: true, ignored: true };
 		}
@@ -88,60 +96,113 @@ export class EmailIngestController {
 		const allowed = allowedSenders(
 			this.config.get("CRM_EMAIL_INGEST_ALLOWED_SENDERS", { infer: true }),
 		);
-		if (!sender || !allowed.has(sender)) {
-			this.logger.warn({
-				message: "Rejected CRM ingest email from unauthorized sender",
-				sender: sender ?? "unknown",
-				emailId: event.data.email_id,
-			});
-			return { accepted: true, ignored: true, reason: "sender_not_allowed" };
-		}
 
-		if (!received.text?.trim()) {
-			return { accepted: true, ignored: true, reason: "missing_text_body" };
-		}
+		// Preserve the existing structured automation path, but only for explicitly
+		// allowlisted senders. Ordinary inbound email never gains write authority.
+		const commandToken = this.config.get("CRM_EMAIL_INGEST_COMMAND_TOKEN", {
+			infer: true,
+		});
+		if (sender && allowed.has(sender) && commandToken && received.text?.trim()) {
+			let batch: ReturnType<typeof parseCrmEmailBatch> | null = null;
+			try {
+				batch = parseCrmEmailBatch(received.text);
+			} catch {
+				batch = null;
+			}
+			if (batch && safeSecretEqual(commandToken, batch.commandToken)) {
+				const result = await this.ingest.process(batch);
 
-		const batch = parseCrmEmailBatch(received.text);
-		const result = await this.ingest.process(batch);
-
-		await sendReceiptIfConfigured(apiKey, this.config, sender, result).catch(
-			(error: unknown) => {
-				this.logger.error(
-					{ message: "CRM email ingest receipt failed", batchId: batch.batchId },
-					error instanceof Error ? error.stack : String(error),
+				await sendReceiptIfConfigured(apiKey, this.config, sender, result).catch(
+					(error: unknown) => {
+						this.logger.error(
+							{ message: "CRM email ingest receipt failed", batchId: batch.batchId },
+							error instanceof Error ? error.stack : String(error),
+						);
+					},
 				);
-			},
-		);
 
-		return { accepted: true, batchId: batch.batchId, result };
+				return {
+					accepted: true,
+					channel: "email",
+					structured: true,
+					batchId: batch.batchId,
+					submitted: result.submitted,
+					existing: result.existing,
+					created: result.created,
+					checked: result.checked,
+					failed: result.failed,
+				};
+			}
+		}
+
+		const routes = parseChannelRoutes(
+			this.config.get("CRM_CHANNEL_ROUTES_JSON", { infer: true }),
+		);
+		const recipients = received.to ?? event.data.to ?? [];
+		const routedRecipient = recipients
+			.map((value) => extractEmail(value))
+			.find((value): value is string => Boolean(value && routeEmail(routes, value)));
+		if (!routedRecipient) {
+			return { accepted: true, ignored: true, reason: "recipient_not_routed" };
+		}
+		const businessUnit = routeEmail(routes, routedRecipient);
+		if (!businessUnit) {
+			return { accepted: true, ignored: true, reason: "recipient_not_routed" };
+		}
+
+		const result = await this.inbound.process({
+			channel: "email",
+			externalMessageId: event.data.email_id,
+			businessUnit,
+			sender: sender ?? received.from ?? event.data.from ?? "unknown",
+			recipient: routedRecipient,
+			subject: received.subject ?? event.data.subject ?? null,
+			body: received.text ?? null,
+			conversationId: event.data.email_id,
+			attachments: (event.data.attachments ?? []).map((attachment) => ({
+				id: attachment.id,
+				name: attachment.filename,
+				mediaType: attachment.content_type,
+			})),
+		});
+
+		return {
+			accepted: true,
+			channel: "email",
+			recorded: result.recorded ?? false,
+			deduplicated: result.deduplicated ?? false,
+			queuedForReview:
+				"queuedForReview" in result ? result.queuedForReview : false,
+			reason: "reason" in result ? result.reason : null,
+		};
 	}
 }
 
 async function readRawBody(
 	request: IncomingMessage,
 	limit: number,
-): Promise<string | null> {
-	const maybeBody = request as IncomingMessage & { body?: unknown };
-	if (typeof maybeBody.body === "string") {
-		return maybeBody.body.length <= limit ? maybeBody.body : null;
+): Promise<Buffer | null> {
+	const maybeBody = request as IncomingMessage & {
+		body?: unknown;
+		rawBody?: Buffer;
+	};
+	if (Buffer.isBuffer(maybeBody.rawBody)) {
+		return maybeBody.rawBody.length <= limit ? maybeBody.rawBody : null;
 	}
-	if (
-		maybeBody.body &&
-		typeof maybeBody.body === "object" &&
-		!Buffer.isBuffer(maybeBody.body)
-	) {
-		const encoded = JSON.stringify(maybeBody.body);
-		return encoded.length <= limit ? encoded : null;
+
+	if (typeof maybeBody.body === "string") {
+		const body = Buffer.from(maybeBody.body);
+		return body.length <= limit ? body : null;
 	}
 	if (Buffer.isBuffer(maybeBody.body)) {
-		return maybeBody.body.length <= limit ? maybeBody.body.toString("utf8") : null;
+		return maybeBody.body.length <= limit ? maybeBody.body : null;
 	}
 
 	return new Promise((resolve) => {
 		const chunks: Buffer[] = [];
 		let size = 0;
 		let settled = false;
-		const finish = (value: string | null) => {
+		const finish = (value: Buffer | null) => {
 			if (settled) return;
 			settled = true;
 			resolve(value);
@@ -155,13 +216,13 @@ async function readRawBody(
 			}
 			chunks.push(chunk);
 		});
-		request.on("end", () => finish(Buffer.concat(chunks).toString("utf8")));
+		request.on("end", () => finish(Buffer.concat(chunks)));
 		request.on("error", () => finish(null));
 	});
 }
 
 function verifySvix(
-	payload: string,
+	payload: Buffer,
 	input: {
 		id?: string;
 		timestamp?: string;
@@ -185,7 +246,10 @@ function verifySvix(
 	}
 	if (!key.length) return false;
 
-	const signed = `${input.id}.${input.timestamp}.${payload}`;
+	const signed = Buffer.concat([
+		Buffer.from(`${input.id}.${input.timestamp}.`),
+		payload,
+	]);
 	const expected = createHmac("sha256", key).update(signed).digest("base64");
 
 	for (const token of input.signature.split(" ")) {
@@ -196,6 +260,13 @@ function verifySvix(
 		if (a.length === b.length && timingSafeEqual(a, b)) return true;
 	}
 	return false;
+}
+
+function safeSecretEqual(expected: string, actual?: string): boolean {
+	if (!actual) return false;
+	const a = Buffer.from(expected);
+	const b = Buffer.from(actual);
+	return a.length === b.length && timingSafeEqual(a, b);
 }
 
 async function fetchReceivedEmail(
@@ -277,10 +348,8 @@ function formatReceipt(
 		"",
 	];
 	for (const item of result.items) {
-		lines.push(
-			`${item.company} — ${item.status} — company=${item.companyId ?? "-"} contact=${item.contactId ?? "-"}`,
-		);
-		if (item.error) lines.push(`  error: ${item.error}`);
+		lines.push(`${item.status} — source=${item.sourceId}`);
+		if (item.error) lines.push("  error: processing failed; review the private CRM log.");
 	}
 	return lines.join("\n");
 }

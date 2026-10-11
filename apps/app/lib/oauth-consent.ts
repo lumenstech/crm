@@ -2,6 +2,11 @@ import { constantTimeEqual, makeSignature } from "better-auth/crypto";
 
 type ConsentSearchParams = Record<string, string | string[] | undefined>;
 
+export type VerifiedOAuthConsentQuery = {
+	params: URLSearchParams;
+	oauthQuery: string;
+};
+
 function canonicalize(params: URLSearchParams) {
 	const canonical = new URLSearchParams();
 	const entries = [...params.entries()].sort(
@@ -29,11 +34,14 @@ function toSearchParams(values: ConsentSearchParams) {
 	return params;
 }
 
-export async function verifiedOAuthConsentQuery(values: ConsentSearchParams) {
+export async function verifiedOAuthConsentQuery(
+	values: ConsentSearchParams,
+): Promise<VerifiedOAuthConsentQuery | null> {
 	const secret = process.env.BETTER_AUTH_SECRET;
 	if (!secret) return null;
 
 	const params = toSearchParams(values);
+	const oauthQuery = params.toString();
 	const signatures = params.getAll("sig");
 	const signature = params.get("sig");
 	const expiresAt = Number(params.get("exp"));
@@ -51,5 +59,5 @@ export async function verifiedOAuthConsentQuery(values: ConsentSearchParams) {
 	const expected = await makeSignature(canonicalize(params).toString(), secret);
 	if (!constantTimeEqual(signature, expected)) return null;
 
-	return params;
+	return { params, oauthQuery };
 }

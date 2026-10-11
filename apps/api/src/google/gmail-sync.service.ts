@@ -195,7 +195,15 @@ export class GmailSyncService {
 		if (ids.length === 0) return { written: 0, remaining: 0 };
 
 		const alreadyHave = await this.db.emailMessage.findMany({
-			where: { gmailMessageId: { in: [...ids] } },
+			where: {
+				gmailMessageId: { in: [...ids] },
+				thread: {
+					OR: [
+						{ provider: "gmail", mailbox },
+						{ provider: null, mailbox: null, providerThreadId: null },
+					],
+				},
+			},
 			select: { gmailMessageId: true },
 		});
 		const seen = new Set(
@@ -221,7 +229,11 @@ export class GmailSyncService {
 
 			const stored = await this.threads.store(
 				row,
-				{ mailbox, origin: "gmail" },
+				{
+					mailbox,
+					origin: "gmail",
+					providerThreadId: parsed.providerThreadId ?? undefined,
+				},
 				parsed,
 				context,
 			);
@@ -262,6 +274,7 @@ export class GmailSyncService {
 		return {
 			rfcMessageId: normaliseMessageId(rawMessageId),
 			rootId,
+			providerThreadId: message.threadId ?? null,
 			subject: header(headers, "subject"),
 			from,
 			recipients: [...to, ...cc],

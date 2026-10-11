@@ -1,11 +1,12 @@
 import { syncError } from "@crm/telemetry";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { GoogleConnectionService } from "../google/google-connection.service";
 import { GoogleSyncService } from "../google/google-sync.service";
 import {
 	isGoogleSyncSource,
 	isMicrosoftSyncSource,
 } from "../mailbox/mailbox.constants";
+import { PurelymailImapService } from "../mailbox/purelymail-imap.service";
 import { SyncStateService } from "../mailbox/sync-state.service";
 import { MicrosoftConnectionService } from "../microsoft/microsoft-connection.service";
 import { MicrosoftSyncService } from "../microsoft/microsoft-sync.service";
@@ -31,6 +32,7 @@ export class MailboxSyncService {
 		private readonly microsoft: MicrosoftSyncService,
 		private readonly googleConnections: GoogleConnectionService,
 		private readonly microsoftConnections: MicrosoftConnectionService,
+		@Optional() private readonly purelymail?: PurelymailImapService,
 	) {}
 
 	async runDue(): Promise<TickSummary> {
@@ -117,6 +119,12 @@ export class MailboxSyncService {
 
 		if (isMicrosoftSyncSource(source)) {
 			return this.microsoft.runOne(userId, source);
+		}
+
+		if (source === "purelymail") {
+			if (!this.purelymail) return null;
+			const outcome = await this.purelymail.poll();
+			return outcome.status === "disabled" ? null : outcome;
 		}
 
 		return null;

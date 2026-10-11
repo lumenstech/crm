@@ -3,11 +3,16 @@ import { redactSecrets } from "./redact";
 import type {
 	AssociateRecordWithBusinessUnitInput,
 	CreateBusinessUnitOpportunityInput,
+	FinalizeOutreachInput,
+	HistoricalEmailImportInput,
 	IngestLeadsInput,
 	IngestSignalInput,
+	ListCompanyOutreachHistoryInput,
 	ListRecordBusinessUnitsInput,
 	ListRecordInteractionsInput,
+	PreflightOutreachInput,
 	RecordInteractionInput,
+	ReserveOutreachInput,
 } from "./schemas";
 
 const jsonValue = z.json();
@@ -170,6 +175,43 @@ export class CrmClient {
 		return this.request("/rest/business-units/opportunities", {
 			method: "POST",
 			body: input,
+		});
+	}
+
+	preflightOutreach(input: PreflightOutreachInput) {
+		return this.request("/rest/outreach/preflight", {
+			method: "POST",
+			body: input,
+		});
+	}
+
+	reserveOutreach(input: ReserveOutreachInput) {
+		return this.request("/rest/outreach/reserve", {
+			method: "POST",
+			body: input,
+		});
+	}
+
+	finalizeOutreach(input: FinalizeOutreachInput) {
+		return this.request("/rest/outreach/finalize", {
+			method: "POST",
+			body: input,
+		});
+	}
+
+	importHistoricalEmail(input: HistoricalEmailImportInput) {
+		return this.request("/rest/mailbox/import/email", {
+			method: "POST",
+			body: input,
+		});
+	}
+
+	listCompanyOutreachHistory(input: ListCompanyOutreachHistoryInput) {
+		return this.request("/rest/outreach/history", {
+			query: {
+				companyId: input.companyId,
+				targetBusinessUnit: input.targetBusinessUnit ?? undefined,
+			},
 		});
 	}
 

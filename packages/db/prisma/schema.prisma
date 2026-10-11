@@ -398,6 +398,22 @@ enum AgentResponseRating {
   DOWN
 }
 
+enum OutreachMode {
+  NEW_OUTREACH
+  FOLLOW_UP
+  RETRY_BOUNCED_ROUTE
+}
+
+enum OutreachStatus {
+  RESERVED
+  QUEUED
+  SENT
+  DELIVERED
+  BOUNCED
+  FAILED
+  CANCELED
+}
+
 model Company {
   id          String  @id @default(cuid())
   name        String
@@ -452,6 +468,7 @@ model Company {
   emailThreads   EmailThread[]
   calendarEvents CalendarEvent[]
   fieldValues    FieldValue[]
+  outreachLedger OutreachLedger[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -514,6 +531,7 @@ model Contact {
   calendarEvents  CalendarEvent[]
   eventAttendance CalendarAttendee[]
   fieldValues     FieldValue[]
+  outreachLedger  OutreachLedger[]
   visitors        TrackedVisitor[]   @relation("VisitorContact")
   submissions     FormSubmission[]   @relation("SubmissionContact")
   createdAt       DateTime           @default(now())
@@ -973,6 +991,57 @@ model AgentRunEvent {
   @@map("agentRunEvent")
 }
 
+model ExecutorJob {
+	id String @id
+
+	operation    String
+	taskRef      String
+	payloadHash  String
+	sourceAccount String
+	sourceEmailId String
+	sourceMessageId String?
+	sourceFrom String?
+	sourceSubject String?
+	sourceTo String[]
+
+	status       String   @default("ACCEPTED")
+	envelope     Json
+	queueHash    String?
+	result       Json?
+	receipt      Json?
+	resultEmailId String?
+	errorCode    String?
+	errorMessage String?
+	attempts     Int      @default(0)
+	leaseUntil   DateTime?
+	expiresAt    DateTime
+	acceptedAt   DateTime @default(now())
+	startedAt    DateTime?
+	finishedAt   DateTime?
+	updatedAt    DateTime @updatedAt
+
+	@@unique([sourceAccount, sourceEmailId])
+	@@unique([resultEmailId])
+	@@index([status, leaseUntil])
+	@@index([taskRef, createdAt])
+	createdAt DateTime @default(now())
+
+	@@map("executorJob")
+}
+
+model ExecutorCheckpoint {
+	id String @id
+
+	provider String
+	account  String
+	cursor   String?
+
+	updatedAt DateTime @updatedAt
+
+	@@unique([provider, account])
+	@@map("executorCheckpoint")
+}
+
 model AgentAction {
   id String @id @default(cuid())
 
@@ -1254,8 +1323,8 @@ model Activity {
   dealId    String?
   deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
-  createdById String
-  createdBy   User   @relation("ActivityAuthor", fields: [createdById], references: [id])
+  createdById String?
+  createdBy   User?  @relation("ActivityAuthor", fields: [createdById], references: [id])
   meta        Json?
 
   emailThreadId   String?        @unique
@@ -1323,9 +1392,32 @@ model MailboxSync {
   @@map("mailboxSync")
 }
 
+model MailboxSyncDisposition {
+  id           String   @id @default(cuid())
+  source       String
+  mailbox      String
+  userId       String
+  rfcMessageId String
+  folder       String
+  uidValidity  String
+  uid          Int
+  status       String
+  reason       String
+  candidateIds Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([source, rfcMessageId])
+  @@index([userId, source])
+  @@map("mailboxSyncDisposition")
+}
+
 model EmailThread {
   id            String  @id @default(cuid())
   rootMessageId String  @unique
+  provider      String?
+  mailbox       String?
+  providerThreadId String?
   subject       String?
 
   companyId String?
@@ -1345,6 +1437,7 @@ model EmailThread {
 
   @@index([companyId, lastMessageAt])
   @@index([contactId, lastMessageAt])
+  @@unique([provider, mailbox, providerThreadId])
   @@map("emailThread")
 }
 
@@ -1759,6 +1852,7 @@ model BusinessUnit {
   recordMappings RecordMapping[]
   sourcedRecordAssociations BusinessUnitRecordAssociation[] @relation("RecordAssociationSourceBusinessUnit")
   targetRecordAssociations  BusinessUnitRecordAssociation[] @relation("RecordAssociationTargetBusinessUnit")
+  outreachLedger OutreachLedger[]
 
   @@index([enabled, key])
   @@map("business_unit")
@@ -1973,6 +2067,44 @@ model OutreachApproval {
 
   @@index([campaignId, state])
   @@map("outreach_approval")
+}
+
+model OutreachLedger {
+  id                 String         @id @default(uuid())
+  companyId          String
+  company            Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contactId          String?
+  contact            Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  businessUnitId     String
+  businessUnit       BusinessUnit   @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  outreachMode       OutreachMode
+  campaignType       String?
+  purpose            String?
+  senderIdentity     String
+  recipientEmail     String
+  subject            String
+  status             OutreachStatus @default(RESERVED)
+  provider           String
+  providerMessageId  String?        @unique
+  reservationKey     String         @unique
+  idempotencyKey     String         @unique
+  metadata           Json?
+  notes              String?
+  errorReason        String?
+  createdAt          DateTime       @default(now())
+  reservedAt         DateTime       @default(now())
+  queuedAt           DateTime?
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  bouncedAt          DateTime?
+  failedAt           DateTime?
+  updatedAt          DateTime       @updatedAt
+
+  @@index([companyId, businessUnitId, outreachMode])
+  @@index([companyId, businessUnitId, status])
+  @@index([businessUnitId, createdAt])
+  @@index([recipientEmail])
+  @@map("outreach_ledger")
 }
 
 model SuppressionEntry {

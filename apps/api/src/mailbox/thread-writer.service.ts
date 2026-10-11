@@ -7,14 +7,20 @@ import {
 	Prisma as PrismaNamespace,
 	RecordSource,
 } from "@crm/db";
+import { jsonObject } from "@crm/db/json";
 import { Injectable, Logger } from "@nestjs/common";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
 import { MailboxEmailIngestService } from "../email-ingest/mailbox-email-ingest.service";
+import {
+	evidenceForSender,
+	sendingBusinessUnitEvidence,
+} from "./email-provenance";
 import type { SyncSource } from "./mailbox.constants";
 import {
 	MailboxMatchService,
 	type MatchContext,
+	type MatchResult,
 } from "./mailbox-match.service";
 import { snippetOf } from "./message-text";
 import type { Participant } from "./participants";
@@ -22,6 +28,7 @@ import type { Participant } from "./participants";
 export type IncomingMessage = {
 	rfcMessageId: string;
 	rootId: string;
+	providerThreadId?: string | null;
 	subject: string | null;
 	from: Participant;
 	recipients: { email: string; name: string | null; kind: "to" | "cc" }[];
@@ -31,6 +38,44 @@ export type IncomingMessage = {
 	outlookMessageId?: string | null;
 	outlookWebLink?: string | null;
 };
+
+export type ThreadWriteRow = Pick<MailboxSync, "userId" | "autoCreate">;
+
+export type ThreadWriteOptions = {
+	mailbox: string;
+	origin: SyncSource;
+	providerThreadId?: string;
+	skipCommandIngest?: boolean;
+	match?: MatchResult;
+};
+
+export type ThreadWriteResult =
+	| {
+			status: "stored";
+			activityId: string;
+			companyId: string | null;
+			contactId: string | null;
+	  }
+	| {
+			status: "duplicate";
+			activityId: string | null;
+			companyId: string | null;
+			contactId: string | null;
+	  }
+	| {
+			status: "conflict";
+			activityId: string | null;
+			companyId: string | null;
+			contactId: string | null;
+			reason: string;
+	  }
+	| {
+			status: "unresolved";
+			rfcMessageId: string;
+			companyId: null;
+			contactId: null;
+	  }
+	| { status: "ignored"; rfcMessageId: string };
 
 @Injectable()
 export class ThreadWriterService {
@@ -59,12 +104,27 @@ export class ThreadWriterService {
 	}
 
 	async store(
-		row: MailboxSync,
-		options: { mailbox: string; origin: SyncSource },
+		row: ThreadWriteRow,
+		options: ThreadWriteOptions,
 		parsed: IncomingMessage,
 		context: MatchContext,
 	): Promise<boolean> {
-		if (await this.emailIngest.handle(parsed, options.mailbox)) return false;
+		const result = await this.storeDetailed(row, options, parsed, context);
+		return result.status === "stored";
+	}
+
+	async storeDetailed(
+		row: ThreadWriteRow,
+		options: ThreadWriteOptions,
+		parsed: IncomingMessage,
+		context: MatchContext,
+	): Promise<ThreadWriteResult> {
+		if (
+			!options.skipCommandIngest &&
+			(await this.emailIngest.handle(parsed, options.mailbox))
+		) {
+			return { status: "ignored", rfcMessageId: parsed.rfcMessageId };
+		}
 
 		const existing = await this.db.emailMessage.findUnique({
 			where: { rfcMessageId: parsed.rfcMessageId },
@@ -79,7 +139,14 @@ export class ThreadWriterService {
 				},
 			},
 		});
-		if (existing?.thread.activity) return false;
+		if (existing?.thread.activity) {
+			return {
+				status: "duplicate",
+				activityId: existing.thread.activity.id,
+				companyId: existing.thread.companyId,
+				contactId: existing.thread.contactId,
+			};
+		}
 
 		const repair = existing !== null;
 		const participants = [parsed.from, ...parsed.recipients];
@@ -104,44 +171,145 @@ export class ThreadWriterService {
 				outbound ||
 				(await this.hasOutboundInThread(parsed.rootId, options.mailbox));
 
-			const match = await this.match.resolve(
-				{
-					participants,
-					allowCreate: row.autoCreate && repliedTo,
-					source: RecordSource.EMAIL,
-					ownerId: row.userId,
-				},
-				context,
-			);
+			const match =
+				options.match ??
+				(await this.match.resolve(
+					{
+						participants,
+						allowCreate: row.autoCreate && repliedTo,
+						source: RecordSource.EMAIL,
+						ownerId: row.userId,
+					},
+					context,
+				));
 
 			companyId = match.companyId;
 			contactId = match.contactId;
 
 			if (!companyId && !contactId) {
-				return false;
+				return {
+					status: "unresolved",
+					rfcMessageId: parsed.rfcMessageId,
+					companyId: null,
+					contactId: null,
+				};
 			}
 		}
 
 		let occurredAt: Date;
+		let activityId: string;
+		let writeKind: "stored" | "repair" = "stored";
 
 		try {
-			occurredAt = await this.db.$transaction(async (tx) => {
+			const projection = await this.db.$transaction(async (tx) => {
+				await this.lockProviderMessage(tx, options, parsed);
+				const existingRoot = existing
+					? null
+					: await tx.emailThread.findUnique({
+							where: { rootMessageId: parsed.rootId },
+							select: {
+								id: true,
+								provider: true,
+								mailbox: true,
+								providerThreadId: true,
+								companyId: true,
+								contactId: true,
+								activity: { select: { id: true } },
+							},
+						});
+				if (
+					existingRoot &&
+					options.providerThreadId &&
+					providerScopeChanged(existingRoot, options)
+				) {
+					return {
+						kind: "conflict" as const,
+						activityId: existingRoot.activity?.id ?? null,
+						companyId: existingRoot.companyId,
+						contactId: existingRoot.contactId,
+						reason:
+							"The provider thread identity is already linked to a different mailbox or provider thread.",
+					};
+				}
+				if (!repair) {
+					const providerMessage = providerMessageWhere(options, parsed);
+					if (providerMessage) {
+						const existingProviderMessage = await tx.emailMessage.findFirst({
+							where: {
+								...providerMessage,
+								thread: providerMessageThreadWhere(options),
+							},
+							select: {
+								rfcMessageId: true,
+								thread: {
+									select: {
+										companyId: true,
+										contactId: true,
+										activity: { select: { id: true } },
+									},
+								},
+							},
+						});
+						if (existingProviderMessage) {
+							const sameRfc =
+								existingProviderMessage.rfcMessageId === parsed.rfcMessageId;
+							if (sameRfc) {
+								return {
+									kind: "duplicate" as const,
+									activityId:
+										existingProviderMessage.thread.activity?.id ?? null,
+									companyId: existingProviderMessage.thread.companyId,
+									contactId: existingProviderMessage.thread.contactId,
+								};
+							}
+							return {
+								kind: "conflict" as const,
+								activityId: existingProviderMessage.thread.activity?.id ?? null,
+								companyId: existingProviderMessage.thread.companyId,
+								contactId: existingProviderMessage.thread.contactId,
+								reason:
+									"The provider message ID is already linked to a different RFC Message-ID.",
+							};
+						}
+					}
+				}
 				const record = existing
 					? { id: existing.threadId }
-					: await tx.emailThread.upsert({
-							where: { rootMessageId: parsed.rootId },
-							create: {
-								rootMessageId: parsed.rootId,
-								subject: parsed.subject,
-								companyId,
-								contactId,
-								firstMessageAt: parsed.sentAt,
-								lastMessageAt: parsed.sentAt,
-								messageCount: 0,
-							},
-							update: {},
-							select: { id: true },
-						});
+					: existingRoot
+						? { id: existingRoot.id }
+						: await tx.emailThread.upsert({
+								where: { rootMessageId: parsed.rootId },
+								create: {
+									rootMessageId: parsed.rootId,
+									provider: options.providerThreadId ? options.origin : null,
+									mailbox: options.providerThreadId ? options.mailbox : null,
+									providerThreadId: options.providerThreadId ?? null,
+									subject: parsed.subject,
+									companyId,
+									contactId,
+									firstMessageAt: parsed.sentAt,
+									lastMessageAt: parsed.sentAt,
+									messageCount: 0,
+								},
+								update: {},
+								select: { id: true },
+							});
+				if (
+					existingRoot &&
+					options.providerThreadId &&
+					(!existingRoot.provider ||
+						!existingRoot.mailbox ||
+						!existingRoot.providerThreadId)
+				) {
+					await tx.emailThread.update({
+						where: { id: existingRoot.id },
+						data: {
+							provider: options.origin,
+							mailbox: options.mailbox,
+							providerThreadId: options.providerThreadId,
+						},
+					});
+				}
 
 				if (!repair) {
 					await tx.emailMessage.create({
@@ -186,23 +354,83 @@ export class ThreadWriterService {
 
 				await tx.emailThread.update({ where: { id: record.id }, data });
 
-				return this.project(tx, record.id, row.userId, {
+				const activity = await this.project(tx, record.id, row.userId, {
 					subject: parsed.subject ?? "(no subject)",
 					snippet: snippetOf(parsed.body),
 					lastMessageAt,
 					companyId,
 					contactId,
 					origin: options.origin,
+					fromEmail: parsed.from.email,
 				});
+				return {
+					kind: repair ? ("repair" as const) : ("stored" as const),
+					id: activity.id,
+					occurredAt: activity.occurredAt,
+				};
 			});
+			if (projection.kind === "duplicate") {
+				return {
+					status: "duplicate",
+					activityId: projection.activityId,
+					companyId: projection.companyId,
+					contactId: projection.contactId,
+				};
+			}
+			if (projection.kind === "conflict") {
+				return {
+					status: "conflict",
+					activityId: projection.activityId,
+					companyId: projection.companyId,
+					contactId: projection.contactId,
+					reason: projection.reason,
+				};
+			}
+			writeKind = projection.kind;
+			occurredAt = projection.occurredAt;
+			activityId = projection.id;
 		} catch (error) {
-			if (await this.storedElsewhere(error, parsed.rfcMessageId)) return false;
+			if (await this.storedElsewhere(error, parsed.rfcMessageId)) {
+				return {
+					status: "duplicate",
+					activityId: null,
+					companyId,
+					contactId,
+				};
+			}
 			throw error;
 		}
 
 		await this.touch({ companyId, contactId }, occurredAt, parsed.rfcMessageId);
 
-		return !repair;
+		return {
+			status: writeKind === "repair" ? "duplicate" : "stored",
+			activityId,
+			companyId,
+			contactId,
+		};
+	}
+
+	private async lockProviderMessage(
+		tx: Prisma.TransactionClient,
+		options: ThreadWriteOptions,
+		parsed: IncomingMessage,
+	): Promise<void> {
+		const providerMessage = providerMessageWhere(options, parsed);
+		if (!providerMessage) return;
+		const providerMessageId =
+			options.origin === "gmail"
+				? parsed.gmailMessageId
+				: parsed.outlookMessageId;
+		if (!providerMessageId) return;
+		const lockKey = JSON.stringify([
+			options.origin,
+			options.mailbox,
+			providerMessageId,
+		]);
+		await tx.$executeRaw(
+			PrismaNamespace.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
+		);
 	}
 
 	private async storedElsewhere(
@@ -267,8 +495,30 @@ export class ThreadWriterService {
 			companyId: string | null;
 			contactId: string | null;
 			origin: SyncSource;
+			fromEmail: string;
 		},
-	): Promise<Date> {
+	): Promise<{ id: string; occurredAt: Date }> {
+		const evidence = evidenceForSender(summary.fromEmail);
+		const current = await tx.activity.findUnique({
+			where: { emailThreadId },
+			select: { meta: true },
+		});
+		const existingEvidence = sendingBusinessUnitEvidence(current?.meta);
+		const activityMeta: Prisma.JsonObject = {
+			synced: true,
+			source: summary.origin,
+		};
+		if (evidence) activityMeta.sendingBusinessUnit = evidence;
+		const activityUpdate: Prisma.ActivityUpdateInput = {
+			body: summary.snippet,
+			occurredAt: summary.lastMessageAt,
+		};
+		if (evidence && !existingEvidence) {
+			activityUpdate.meta = {
+				...jsonObject(current?.meta ?? undefined),
+				sendingBusinessUnit: evidence,
+			};
+		}
 		const activity = await tx.activity.upsert({
 			where: { emailThreadId },
 			create: {
@@ -280,15 +530,61 @@ export class ThreadWriterService {
 				contactId: summary.contactId,
 				createdById: userId,
 				emailThreadId,
-				meta: { synced: true, source: summary.origin },
+				meta: activityMeta,
 			},
-			update: {
-				body: summary.snippet,
-				occurredAt: summary.lastMessageAt,
-			},
-			select: { createdAt: true },
+			update: activityUpdate,
+			select: { id: true, occurredAt: true },
 		});
 
-		return activity.createdAt;
+		return {
+			id: activity.id,
+			occurredAt: activity.occurredAt ?? summary.lastMessageAt,
+		};
 	}
+}
+
+function providerMessageWhere(
+	options: ThreadWriteOptions,
+	parsed: IncomingMessage,
+): Prisma.EmailMessageWhereInput | null {
+	if (options.origin === "gmail" && parsed.gmailMessageId) {
+		return { gmailMessageId: parsed.gmailMessageId };
+	}
+	if (options.origin === "outlook" && parsed.outlookMessageId) {
+		return { outlookMessageId: parsed.outlookMessageId };
+	}
+	return null;
+}
+
+function providerMessageThreadWhere(
+	options: ThreadWriteOptions,
+): Prisma.EmailThreadWhereInput {
+	return {
+		OR: [
+			{ provider: options.origin, mailbox: options.mailbox },
+			{ provider: null, mailbox: null, providerThreadId: null },
+		],
+	};
+}
+
+function providerScopeChanged(
+	existing: {
+		provider: string | null;
+		mailbox: string | null;
+		providerThreadId: string | null;
+	},
+	options: ThreadWriteOptions,
+): boolean {
+	const hasIdentity =
+		existing.provider !== null ||
+		existing.mailbox !== null ||
+		existing.providerThreadId !== null;
+	if (!hasIdentity) return false;
+
+	return (
+		existing.provider !== options.origin ||
+		existing.mailbox !== options.mailbox ||
+		(existing.providerThreadId !== null &&
+			existing.providerThreadId !== options.providerThreadId)
+	);
 }
