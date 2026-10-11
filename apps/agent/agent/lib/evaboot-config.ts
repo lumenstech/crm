@@ -1,0 +1,37 @@
+const SECOND_MS = 1_000;
+
+export const EVABOOT = {
+	baseUrl: "https://api.evaboot.com/v1/",
+	timeoutMs: 30 * SECOND_MS,
+	maxResponseBytes: 4 * 1024 * 1024,
+	pageSize: 100,
+	previewLimit: 1_000,
+	maxPreviewRecords: 10_000,
+	maxProfileBatch: 2_500,
+	exportCredits: 1,
+	emailCredits: 1,
+	maxRetryAfterSeconds: 86_400,
+	personalDomains: [
+		"gmail.com",
+		"googlemail.com",
+		"yahoo.com",
+		"hotmail.com",
+		"outlook.com",
+		"live.com",
+		"aol.com",
+		"icloud.com",
+		"me.com",
+		"proton.me",
+		"protonmail.com",
+	],
+	sharedMailboxes: [
+		"info",
+		"sales",
+		"support",
+		"contact",
+		"admin",
+		"office",
+		"billing",
+		"hello",
+	],
+} as const;
