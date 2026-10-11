@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.0](https://github.com/lumenstech/crm/compare/v1.16.0...v1.17.0) (2026-10-11)
+
+
+### Features
+
+* **mailbox:** authorize scoped historical Gmail alias ([9f38b06](https://github.com/lumenstech/crm/commit/9f38b06d641a697dce12be5ca173764eb289150d))
+
 ## [1.16.0](https://github.com/lumenstech/crm/compare/v1.15.3...v1.16.0) (2026-10-11)
 
 
