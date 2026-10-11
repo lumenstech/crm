@@ -21,6 +21,25 @@ const RATE_WINDOW_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { month: "short" });
+const STALE_RELATIONSHIP_DAYS = 60;
+
+type RelationshipPulseRow = {
+	id: string;
+	firstName: string;
+	lastName: string | null;
+	title: string | null;
+	email: string | null;
+	companyId: string | null;
+	companyName: string | null;
+	lastInboundAt: Date | null;
+	lastOutboundAt: Date | null;
+};
+
+type RelationshipPulseCounts = {
+	needsReplyCount: number;
+	waitingOnThemCount: number;
+	staleCount: number;
+};
 
 function monthStart(from: Date, offset: number): Date {
 	return new Date(from.getFullYear(), from.getMonth() + offset, 1);
@@ -50,6 +69,103 @@ export class DashboardService {
 
 		const base = await this.conversion.reportingCurrency();
 		const counted = this.conversion.countedWhere(base);
+
+		const staleBefore = new Date(
+			now.getTime() - STALE_RELATIONSHIP_DAYS * DAY_MS,
+		);
+
+		const [relationshipCounts, needsReply, waitingOnThem, staleRelationships] =
+			await Promise.all([
+				this.db.$queryRaw<RelationshipPulseCounts[]>`
+				WITH rollup AS (
+					SELECT
+						c.id,
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'INBOUND') AS "lastInboundAt",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'OUTBOUND') AS "lastOutboundAt"
+					FROM contact c
+					JOIN "emailThread" t ON t."contactId" = c.id
+					JOIN "emailMessage" m ON m."threadId" = t.id
+					WHERE c."archivedAt" IS NULL
+						AND (${!mine} OR c."ownerId" = ${actingUserId})
+					GROUP BY c.id
+				)
+				SELECT
+					COUNT(*) FILTER (
+						WHERE "lastInboundAt" IS NOT NULL
+							AND ("lastOutboundAt" IS NULL OR "lastInboundAt" > "lastOutboundAt")
+					)::int AS "needsReplyCount",
+					COUNT(*) FILTER (
+						WHERE "lastOutboundAt" IS NOT NULL
+							AND ("lastInboundAt" IS NULL OR "lastOutboundAt" > "lastInboundAt")
+					)::int AS "waitingOnThemCount",
+					COUNT(*) FILTER (
+						WHERE GREATEST("lastInboundAt", "lastOutboundAt") < ${staleBefore}
+					)::int AS "staleCount"
+				FROM rollup
+			`,
+				this.db.$queryRaw<RelationshipPulseRow[]>`
+				WITH rollup AS (
+					SELECT
+						c.id, c."firstName", c."lastName", c.title, c.email,
+						co.id AS "companyId", co.name AS "companyName",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'INBOUND') AS "lastInboundAt",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'OUTBOUND') AS "lastOutboundAt"
+					FROM contact c
+					LEFT JOIN company co ON co.id = c."companyId"
+					JOIN "emailThread" t ON t."contactId" = c.id
+					JOIN "emailMessage" m ON m."threadId" = t.id
+					WHERE c."archivedAt" IS NULL
+						AND (${!mine} OR c."ownerId" = ${actingUserId})
+					GROUP BY c.id, co.id, co.name
+				)
+				SELECT * FROM rollup
+				WHERE "lastInboundAt" IS NOT NULL
+					AND ("lastOutboundAt" IS NULL OR "lastInboundAt" > "lastOutboundAt")
+				ORDER BY "lastInboundAt" DESC
+				LIMIT 6
+			`,
+				this.db.$queryRaw<RelationshipPulseRow[]>`
+				WITH rollup AS (
+					SELECT
+						c.id, c."firstName", c."lastName", c.title, c.email,
+						co.id AS "companyId", co.name AS "companyName",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'INBOUND') AS "lastInboundAt",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'OUTBOUND') AS "lastOutboundAt"
+					FROM contact c
+					LEFT JOIN company co ON co.id = c."companyId"
+					JOIN "emailThread" t ON t."contactId" = c.id
+					JOIN "emailMessage" m ON m."threadId" = t.id
+					WHERE c."archivedAt" IS NULL
+						AND (${!mine} OR c."ownerId" = ${actingUserId})
+					GROUP BY c.id, co.id, co.name
+				)
+				SELECT * FROM rollup
+				WHERE "lastOutboundAt" IS NOT NULL
+					AND ("lastInboundAt" IS NULL OR "lastOutboundAt" > "lastInboundAt")
+				ORDER BY "lastOutboundAt" DESC
+				LIMIT 6
+			`,
+				this.db.$queryRaw<RelationshipPulseRow[]>`
+				WITH rollup AS (
+					SELECT
+						c.id, c."firstName", c."lastName", c.title, c.email,
+						co.id AS "companyId", co.name AS "companyName",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'INBOUND') AS "lastInboundAt",
+						MAX(m."sentAt") FILTER (WHERE m.direction = 'OUTBOUND') AS "lastOutboundAt"
+					FROM contact c
+					LEFT JOIN company co ON co.id = c."companyId"
+					JOIN "emailThread" t ON t."contactId" = c.id
+					JOIN "emailMessage" m ON m."threadId" = t.id
+					WHERE c."archivedAt" IS NULL
+						AND (${!mine} OR c."ownerId" = ${actingUserId})
+					GROUP BY c.id, co.id, co.name
+				)
+				SELECT * FROM rollup
+				WHERE GREATEST("lastInboundAt", "lastOutboundAt") < ${staleBefore}
+				ORDER BY GREATEST("lastInboundAt", "lastOutboundAt") ASC
+				LIMIT 6
+			`,
+			]);
 
 		const [
 			openByStage,
@@ -233,6 +349,25 @@ export class DashboardService {
 
 		const decided = wins + losses;
 
+		const mapRelationship = (row: RelationshipPulseRow) => ({
+			id: row.id,
+			firstName: row.firstName,
+			lastName: row.lastName,
+			title: row.title,
+			email: row.email,
+			company:
+				row.companyId && row.companyName
+					? { id: row.companyId, name: row.companyName }
+					: null,
+			lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
+			lastOutboundAt: row.lastOutboundAt?.toISOString() ?? null,
+		});
+		const relationshipCount = relationshipCounts[0] ?? {
+			needsReplyCount: 0,
+			waitingOnThemCount: 0,
+			staleCount: 0,
+		};
+
 		return {
 			scope: input.scope,
 			reportingCurrency: base,
@@ -285,6 +420,12 @@ export class DashboardService {
 				createdAt: createdAt.toISOString(),
 				meta: activityMeta.parse(meta),
 			})),
+			relationshipPulse: {
+				...relationshipCount,
+				needsReply: needsReply.map(mapRelationship),
+				waitingOnThem: waitingOnThem.map(mapRelationship),
+				stale: staleRelationships.map(mapRelationship),
+			},
 		};
 	}
 }

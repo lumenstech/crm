@@ -131,6 +131,18 @@ const contactOwnerOutput = z.object({
 	image: z.string().nullable(),
 });
 
+const contactBusinessUnitOutput = z.object({
+	key: z.string(),
+	name: z.string(),
+});
+
+const contactRelationshipStatus = z.enum([
+	"needs_reply",
+	"waiting_on_them",
+	"active",
+	"no_email",
+]);
+
 export const contactRowOutput = z.object({
 	id: z.string(),
 	firstName: z.string(),
@@ -143,6 +155,12 @@ export const contactRowOutput = z.object({
 	),
 	company: contactCompanyOutput.nullable(),
 	owner: contactOwnerOutput.nullable(),
+	businessUnits: z.array(contactBusinessUnitOutput),
+	emailCount: z.number(),
+	threadCount: z.number(),
+	lastInboundAt: z.string().nullable(),
+	lastOutboundAt: z.string().nullable(),
+	relationshipStatus: contactRelationshipStatus,
 	lastActivityAt: z.string().nullable(),
 	createdAt: z.string(),
 	archivedAt: z.string().nullable(),
