@@ -8,6 +8,8 @@ const suffix = process.env.TEST_RUN_ID ?? `b379f49-${Date.now()}`;
 const dataGearKey = "data-gear";
 const otherKey = `history-other-${suffix}`;
 const dataGearSenderAddress = "sales@data-gear.com";
+const syntheticUserId = "synthetic-outreach-user";
+const excludedUserId = "CQILDYRIiaRmf7CD28VLn8jYPu6gSeTE";
 const service = new OutreachService(db);
 
 let dataGearId: string;
@@ -65,6 +67,8 @@ async function createOutboundHistory(
 		evidenceKey?: string;
 		extraFromEmail?: string;
 		fromEmail?: string;
+		mailbox?: string;
+		provider?: string;
 		suffix: string;
 	},
 ) {
@@ -79,8 +83,8 @@ async function createOutboundHistory(
 	const thread = await db.emailThread.create({
 		data: {
 			rootMessageId: `<history-${options.suffix}@example.test>`,
-			provider: "gmail",
-			mailbox: dataGearSenderAddress,
+			provider: options.provider ?? "gmail",
+			mailbox: options.mailbox ?? dataGearSenderAddress,
 			providerThreadId: `history-thread-${options.suffix}`,
 			subject: "Historical outbound message",
 			companyId,
@@ -193,7 +197,7 @@ describe("outreach history safety against the isolated database", () => {
 			data: { businessUnitId: otherUnitId },
 		});
 
-		const result = await service.preflight(input(company));
+		const result = await service.preflight(input(company), syntheticUserId);
 
 		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -202,6 +206,7 @@ describe("outreach history safety against the isolated database", () => {
 		]);
 		const approved = await service.preflight(
 			input(company, { approvedCrossBusinessContact: true }),
+			syntheticUserId,
 		);
 		expect(approved.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(approved.newOutreachPermitted).toBe(false);
@@ -218,7 +223,7 @@ describe("outreach history safety against the isolated database", () => {
 			suffix: `${suffix}-unattributed`,
 		});
 
-		const result = await service.preflight(input(company));
+		const result = await service.preflight(input(company), syntheticUserId);
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -237,7 +242,7 @@ describe("outreach history safety against the isolated database", () => {
 			suffix: `${suffix}-mixed`,
 		});
 
-		const result = await service.preflight(input(company));
+		const result = await service.preflight(input(company), syntheticUserId);
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.priorCanonicalMailboxContact.count).toBe(2);
@@ -245,6 +250,46 @@ describe("outreach history safety against the isolated database", () => {
 			dataGearKey,
 		]);
 		expect(result.priorCanonicalMailboxContact.unattributedCount).toBe(1);
+	});
+
+	it("excludes the restricted Gmail mailbox but keeps allowed Purelymail evidence", async () => {
+		const company = await createCompany(
+			"History Safety Excluded Gmail",
+			`history-safety-${suffix}-excluded-gmail.test`,
+		);
+		await createOutboundHistory(company.id, {
+			provider: "gmail",
+			mailbox: "DANNY@LUMENSNY.COM",
+			fromEmail: "danny@lumensny.com",
+			evidenceKey: dataGearKey,
+			suffix: `${suffix}-excluded-gmail`,
+		});
+		await createOutboundHistory(company.id, {
+			provider: "purelymail",
+			mailbox: dataGearSenderAddress,
+			fromEmail: dataGearSenderAddress,
+			evidenceKey: dataGearKey,
+			suffix: `${suffix}-allowed-purelymail`,
+		});
+
+		const result = await service.preflight(input(company), excludedUserId);
+
+		expect(result.historyCoverage).toBe("limited");
+		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
+		expect(result.newOutreachPermitted).toBe(false);
+		expect(result.priorCanonicalMailboxContact).toMatchObject({
+			count: 1,
+			businessUnitKeys: [dataGearKey],
+		});
+
+		const blocked = await service.reserve(
+			input(company, { idempotencyKey: `${suffix}-excluded-gmail-reserve` }),
+			excludedUserId,
+		);
+		expect(blocked.status).toBe("OUTBOUND_DISABLED");
+		expect(
+			await db.outreachLedger.count({ where: { companyId: company.id } }),
+		).toBe(0);
 	});
 
 	it("allows imported-only history to reserve an explicit follow-up", async () => {
@@ -263,6 +308,7 @@ describe("outreach history safety against the isolated database", () => {
 				outreachMode: "FOLLOW_UP",
 				idempotencyKey: `${suffix}-follow-up-reservation`,
 			}),
+			syntheticUserId,
 		);
 
 		expect(result.status).toBe("RESERVED");
@@ -280,8 +326,14 @@ describe("outreach history safety against the isolated database", () => {
 			`history-safety-${suffix}-race.test`,
 		);
 		const [first, second] = await Promise.all([
-			service.reserve(input(company, { idempotencyKey: `${suffix}-race-a` })),
-			service.reserve(input(company, { idempotencyKey: `${suffix}-race-b` })),
+			service.reserve(
+				input(company, { idempotencyKey: `${suffix}-race-a` }),
+				syntheticUserId,
+			),
+			service.reserve(
+				input(company, { idempotencyKey: `${suffix}-race-b` }),
+				syntheticUserId,
+			),
 		]);
 
 		expect([first.status, second.status].sort()).toEqual([
@@ -306,6 +358,7 @@ describe("outreach history safety against the isolated database", () => {
 
 		const afterSent = await service.reserve(
 			input(company, { idempotencyKey: `${suffix}-race-after-sent` }),
+			syntheticUserId,
 		);
 		expect(afterSent.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(

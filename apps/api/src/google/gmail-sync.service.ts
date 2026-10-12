@@ -4,6 +4,7 @@ import {
 	type MailboxSyncModel as MailboxSync,
 } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
+import { hasExcludedMailboxForSource } from "../config/mailbox-exclusion";
 import { InjectDatabase } from "../database/database.constants";
 import type { MatchContext } from "../mailbox/mailbox-match.service";
 import { MailboxTokenService } from "../mailbox/mailbox-token.service";
@@ -49,6 +50,14 @@ export class GmailSyncService {
 	) {}
 
 	async sync(row: MailboxSync): Promise<GmailSyncOutcome> {
+		if (hasExcludedMailboxForSource(row.userId, "gmail")) {
+			return {
+				source: "gmail",
+				userId: row.userId,
+				status: "skipped",
+				reason: "Mailbox history is excluded for this user.",
+			};
+		}
 		const token = await this.tokens.accessTokenFor(row.userId, "gmail");
 
 		if (token.outcome === "not-connected") {

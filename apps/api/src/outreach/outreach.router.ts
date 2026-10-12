@@ -1,6 +1,14 @@
 import { Inject } from "@nestjs/common";
-import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
+import {
+	Ctx,
+	Input,
+	Mutation,
+	Query,
+	Router,
+	UseMiddlewares,
+} from "nestjs-trpc";
 import type { z } from "zod";
+import type { AuthedTrpcContext } from "../trpc/context.types";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
 import {
@@ -27,8 +35,11 @@ export class OutreachRouter {
 		output: preflightOutreachOutput,
 		meta: restMeta("POST", "/outreach/preflight", ["Outreach"]),
 	})
-	async preflight(@Input() input: z.infer<typeof preflightOutreachInput>) {
-		return this.outreach.preflight(input);
+	async preflight(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof preflightOutreachInput>,
+	) {
+		return this.outreach.preflight(input, ctx.user.id);
 	}
 
 	@Mutation({
@@ -36,8 +47,11 @@ export class OutreachRouter {
 		output: reserveOutreachOutput,
 		meta: restMeta("POST", "/outreach/reserve", ["Outreach"]),
 	})
-	async reserve(@Input() input: z.infer<typeof reserveOutreachInput>) {
-		return this.outreach.reserve(input);
+	async reserve(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof reserveOutreachInput>,
+	) {
+		return this.outreach.reserve(input, ctx.user.id);
 	}
 
 	@Mutation({

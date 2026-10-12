@@ -9,6 +9,7 @@ import {
 } from "@crm/db";
 import { jsonObject } from "@crm/db/json";
 import { Injectable, Logger } from "@nestjs/common";
+import { isMailboxExcluded } from "../config/mailbox-exclusion";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
 import { MailboxEmailIngestService } from "../email-ingest/mailbox-email-ingest.service";
@@ -120,6 +121,9 @@ export class ThreadWriterService {
 		parsed: IncomingMessage,
 		context: MatchContext,
 	): Promise<ThreadWriteResult> {
+		if (isMailboxExcluded(row.userId, options.origin, options.mailbox)) {
+			return { status: "ignored", rfcMessageId: parsed.rfcMessageId };
+		}
 		if (
 			!options.skipCommandIngest &&
 			(await this.emailIngest.handle(parsed, options.mailbox))

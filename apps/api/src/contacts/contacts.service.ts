@@ -24,6 +24,10 @@ import {
 } from "../crm/activity-stamp.service";
 import { type BulkResult, requireOwner, runBulk } from "../crm/bulk";
 import { blankToNull, normalizeEmail, toCents } from "../crm/values";
+import {
+	excludedMailboxesForUser,
+	visibleEmailThreadWhere,
+} from "../config/mailbox-exclusion";
 import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
 import {
@@ -151,7 +155,7 @@ export class ContactsService {
 		};
 	}
 
-	async byId(id: string) {
+	async byId(id: string, actingUserId: string) {
 		const contact = await this.db.contact.findUnique({
 			where: { id },
 			select: {
@@ -224,6 +228,7 @@ export class ContactsService {
 		const relationship = await this.relationship(
 			id,
 			contact.company?.id ?? null,
+			actingUserId,
 		);
 
 		const { deals, createdAt, archivedAt, brief, facts, company, ...rest } =
@@ -607,18 +612,28 @@ export class ContactsService {
 		});
 	}
 
-	private async relationship(contactId: string, companyId: string | null) {
+	private async relationship(
+		contactId: string,
+		companyId: string | null,
+		actingUserId: string,
+	) {
 		const now = new Date();
+		const threadVisibility = visibleEmailThreadWhere(
+			excludedMailboxesForUser(actingUserId),
+		);
 
 		const [threads, lastReply, meetings, nextMeeting, colleagues] =
 			await Promise.all([
 				this.db.emailThread.aggregate({
-					where: { contactId },
+					where: { contactId, ...threadVisibility },
 					_sum: { messageCount: true },
 					_count: { _all: true },
 				}),
 				this.db.emailMessage.findFirst({
-					where: { thread: { contactId }, direction: "INBOUND" },
+					where: {
+						thread: { contactId, ...threadVisibility },
+						direction: "INBOUND",
+					},
 					orderBy: { sentAt: "desc" },
 					select: { sentAt: true },
 				}),

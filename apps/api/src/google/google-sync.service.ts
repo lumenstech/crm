@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { hasExcludedMailboxForSource } from "../config/mailbox-exclusion";
 import { SyncStateService } from "../mailbox/sync-state.service";
 import { CalendarSyncService } from "./calendar-sync.service";
 import { GmailSyncService } from "./gmail-sync.service";
@@ -13,6 +14,9 @@ export class GoogleSyncService {
 	) {}
 
 	async runOne(userId: string, source: GoogleSyncSource) {
+		if (source === "gmail" && hasExcludedMailboxForSource(userId, source)) {
+			return null;
+		}
 		const row = await this.state.get(userId, source);
 		if (!row) return null;
 

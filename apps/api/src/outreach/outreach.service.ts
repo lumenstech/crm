@@ -9,6 +9,11 @@ import {
 import { jsonObject } from "@crm/db/json";
 import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
+import {
+	excludedMailboxesForUser,
+	historyCoverageForUser,
+	visibleEmailThreadWhere,
+} from "../config/mailbox-exclusion";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	sendingBusinessUnitEvidence,
@@ -96,7 +101,19 @@ export class OutreachService {
 
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	async preflight(input: PreflightOutreachInput) {
+	async preflight(input: PreflightOutreachInput, actingUserId: string) {
+		const coverage = historyCoverageForUser(actingUserId);
+		const result = await this.preflightRaw(
+			input,
+			excludedMailboxesForUser(actingUserId),
+		);
+		return { ...result, historyCoverage: coverage };
+	}
+
+	private async preflightRaw(
+		input: PreflightOutreachInput,
+		excludedMailboxes: ReturnType<typeof excludedMailboxesForUser>,
+	) {
 		try {
 			const target = await this.db.businessUnit.findUnique({
 				where: { key: input.targetBusinessUnit },
@@ -200,7 +217,10 @@ export class OutreachService {
 				this.db.emailMessage.findMany({
 					where: {
 						direction: EmailDirection.OUTBOUND,
-						thread: { companyId: resolution.company.id },
+						thread: {
+							companyId: resolution.company.id,
+							...visibleEmailThreadWhere(excludedMailboxes),
+						},
 					},
 					select: {
 						sentAt: true,
@@ -392,6 +412,24 @@ export class OutreachService {
 				);
 			}
 
+			if (
+				excludedMailboxes.length > 0 &&
+				input.outreachMode === "NEW_OUTREACH"
+			) {
+				return this.decision(
+					"OUTBOUND_DISABLED",
+					resolution,
+					matchedIdentifiers(resolution, input),
+					existingBusinessUnitAssociations,
+					previousOutreach,
+					false,
+					"Mailbox history coverage is limited for this user.",
+					"Use an allowed mailbox source or obtain explicit history coverage review before new outreach.",
+					identity,
+					priorCanonicalMailboxContact,
+				);
+			}
+
 			if (otherBusinessActivity && input.outreachMode === "NEW_OUTREACH") {
 				return this.decision(
 					"CROSS_BUSINESS_CONTACT",
@@ -428,7 +466,8 @@ export class OutreachService {
 		}
 	}
 
-	async reserve(input: ReserveOutreachInput) {
+	async reserve(input: ReserveOutreachInput, actingUserId: string) {
+		const excludedMailboxes = excludedMailboxesForUser(actingUserId);
 		const idempotencyKey =
 			input.idempotencyKey?.trim() || this.derivedIdempotencyKey(input);
 		try {
@@ -463,7 +502,7 @@ export class OutreachService {
 				reservation: null,
 			};
 		}
-		const preflight = await this.preflight(input);
+		const preflight = await this.preflight(input, actingUserId);
 		const allowed = this.allowedReservation(
 			input,
 			preflight.status,
@@ -513,6 +552,15 @@ export class OutreachService {
 				}
 
 				if (input.outreachMode === "NEW_OUTREACH") {
+					if (excludedMailboxes.length > 0) {
+						return {
+							kind: "blocked" as const,
+							status: "OUTBOUND_DISABLED" as const,
+							reason: "Mailbox history coverage is limited for this user.",
+							requiredNextAction:
+								"Use an allowed mailbox source or obtain explicit history coverage review before new outreach.",
+						};
+					}
 					const existing = await tx.outreachLedger.findFirst({
 						where: {
 							companyId,
@@ -536,7 +584,10 @@ export class OutreachService {
 						tx.emailMessage.findMany({
 							where: {
 								direction: EmailDirection.OUTBOUND,
-								thread: { companyId },
+								thread: {
+									companyId,
+									...visibleEmailThreadWhere(excludedMailboxes),
+								},
 							},
 							select: {
 								sentAt: true,

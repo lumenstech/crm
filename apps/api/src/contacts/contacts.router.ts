@@ -51,8 +51,8 @@ export class ContactsRouter {
 		output: contactByIdOutput,
 		meta: restMeta("GET", "/contacts/{id}", ["Contacts"]),
 	})
-	async byId(@Input("id") id: string) {
-		return this.contacts.byId(id);
+	async byId(@Ctx() ctx: AuthedTrpcContext, @Input("id") id: string) {
+		return this.contacts.byId(id, ctx.user.id);
 	}
 
 	@Mutation({

@@ -105,8 +105,11 @@ export class GoogleRouter {
 		output: emailThreadOutput,
 		meta: restMeta("GET", "/google/threads/{threadId}", ["Google"]),
 	})
-	async thread(@Input("threadId") threadId: string) {
-		return this.conversations.thread(threadId);
+	async thread(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input("threadId") threadId: string,
+	) {
+		return this.conversations.thread(threadId, ctx.user.id);
 	}
 
 	@Query({

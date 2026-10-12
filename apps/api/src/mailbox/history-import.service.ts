@@ -4,6 +4,7 @@ import {
 	ForbiddenException,
 	Injectable,
 } from "@nestjs/common";
+import { isMailboxExcluded } from "../config/mailbox-exclusion";
 import {
 	isHistoricalMailboxAuthorized,
 	parseHistoricalMailboxBindings,
@@ -33,6 +34,11 @@ export class HistoricalEmailImportService {
 		userEmail: string,
 	): Promise<HistoricalEmailImportOutput> {
 		const mailbox = input.mailbox.toLowerCase();
+		if (isMailboxExcluded(userId, input.source, mailbox)) {
+			throw new ForbiddenException(
+				"This mailbox is not available for history operations.",
+			);
+		}
 		const bindings = parseHistoricalMailboxBindings(
 			process.env.CRM_HISTORICAL_MAILBOX_BINDINGS_JSON,
 		);

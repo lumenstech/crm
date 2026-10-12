@@ -11,6 +11,10 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import {
+	excludedMailboxesForUser,
+	visibleActivityWhere,
+} from "../config/mailbox-exclusion";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { blankToNull } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
@@ -82,8 +86,14 @@ export class ActivitiesService {
 		private readonly stamp: ActivityStampService,
 	) {}
 
-	async timeline(input: TimelineInput): Promise<TimelineResult> {
-		const where = this.anchor(input);
+	async timeline(
+		input: TimelineInput,
+		actingUserId: string,
+	): Promise<TimelineResult> {
+		const where = {
+			...this.anchor(input),
+			...visibleActivityWhere(excludedMailboxesForUser(actingUserId)),
+		};
 		Object.assign(where, filterClause(input.filter));
 
 		const rows = await this.db.activity.findMany({
@@ -109,8 +119,12 @@ export class ActivitiesService {
 
 	async timelineCounts(
 		input: Pick<TimelineInput, "companyId" | "contactId" | "dealId">,
+		actingUserId: string,
 	): Promise<TimelineCounts> {
-		const anchor = this.anchor(input);
+		const anchor = {
+			...this.anchor(input),
+			...visibleActivityWhere(excludedMailboxesForUser(actingUserId)),
+		};
 
 		const [all, notes, upcoming, done, email, meetings] = await Promise.all([
 			this.db.activity.count({ where: anchor }),
