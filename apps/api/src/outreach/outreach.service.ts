@@ -7,12 +7,12 @@ import {
 	Prisma,
 } from "@crm/db";
 import { jsonObject } from "@crm/db/json";
+import { visibleEmailThreadWhere } from "@crm/db/mailbox-privacy";
 import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
 import {
-	excludedMailboxesForUser,
+	excludedMailboxesForReader,
 	historyCoverageForUser,
-	visibleEmailThreadWhere,
 } from "../config/mailbox-exclusion";
 import { InjectDatabase } from "../database/database.constants";
 import {
@@ -60,6 +60,19 @@ const historyInclude = {
 	company: { select: { id: true, name: true } },
 } as const;
 
+const historyDecisionSelect = {
+	id: true,
+	companyId: true,
+	businessUnitId: true,
+	status: true,
+	providerMessageId: true,
+	businessUnit: { select: { id: true, key: true, name: true } },
+} as const;
+
+type OutreachHistoryRow = Prisma.OutreachLedgerGetPayload<{
+	include: typeof historyInclude;
+}>;
+
 type CompanyRecord = Prisma.CompanyGetPayload<{ select: typeof companySelect }>;
 
 type CompanyResolution = {
@@ -105,14 +118,16 @@ export class OutreachService {
 		const coverage = historyCoverageForUser(actingUserId);
 		const result = await this.preflightRaw(
 			input,
-			excludedMailboxesForUser(actingUserId),
+			excludedMailboxesForReader(actingUserId),
+			coverage === "limited",
 		);
 		return { ...result, historyCoverage: coverage };
 	}
 
 	private async preflightRaw(
 		input: PreflightOutreachInput,
-		excludedMailboxes: ReturnType<typeof excludedMailboxesForUser>,
+		excludedMailboxes: ReturnType<typeof excludedMailboxesForReader>,
+		limitedHistory: boolean,
 	) {
 		try {
 			const target = await this.db.businessUnit.findUnique({
@@ -184,12 +199,19 @@ export class OutreachService {
 						},
 					},
 				}),
-				this.db.outreachLedger.findMany({
-					where: { companyId: resolution.company.id },
-					include: historyInclude,
-					orderBy: { createdAt: "asc" },
-					take: 100,
-				}),
+				excludedMailboxes.length === 0
+					? this.db.outreachLedger.findMany({
+							where: { companyId: resolution.company.id },
+							include: historyInclude,
+							orderBy: { createdAt: "asc" },
+							take: 100,
+						})
+					: this.db.outreachLedger.findMany({
+							where: { companyId: resolution.company.id },
+							select: historyDecisionSelect,
+							orderBy: { createdAt: "asc" },
+							take: 100,
+						}),
 				input.recipientEmail
 					? this.db.suppressedContact.findUnique({
 							where: { email: input.recipientEmail.toLowerCase() },
@@ -238,6 +260,23 @@ export class OutreachService {
 				}),
 			]);
 
+			const visibleHistory =
+				excludedMailboxes.length === 0
+					? (history as OutreachHistoryRow[])
+					: canonicalMailboxMessages.length === 0
+						? []
+						: await this.db.outreachLedger.findMany({
+								where: {
+									companyId: resolution.company.id,
+									providerMessageId: {
+										in: canonicalMailboxMessages.map(
+											(message) => message.rfcMessageId,
+										),
+									},
+								},
+								include: historyInclude,
+								orderBy: { createdAt: "asc" },
+							});
 			const existingBusinessUnitAssociations = [
 				...(resolution.company.businessUnit
 					? [resolution.company.businessUnit]
@@ -247,7 +286,7 @@ export class OutreachService {
 				(unit, index, rows) =>
 					rows.findIndex((candidate) => candidate.id === unit.id) === index,
 			);
-			const previousOutreach = history.map((row) => this.serialize(row));
+			const previousOutreach = visibleHistory.map((row) => this.serialize(row));
 			const targetHistory = history.filter(
 				(row) => row.businessUnitId === target.id,
 			);
@@ -350,6 +389,21 @@ export class OutreachService {
 				);
 			}
 
+			if (limitedHistory && input.outreachMode === "NEW_OUTREACH") {
+				return this.decision(
+					"OUTBOUND_DISABLED",
+					resolution,
+					matchedIdentifiers(resolution, input),
+					existingBusinessUnitAssociations,
+					previousOutreach,
+					false,
+					"Mailbox history coverage is limited for this user.",
+					"Use an allowed mailbox source or obtain explicit history coverage review before new outreach.",
+					identity,
+					priorCanonicalMailboxContact,
+				);
+			}
+
 			if (priorCanonicalMailboxContact.count > 0) {
 				if (priorCanonicalMailboxContact.unattributedCount > 0) {
 					return this.decision(
@@ -412,24 +466,6 @@ export class OutreachService {
 				);
 			}
 
-			if (
-				excludedMailboxes.length > 0 &&
-				input.outreachMode === "NEW_OUTREACH"
-			) {
-				return this.decision(
-					"OUTBOUND_DISABLED",
-					resolution,
-					matchedIdentifiers(resolution, input),
-					existingBusinessUnitAssociations,
-					previousOutreach,
-					false,
-					"Mailbox history coverage is limited for this user.",
-					"Use an allowed mailbox source or obtain explicit history coverage review before new outreach.",
-					identity,
-					priorCanonicalMailboxContact,
-				);
-			}
-
 			if (otherBusinessActivity && input.outreachMode === "NEW_OUTREACH") {
 				return this.decision(
 					"CROSS_BUSINESS_CONTACT",
@@ -467,20 +503,33 @@ export class OutreachService {
 	}
 
 	async reserve(input: ReserveOutreachInput, actingUserId: string) {
-		const excludedMailboxes = excludedMailboxesForUser(actingUserId);
+		const excludedMailboxes = excludedMailboxesForReader(actingUserId);
+		const limitedHistory = historyCoverageForUser(actingUserId) === "limited";
 		const idempotencyKey =
 			input.idempotencyKey?.trim() || this.derivedIdempotencyKey(input);
 		try {
-			const existing = await this.db.outreachLedger.findUnique({
-				where: { idempotencyKey },
-				include: historyInclude,
-			});
-			if (existing)
-				return this.duplicate(
-					existing,
-					idempotencyKey,
-					"The idempotency key already has a reservation.",
-				);
+			if (excludedMailboxes.length === 0) {
+				const existing = await this.db.outreachLedger.findUnique({
+					where: { idempotencyKey },
+					include: historyInclude,
+				});
+				if (existing)
+					return this.duplicate(
+						existing,
+						idempotencyKey,
+						"The idempotency key already has a reservation.",
+					);
+			} else {
+				const existing = await this.db.outreachLedger.findUnique({
+					where: { idempotencyKey },
+					select: { id: true },
+				});
+				if (existing)
+					return this.limitedDuplicate(
+						idempotencyKey,
+						"The idempotency key already has a reservation.",
+					);
+			}
 		} catch (error) {
 			this.logger.error(
 				{ message: "Outreach idempotency check failed closed" },
@@ -552,7 +601,7 @@ export class OutreachService {
 				}
 
 				if (input.outreachMode === "NEW_OUTREACH") {
-					if (excludedMailboxes.length > 0) {
+					if (limitedHistory) {
 						return {
 							kind: "blocked" as const,
 							status: "OUTBOUND_DISABLED" as const,
@@ -561,26 +610,50 @@ export class OutreachService {
 								"Use an allowed mailbox source or obtain explicit history coverage review before new outreach.",
 						};
 					}
-					const existing = await tx.outreachLedger.findFirst({
-						where: {
-							companyId,
-							businessUnitId: target.id,
-							outreachMode: OutreachMode.NEW_OUTREACH,
-							status: { in: [...INITIAL_HISTORY_STATUSES] },
-						},
-						include: historyInclude,
-						orderBy: { createdAt: "asc" },
-					});
+					const existing =
+						excludedMailboxes.length === 0
+							? await tx.outreachLedger.findFirst({
+									where: {
+										companyId,
+										businessUnitId: target.id,
+										outreachMode: OutreachMode.NEW_OUTREACH,
+										status: { in: [...INITIAL_HISTORY_STATUSES] },
+									},
+									include: historyInclude,
+									orderBy: { createdAt: "asc" },
+								})
+							: await tx.outreachLedger.findFirst({
+									where: {
+										companyId,
+										businessUnitId: target.id,
+										outreachMode: OutreachMode.NEW_OUTREACH,
+										status: { in: [...INITIAL_HISTORY_STATUSES] },
+									},
+									select: historyDecisionSelect,
+									orderBy: { createdAt: "asc" },
+								});
 					if (existing) {
-						return { kind: "duplicate" as const, row: existing };
+						return {
+							kind:
+								excludedMailboxes.length === 0
+									? ("duplicate" as const)
+									: ("limited_duplicate" as const),
+							row: existing,
+						};
 					}
 
 					const [currentHistory, currentMessages] = await Promise.all([
-						tx.outreachLedger.findMany({
-							where: { companyId },
-							include: historyInclude,
-							orderBy: { createdAt: "asc" },
-						}),
+						excludedMailboxes.length === 0
+							? tx.outreachLedger.findMany({
+									where: { companyId },
+									include: historyInclude,
+									orderBy: { createdAt: "asc" },
+								})
+							: tx.outreachLedger.findMany({
+									where: { companyId },
+									select: historyDecisionSelect,
+									orderBy: { createdAt: "asc" },
+								}),
 						tx.emailMessage.findMany({
 							where: {
 								direction: EmailDirection.OUTBOUND,
@@ -684,9 +757,15 @@ export class OutreachService {
 					reservation: null,
 				};
 			}
+			if (result.kind === "limited_duplicate") {
+				return this.limitedDuplicate(
+					idempotencyKey,
+					"A concurrent or existing reservation already claims this company.",
+				);
+			}
 			if (result.kind === "duplicate") {
 				return this.duplicate(
-					result.row,
+					result.row as OutreachHistoryRow,
 					idempotencyKey,
 					"A concurrent or existing reservation already claims this company.",
 				);
@@ -694,41 +773,63 @@ export class OutreachService {
 			return {
 				status: "RESERVED" as const,
 				reservationId: result.row.id,
-				reservationKey: result.row.reservationKey,
+				reservationKey: (result.row as OutreachHistoryRow).reservationKey,
 				idempotencyKey,
 				canonicalCompanyId: result.row.companyId,
 				canonicalCompanyName: preflight.canonicalCompanyName,
-				senderIdentity: result.row.senderIdentity,
+				senderIdentity: (result.row as OutreachHistoryRow).senderIdentity,
 				template: preflight.template,
 				duplicate: false,
 				reason: "Atomic outreach reservation created.",
 				requiredNextAction:
 					"Submit the approved payload, then finalize this reservation.",
-				reservation: this.serialize(result.row),
+				reservation: this.serialize(result.row as OutreachHistoryRow),
 			};
 		} catch (error) {
 			if (
 				error instanceof Prisma.PrismaClientKnownRequestError &&
 				error.code === "P2002"
 			) {
-				const existing = await this.db.outreachLedger.findFirst({
-					where: {
-						OR: [
-							{ idempotencyKey },
-							{
-								companyId: preflight.canonicalCompanyId ?? "",
-								businessUnit: { key: input.targetBusinessUnit },
-								outreachMode: OutreachMode.NEW_OUTREACH,
-								status: { in: [...ACTIVE_STATUSES] },
-							},
-						],
-					},
-					include: historyInclude,
-					orderBy: { createdAt: "asc" },
-				});
+				const existing =
+					excludedMailboxes.length === 0
+						? await this.db.outreachLedger.findFirst({
+								where: {
+									OR: [
+										{ idempotencyKey },
+										{
+											companyId: preflight.canonicalCompanyId ?? "",
+											businessUnit: { key: input.targetBusinessUnit },
+											outreachMode: OutreachMode.NEW_OUTREACH,
+											status: { in: [...ACTIVE_STATUSES] },
+										},
+									],
+								},
+								include: historyInclude,
+								orderBy: { createdAt: "asc" },
+							})
+						: await this.db.outreachLedger.findFirst({
+								where: {
+									OR: [
+										{ idempotencyKey },
+										{
+											companyId: preflight.canonicalCompanyId ?? "",
+											businessUnit: { key: input.targetBusinessUnit },
+											outreachMode: OutreachMode.NEW_OUTREACH,
+											status: { in: [...ACTIVE_STATUSES] },
+										},
+									],
+								},
+								select: historyDecisionSelect,
+								orderBy: { createdAt: "asc" },
+							});
 				if (existing) {
+					if (excludedMailboxes.length > 0)
+						return this.limitedDuplicate(
+							idempotencyKey,
+							"A concurrent or existing reservation already claims this company.",
+						);
 					return this.duplicate(
-						existing,
+						existing as OutreachHistoryRow,
 						idempotencyKey,
 						"A concurrent or existing reservation already claims this company.",
 					);
@@ -756,17 +857,32 @@ export class OutreachService {
 		}
 	}
 
-	async finalize(input: FinalizeOutreachInput) {
+	async finalize(input: FinalizeOutreachInput, actingUserId: string) {
+		const excludedMailboxes = excludedMailboxesForReader(actingUserId);
 		try {
 			const row = await this.db.$transaction(async (tx) => {
 				const identity = await tx.outreachLedger.findUnique({
 					where: { id: input.reservationId },
-					select: { companyId: true },
+					select: { companyId: true, providerMessageId: true },
 				});
 				if (!identity)
 					throw new ConflictException(
 						"The outreach reservation does not exist.",
 					);
+				if (excludedMailboxes.length > 0 && identity.providerMessageId) {
+					const visibleMessage = await tx.emailMessage.findFirst({
+						where: {
+							rfcMessageId: identity.providerMessageId,
+							thread: visibleEmailThreadWhere(excludedMailboxes),
+						},
+						select: { id: true },
+					});
+					if (!visibleMessage) {
+						throw new ConflictException(
+							"Outreach finalization is unavailable for protected mailbox history.",
+						);
+					}
+				}
 				await this.lockCompany(tx, identity.companyId);
 				const existing = await tx.outreachLedger.findUnique({
 					where: { id: input.reservationId },
@@ -854,20 +970,54 @@ export class OutreachService {
 		}
 	}
 
-	async history(input: ListCompanyOutreachHistoryInput) {
+	async history(input: ListCompanyOutreachHistoryInput, actingUserId: string) {
+		const coverage = historyCoverageForUser(actingUserId);
+		if (coverage === "limited") {
+			return {
+				companyId: input.companyId,
+				historyCoverage: coverage,
+				rows: [],
+			};
+		}
+		const excludedMailboxes = excludedMailboxesForReader(actingUserId);
 		const where: Prisma.OutreachLedgerWhereInput = {
 			companyId: input.companyId,
 		};
 		if (input.targetBusinessUnit) {
 			where.businessUnit = { key: input.targetBusinessUnit };
 		}
-		const rows = await this.db.outreachLedger.findMany({
-			where,
-			include: historyInclude,
-			orderBy: { createdAt: "asc" },
-		});
+		const rows =
+			excludedMailboxes.length === 0
+				? await this.db.outreachLedger.findMany({
+						where,
+						include: historyInclude,
+						orderBy: { createdAt: "asc" },
+					})
+				: await (async () => {
+						const visibleMessages = await this.db.emailMessage.findMany({
+							where: {
+								thread: {
+									companyId: input.companyId,
+									...visibleEmailThreadWhere(excludedMailboxes),
+								},
+							},
+							select: { rfcMessageId: true },
+						});
+						if (visibleMessages.length === 0) return [];
+						return this.db.outreachLedger.findMany({
+							where: {
+								...where,
+								providerMessageId: {
+									in: visibleMessages.map((message) => message.rfcMessageId),
+								},
+							},
+							include: historyInclude,
+							orderBy: { createdAt: "asc" },
+						});
+					})();
 		return {
 			companyId: input.companyId,
+			historyCoverage: coverage,
 			rows: rows.map((row) => this.serialize(row)),
 		};
 	}
@@ -1068,6 +1218,24 @@ export class OutreachService {
 				"Do not send. Restore CRM availability and rerun preflight.",
 			senderIdentity: null,
 			template: null,
+		};
+	}
+
+	private limitedDuplicate(idempotencyKey: string, reason: string) {
+		return {
+			status: "BLOCKED_DUPLICATE" as const,
+			reservationId: null,
+			reservationKey: null,
+			idempotencyKey,
+			canonicalCompanyId: null,
+			canonicalCompanyName: null,
+			senderIdentity: null,
+			template: null,
+			duplicate: true,
+			reason,
+			requiredNextAction:
+				"Use the existing reservation through an authorized owner context. Do not submit another message.",
+			reservation: null,
 		};
 	}
 

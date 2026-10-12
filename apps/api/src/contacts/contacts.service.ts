@@ -25,9 +25,9 @@ import {
 import { type BulkResult, requireOwner, runBulk } from "../crm/bulk";
 import { blankToNull, normalizeEmail, toCents } from "../crm/values";
 import {
-	excludedMailboxesForUser,
-	visibleEmailThreadWhere,
+	excludedMailboxesForReader,
 } from "../config/mailbox-exclusion";
+import { visibleEmailThreadWhere } from "@crm/db/mailbox-privacy";
 import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
 import {
@@ -619,7 +619,7 @@ export class ContactsService {
 	) {
 		const now = new Date();
 		const threadVisibility = visibleEmailThreadWhere(
-			excludedMailboxesForUser(actingUserId),
+			excludedMailboxesForReader(actingUserId),
 		);
 
 		const [threads, lastReply, meetings, nextMeeting, colleagues] =

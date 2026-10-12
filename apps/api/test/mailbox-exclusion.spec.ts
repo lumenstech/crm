@@ -1,12 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import {
-	excludedMailboxesForUser,
-	hasExcludedMailboxForSource,
-	historyCoverageForUser,
-	isMailboxExcluded,
-	parseExcludedMailboxes,
 	visibleActivityWhere,
 	visibleEmailThreadWhere,
+} from "@crm/db/mailbox-privacy";
+import {
+	excludedMailboxesForReader,
+	excludedMailboxesForUser,
+	hasExcludedMailboxForSource,
+	hasOwnedExcludedMailboxForSource,
+	historyCoverageForUser,
+	isMailboxExcluded,
+	isOwnedMailboxExcluded,
+	parseExcludedMailboxes,
 } from "../src/config/mailbox-exclusion";
 
 const excludedUserId = "CQILDYRIiaRmf7CD28VLn8jYPu6gSeTE";
@@ -31,8 +36,19 @@ describe("per-user mailbox exclusions", () => {
 			true,
 		);
 		expect(hasExcludedMailboxForSource("another-user", "gmail", "[]")).toBe(
-			false,
+			true,
 		);
+		expect(
+			hasOwnedExcludedMailboxForSource("another-user", "gmail", "[]"),
+		).toBe(false);
+		expect(
+			isOwnedMailboxExcluded(
+				"another-user",
+				"gmail",
+				"danny@lumensny.com",
+				"[]",
+			),
+		).toBe(false);
 	});
 
 	it("normalizes additional mailbox entries and preserves DataGear access", () => {
@@ -63,17 +79,23 @@ describe("per-user mailbox exclusions", () => {
 		const excluded = excludedMailboxesForUser(excludedUserId, "[]");
 
 		expect(visibleEmailThreadWhere(excluded)).toEqual({
-			NOT: {
-				OR: [
-					{
-						provider: "gmail",
-						mailbox: {
-							equals: "danny@lumensny.com",
-							mode: "insensitive",
-						},
+			OR: [
+				{ provider: null },
+				{ mailbox: null },
+				{
+					NOT: {
+						OR: [
+							{
+								provider: "gmail",
+								mailbox: {
+									equals: "danny@lumensny.com",
+									mode: "insensitive",
+								},
+							},
+						],
 					},
-				],
-			},
+				},
+			],
 		});
 		expect(visibleActivityWhere(excluded)).toEqual({
 			OR: [
@@ -81,21 +103,45 @@ describe("per-user mailbox exclusions", () => {
 				{
 					emailThread: {
 						is: {
-							NOT: {
-								OR: [
-									{
-										provider: "gmail",
-										mailbox: {
-											equals: "danny@lumensny.com",
-											mode: "insensitive",
-										},
+							OR: [
+								{ provider: null },
+								{ mailbox: null },
+								{
+									NOT: {
+										OR: [
+											{
+												provider: "gmail",
+												mailbox: {
+													equals: "danny@lumensny.com",
+													mode: "insensitive",
+												},
+											},
+										],
 									},
-								],
-							},
+								},
+							],
 						},
 					},
 				},
 			],
 		});
+	});
+
+	it("applies the protected mailbox filter to every reader identity", () => {
+		const rows = excludedMailboxesForReader("another-user", "[]");
+
+		expect(rows).toContainEqual({
+			userId: excludedUserId,
+			source: "gmail",
+			mailbox: "danny@lumensny.com",
+		});
+		expect(visibleEmailThreadWhere(rows)).toMatchObject({
+			OR: [
+				{ provider: null },
+				{ mailbox: null },
+				{ NOT: { OR: [{ provider: "gmail" }] } },
+			],
+		});
+		expect(excludedMailboxesForUser("another-user", "[]")).toEqual([]);
 	});
 });

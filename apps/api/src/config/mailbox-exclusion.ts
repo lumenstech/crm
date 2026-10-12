@@ -1,4 +1,4 @@
-import type { Prisma } from "@crm/db";
+import { EXCLUDED_MAILBOX } from "@crm/db/mailbox-privacy";
 import { z } from "zod";
 
 const mailboxSource = z.enum(["gmail", "outlook", "purelymail"]);
@@ -20,13 +20,7 @@ const excludedMailbox = z
 
 export type ExcludedMailbox = z.infer<typeof excludedMailbox>;
 
-const defaultExcludedMailboxes: readonly ExcludedMailbox[] = [
-	{
-		userId: "CQILDYRIiaRmf7CD28VLn8jYPu6gSeTE",
-		source: "gmail",
-		mailbox: "danny@lumensny.com",
-	},
-];
+const defaultExcludedMailboxes: readonly ExcludedMailbox[] = [EXCLUDED_MAILBOX];
 
 function parseJson(raw: string, name: string): unknown {
 	try {
@@ -62,7 +56,46 @@ export function excludedMailboxesForUser(
 	return parseExcludedMailboxes(raw).filter((row) => row.userId === userId);
 }
 
+export function excludedMailboxesForReader(
+	userId: string,
+	raw = process.env.CRM_EXCLUDED_MAILBOXES_JSON,
+): readonly ExcludedMailbox[] {
+	const rows = [
+		...defaultExcludedMailboxes,
+		...parseExcludedMailboxes(raw).filter((row) => row.userId === userId),
+	];
+	const seen = new Set<string>();
+	return rows.filter((row) => {
+		const key = `${row.userId}:${row.source}:${row.mailbox}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
 export function isMailboxExcluded(
+	userId: string,
+	source: string,
+	mailbox: string,
+	raw = process.env.CRM_EXCLUDED_MAILBOXES_JSON,
+): boolean {
+	const normalizedMailbox = mailbox.trim().toLowerCase();
+	return excludedMailboxesForReader(userId, raw).some(
+		(row) => row.source === source && row.mailbox === normalizedMailbox,
+	);
+}
+
+export function hasExcludedMailboxForSource(
+	userId: string,
+	source: string,
+	raw = process.env.CRM_EXCLUDED_MAILBOXES_JSON,
+): boolean {
+	return excludedMailboxesForReader(userId, raw).some(
+		(row) => row.source === source,
+	);
+}
+
+export function isOwnedMailboxExcluded(
 	userId: string,
 	source: string,
 	mailbox: string,
@@ -74,7 +107,7 @@ export function isMailboxExcluded(
 	);
 }
 
-export function hasExcludedMailboxForSource(
+export function hasOwnedExcludedMailboxForSource(
 	userId: string,
 	source: string,
 	raw = process.env.CRM_EXCLUDED_MAILBOXES_JSON,
@@ -82,38 +115,6 @@ export function hasExcludedMailboxForSource(
 	return excludedMailboxesForUser(userId, raw).some(
 		(row) => row.source === source,
 	);
-}
-
-export function visibleEmailThreadWhere(
-	excluded: readonly ExcludedMailbox[],
-): Prisma.EmailThreadWhereInput {
-	if (excluded.length === 0) return {};
-
-	return {
-		NOT: {
-			OR: excluded.map((row) => ({
-				provider: row.source,
-				mailbox: { equals: row.mailbox, mode: "insensitive" },
-			})),
-		},
-	};
-}
-
-export function visibleActivityWhere(
-	excluded: readonly ExcludedMailbox[],
-): Prisma.ActivityWhereInput {
-	if (excluded.length === 0) return {};
-
-	return {
-		OR: [
-			{ emailThread: { is: null } },
-			{
-				emailThread: {
-					is: { ...visibleEmailThreadWhere(excluded) },
-				},
-			},
-		],
-	};
 }
 
 export function historyCoverageForUser(

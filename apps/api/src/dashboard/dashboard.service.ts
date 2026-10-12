@@ -1,11 +1,9 @@
 import { ActivityType, type Db, DealStage } from "@crm/db";
 import { OPEN_DEAL_STAGES } from "@crm/db/deal-stage";
+import { visibleActivityWhere } from "@crm/db/mailbox-privacy";
 import { activityMeta } from "@crm/validation/activity-meta";
 import { Injectable } from "@nestjs/common";
-import {
-	excludedMailboxesForUser,
-	visibleActivityWhere,
-} from "../config/mailbox-exclusion";
+import { excludedMailboxesForReader } from "../config/mailbox-exclusion";
 import { toCents } from "../crm/values";
 import { ConversionService } from "../currency/conversion.service";
 import { InjectDatabase } from "../database/database.constants";
@@ -55,8 +53,11 @@ export class DashboardService {
 		const base = await this.conversion.reportingCurrency();
 		const counted = this.conversion.countedWhere(base);
 		const recentActivityVisibility = visibleActivityWhere(
-			excludedMailboxesForUser(actingUserId),
+			excludedMailboxesForReader(actingUserId),
 		);
+		const recentActivityWhere = mine
+			? { ...recentActivityVisibility, createdById: actingUserId }
+			: recentActivityVisibility;
 
 		const [
 			openByStage,
@@ -157,10 +158,7 @@ export class DashboardService {
 				},
 			}),
 			this.db.activity.findMany({
-				where: {
-					...(mine ? { createdById: actingUserId } : {}),
-					...recentActivityVisibility,
-				},
+				where: recentActivityWhere,
 				orderBy: [{ createdAt: "desc" }],
 				take: 12,
 				select: {

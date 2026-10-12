@@ -4,6 +4,7 @@ import {
 	type Prisma,
 	Prisma as PrismaNamespace,
 } from "@crm/db";
+import { visibleActivityWhere } from "@crm/db/mailbox-privacy";
 import { activityMeta } from "@crm/validation/activity-meta";
 import {
 	BadRequestException,
@@ -11,10 +12,7 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
-import {
-	excludedMailboxesForUser,
-	visibleActivityWhere,
-} from "../config/mailbox-exclusion";
+import { excludedMailboxesForReader } from "../config/mailbox-exclusion";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { blankToNull } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
@@ -92,7 +90,7 @@ export class ActivitiesService {
 	): Promise<TimelineResult> {
 		const where = {
 			...this.anchor(input),
-			...visibleActivityWhere(excludedMailboxesForUser(actingUserId)),
+			...visibleActivityWhere(excludedMailboxesForReader(actingUserId)),
 		};
 		Object.assign(where, filterClause(input.filter));
 
@@ -123,7 +121,7 @@ export class ActivitiesService {
 	): Promise<TimelineCounts> {
 		const anchor = {
 			...this.anchor(input),
-			...visibleActivityWhere(excludedMailboxesForUser(actingUserId)),
+			...visibleActivityWhere(excludedMailboxesForReader(actingUserId)),
 		};
 
 		const [all, notes, upcoming, done, email, meetings] = await Promise.all([

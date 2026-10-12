@@ -180,6 +180,7 @@ export const reserveOutreachOutput = z.object({
 export const finalizeOutreachOutput = outreachHistoryOutput;
 export const listCompanyOutreachHistoryOutput = z.object({
 	companyId: z.string(),
+	historyCoverage,
 	rows: z.array(outreachHistoryOutput),
 });
 

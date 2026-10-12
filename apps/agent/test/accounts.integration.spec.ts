@@ -159,6 +159,35 @@ beforeAll(async () => {
 		],
 	});
 
+	const protectedThread = await db.emailThread.create({
+		data: {
+			rootMessageId: `<protected-root.${suffix}@example.test>`,
+			provider: "gmail",
+			mailbox: "DANNY@LUMENSNY.COM",
+			providerThreadId: `protected-thread-${suffix}`,
+			subject: "Protected mailbox thread",
+			companyId,
+			contactId: paulaId,
+			firstMessageAt: daysAgo(2),
+			lastMessageAt: daysAgo(2),
+			messageCount: 1,
+		},
+		select: { id: true },
+	});
+
+	await db.emailMessage.create({
+		data: {
+			threadId: protectedThread.id,
+			rfcMessageId: `<protected-message.${suffix}@example.test>`,
+			direction: EmailDirection.INBOUND,
+			fromEmail: "private@example.test",
+			recipients: [],
+			subject: "Protected mailbox thread",
+			body: "PROTECTED_MAILBOX_BODY_SHOULD_NOT_BE_READ",
+			sentAt: daysAgo(2),
+		},
+	});
+
 	await db.calendarEvent.create({
 		data: {
 			iCalUid: `event.${suffix}@example.test`,
@@ -247,6 +276,20 @@ describe("readCompanyHistory", () => {
 		expect(history?.stats.theyReplied).toBe(true);
 		expect(history?.stats.lastReplyFrom).toBe("Paula Marchetti");
 		expect(history?.stats.nextMeetingAt).not.toBeNull();
+	});
+
+	it("does not return protected mailbox correspondence", async () => {
+		const history = await readCompanyHistory(companyId);
+
+		expect(history?.threads).toHaveLength(1);
+		expect(
+			history?.threads.some((thread) =>
+				thread.messages.some((message) =>
+					message.body?.includes("PROTECTED_MAILBOX_BODY_SHOULD_NOT_BE_READ"),
+				),
+			),
+		).toBe(false);
+		expect(history?.stats.emails).toBe(2);
 	});
 
 	it("leaves email and meeting projections out of the notes", async () => {

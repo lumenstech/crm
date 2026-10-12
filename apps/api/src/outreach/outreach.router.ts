@@ -59,8 +59,11 @@ export class OutreachRouter {
 		output: finalizeOutreachOutput,
 		meta: restMeta("POST", "/outreach/finalize", ["Outreach"]),
 	})
-	async finalize(@Input() input: z.infer<typeof finalizeOutreachInput>) {
-		return this.outreach.finalize(input);
+	async finalize(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof finalizeOutreachInput>,
+	) {
+		return this.outreach.finalize(input, ctx.user.id);
 	}
 
 	@Query({
@@ -69,8 +72,9 @@ export class OutreachRouter {
 		meta: restMeta("GET", "/outreach/history", ["Outreach"]),
 	})
 	async history(
+		@Ctx() ctx: AuthedTrpcContext,
 		@Input() input: z.infer<typeof listCompanyOutreachHistoryInput>,
 	) {
-		return this.outreach.history(input);
+		return this.outreach.history(input, ctx.user.id);
 	}
 }

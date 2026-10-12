@@ -275,7 +275,7 @@ describe("outreach history safety against the isolated database", () => {
 		const result = await service.preflight(input(company), excludedUserId);
 
 		expect(result.historyCoverage).toBe("limited");
-		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
+		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
 		expect(result.priorCanonicalMailboxContact).toMatchObject({
 			count: 1,
@@ -348,13 +348,16 @@ describe("outreach history safety against the isolated database", () => {
 		if (reserved.status !== "RESERVED" || !reserved.reservationId) {
 			throw new Error("Reservation was not created.");
 		}
-		await service.finalize({
-			reservationId: reserved.reservationId,
-			status: "SENT",
-			provider: "test",
-			providerMessageId: `${suffix}-sent-message`,
-			sentAt: "2026-10-10T00:00:00.000Z",
-		});
+		await service.finalize(
+			{
+				reservationId: reserved.reservationId,
+				status: "SENT",
+				provider: "test",
+				providerMessageId: `${suffix}-sent-message`,
+				sentAt: "2026-10-10T00:00:00.000Z",
+			},
+			syntheticUserId,
+		);
 
 		const afterSent = await service.reserve(
 			input(company, { idempotencyKey: `${suffix}-race-after-sent` }),
