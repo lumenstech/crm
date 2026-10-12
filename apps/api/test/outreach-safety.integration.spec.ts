@@ -199,7 +199,10 @@ describe("outreach history safety against the isolated database", () => {
 			data: { businessUnitId: otherUnitId },
 		});
 
-		const result = await service.preflight(input(company), syntheticUserId);
+		const result = await service.preflight(
+			input(company, { outreachMode: "FOLLOW_UP" }),
+			syntheticUserId,
+		);
 
 		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -207,7 +210,10 @@ describe("outreach history safety against the isolated database", () => {
 			dataGearKey,
 		]);
 		const approved = await service.preflight(
-			input(company, { approvedCrossBusinessContact: true }),
+			input(company, {
+				approvedCrossBusinessContact: true,
+				outreachMode: "FOLLOW_UP",
+			}),
 			syntheticUserId,
 		);
 		expect(approved.status).toBe("FOLLOW_UP_REQUIRED");
@@ -389,7 +395,7 @@ describe("outreach history safety against the isolated database", () => {
 		).toBe(1);
 	});
 
-	it("serializes concurrent new reservations and rechecks terminal history", async () => {
+	it("fails closed for concurrent new reservations with limited history", async () => {
 		const company = await createCompany(
 			"History Safety Race",
 			`history-safety-${suffix}-race.test`,
@@ -406,35 +412,11 @@ describe("outreach history safety against the isolated database", () => {
 		]);
 
 		expect([first.status, second.status].sort()).toEqual([
-			"BLOCKED_DUPLICATE",
-			"RESERVED",
+			"OUTBOUND_DISABLED",
+			"OUTBOUND_DISABLED",
 		]);
 		expect(
 			await db.outreachLedger.count({ where: { companyId: company.id } }),
-		).toBe(1);
-
-		const reserved = first.status === "RESERVED" ? first : second;
-		if (reserved.status !== "RESERVED" || !reserved.reservationId) {
-			throw new Error("Reservation was not created.");
-		}
-		await service.finalize(
-			{
-				reservationId: reserved.reservationId,
-				status: "SENT",
-				provider: "test",
-				providerMessageId: `${suffix}-sent-message`,
-				sentAt: "2026-10-10T00:00:00.000Z",
-			},
-			syntheticUserId,
-		);
-
-		const afterSent = await service.reserve(
-			input(company, { idempotencyKey: `${suffix}-race-after-sent` }),
-			syntheticUserId,
-		);
-		expect(afterSent.status).toBe("FOLLOW_UP_REQUIRED");
-		expect(
-			await db.outreachLedger.count({ where: { companyId: company.id } }),
-		).toBe(1);
+		).toBe(0);
 	});
 });
