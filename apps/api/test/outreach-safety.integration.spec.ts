@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { ActivityType, db, EmailDirection } from "@crm/db";
+import { ConversationService } from "../src/google/conversation.service";
 import { reserveOutreachInput } from "../src/outreach/outreach.contracts";
 import { OutreachService } from "../src/outreach/outreach.service";
 import { DATAGEAR_SENDER } from "../src/outreach/outreach-config";
@@ -8,7 +9,10 @@ const suffix = process.env.TEST_RUN_ID ?? `b379f49-${Date.now()}`;
 const dataGearKey = "data-gear";
 const otherKey = `history-other-${suffix}`;
 const dataGearSenderAddress = "sales@data-gear.com";
+const syntheticUserId = "synthetic-outreach-user";
+const excludedUserId = "CQILDYRIiaRmf7CD28VLn8jYPu6gSeTE";
 const service = new OutreachService(db);
+const conversations = new ConversationService(db);
 
 let dataGearId: string;
 let otherUnitId: string;
@@ -65,6 +69,8 @@ async function createOutboundHistory(
 		evidenceKey?: string;
 		extraFromEmail?: string;
 		fromEmail?: string;
+		mailbox?: string;
+		provider?: string;
 		suffix: string;
 	},
 ) {
@@ -79,8 +85,8 @@ async function createOutboundHistory(
 	const thread = await db.emailThread.create({
 		data: {
 			rootMessageId: `<history-${options.suffix}@example.test>`,
-			provider: "gmail",
-			mailbox: dataGearSenderAddress,
+			provider: options.provider ?? "gmail",
+			mailbox: options.mailbox ?? dataGearSenderAddress,
 			providerThreadId: `history-thread-${options.suffix}`,
 			subject: "Historical outbound message",
 			companyId,
@@ -193,7 +199,10 @@ describe("outreach history safety against the isolated database", () => {
 			data: { businessUnitId: otherUnitId },
 		});
 
-		const result = await service.preflight(input(company));
+		const result = await service.preflight(
+			input(company, { outreachMode: "FOLLOW_UP" }),
+			syntheticUserId,
+		);
 
 		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -201,7 +210,11 @@ describe("outreach history safety against the isolated database", () => {
 			dataGearKey,
 		]);
 		const approved = await service.preflight(
-			input(company, { approvedCrossBusinessContact: true }),
+			input(company, {
+				approvedCrossBusinessContact: true,
+				outreachMode: "FOLLOW_UP",
+			}),
+			syntheticUserId,
 		);
 		expect(approved.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(approved.newOutreachPermitted).toBe(false);
@@ -218,7 +231,7 @@ describe("outreach history safety against the isolated database", () => {
 			suffix: `${suffix}-unattributed`,
 		});
 
-		const result = await service.preflight(input(company));
+		const result = await service.preflight(input(company), syntheticUserId);
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -237,7 +250,7 @@ describe("outreach history safety against the isolated database", () => {
 			suffix: `${suffix}-mixed`,
 		});
 
-		const result = await service.preflight(input(company));
+		const result = await service.preflight(input(company), syntheticUserId);
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.priorCanonicalMailboxContact.count).toBe(2);
@@ -245,6 +258,113 @@ describe("outreach history safety against the isolated database", () => {
 			dataGearKey,
 		]);
 		expect(result.priorCanonicalMailboxContact.unattributedCount).toBe(1);
+	});
+
+	it("excludes the restricted Gmail mailbox but keeps allowed Purelymail evidence", async () => {
+		const company = await createCompany(
+			"History Safety Excluded Gmail",
+			`history-safety-${suffix}-excluded-gmail.test`,
+		);
+		await createOutboundHistory(company.id, {
+			provider: "gmail",
+			mailbox: "DANNY@LUMENSNY.COM",
+			fromEmail: "danny@lumensny.com",
+			evidenceKey: dataGearKey,
+			suffix: `${suffix}-excluded-gmail`,
+		});
+		await createOutboundHistory(company.id, {
+			provider: "purelymail",
+			mailbox: dataGearSenderAddress,
+			fromEmail: dataGearSenderAddress,
+			evidenceKey: dataGearKey,
+			suffix: `${suffix}-allowed-purelymail`,
+		});
+
+		const result = await service.preflight(input(company), excludedUserId);
+
+		expect(result.historyCoverage).toBe("limited");
+		expect(result.status).toBe("OUTBOUND_DISABLED");
+		expect(result.newOutreachPermitted).toBe(false);
+		expect(result.priorCanonicalMailboxContact).toMatchObject({
+			count: 1,
+			businessUnitKeys: [dataGearKey],
+		});
+
+		const blocked = await service.reserve(
+			input(company, { idempotencyKey: `${suffix}-excluded-gmail-reserve` }),
+			excludedUserId,
+		);
+		expect(blocked.status).toBe("OUTBOUND_DISABLED");
+		expect(
+			await db.outreachLedger.count({ where: { companyId: company.id } }),
+		).toBe(0);
+	});
+
+	it("fails closed for another reader with only protected mailbox history", async () => {
+		const company = await createCompany(
+			"History Safety Protected Only",
+			`history-safety-${suffix}-protected-only.test`,
+		);
+		await createOutboundHistory(company.id, {
+			provider: "gmail",
+			mailbox: "DANNY@LUMENSNY.COM",
+			fromEmail: "danny@lumensny.com",
+			suffix: `${suffix}-protected-only`,
+		});
+
+		const result = await service.preflight(input(company), "another-reader");
+
+		expect(result.historyCoverage).toBe("limited");
+		expect(result.status).toBe("OUTBOUND_DISABLED");
+		expect(result.priorCanonicalMailboxContact.count).toBe(0);
+
+		const blocked = await service.reserve(
+			input(company, {
+				idempotencyKey: `${suffix}-protected-only-reserve`,
+			}),
+			"another-reader",
+		);
+		expect(blocked.status).toBe("OUTBOUND_DISABLED");
+		expect(
+			await db.outreachLedger.count({ where: { companyId: company.id } }),
+		).toBe(0);
+	});
+
+	it("does not retrieve a legacy thread with unknown mailbox provenance", async () => {
+		const company = await createCompany(
+			"History Safety Legacy Null",
+			`history-safety-${suffix}-legacy-null.test`,
+		);
+		const sentAt = new Date("2026-09-27T16:14:26.000Z");
+		const thread = await db.emailThread.create({
+			data: {
+				rootMessageId: `<legacy-null-api-${suffix}@example.test>`,
+				provider: null,
+				mailbox: null,
+				providerThreadId: null,
+				subject: "Legacy thread with unknown provenance",
+				companyId: company.id,
+				firstMessageAt: sentAt,
+				lastMessageAt: sentAt,
+				messageCount: 1,
+				messages: {
+					create: {
+						rfcMessageId: `<legacy-null-api-message-${suffix}@example.test>`,
+						direction: EmailDirection.INBOUND,
+						fromEmail: "legacy-unknown@example.test",
+						recipients: [],
+						subject: "Legacy thread with unknown provenance",
+						body: "LEGACY_NULL_API_BODY_SHOULD_NOT_BE_READ",
+						sentAt,
+					},
+				},
+			},
+			select: { id: true },
+		});
+
+		await expect(
+			conversations.thread(thread.id, "another-reader"),
+		).rejects.toThrow(`No email thread with id ${thread.id}.`);
 	});
 
 	it("allows imported-only history to reserve an explicit follow-up", async () => {
@@ -263,6 +383,7 @@ describe("outreach history safety against the isolated database", () => {
 				outreachMode: "FOLLOW_UP",
 				idempotencyKey: `${suffix}-follow-up-reservation`,
 			}),
+			syntheticUserId,
 		);
 
 		expect(result.status).toBe("RESERVED");
@@ -274,42 +395,28 @@ describe("outreach history safety against the isolated database", () => {
 		).toBe(1);
 	});
 
-	it("serializes concurrent new reservations and rechecks terminal history", async () => {
+	it("fails closed for concurrent new reservations with limited history", async () => {
 		const company = await createCompany(
 			"History Safety Race",
 			`history-safety-${suffix}-race.test`,
 		);
 		const [first, second] = await Promise.all([
-			service.reserve(input(company, { idempotencyKey: `${suffix}-race-a` })),
-			service.reserve(input(company, { idempotencyKey: `${suffix}-race-b` })),
+			service.reserve(
+				input(company, { idempotencyKey: `${suffix}-race-a` }),
+				syntheticUserId,
+			),
+			service.reserve(
+				input(company, { idempotencyKey: `${suffix}-race-b` }),
+				syntheticUserId,
+			),
 		]);
 
 		expect([first.status, second.status].sort()).toEqual([
-			"BLOCKED_DUPLICATE",
-			"RESERVED",
+			"OUTBOUND_DISABLED",
+			"OUTBOUND_DISABLED",
 		]);
 		expect(
 			await db.outreachLedger.count({ where: { companyId: company.id } }),
-		).toBe(1);
-
-		const reserved = first.status === "RESERVED" ? first : second;
-		if (reserved.status !== "RESERVED" || !reserved.reservationId) {
-			throw new Error("Reservation was not created.");
-		}
-		await service.finalize({
-			reservationId: reserved.reservationId,
-			status: "SENT",
-			provider: "test",
-			providerMessageId: `${suffix}-sent-message`,
-			sentAt: "2026-10-10T00:00:00.000Z",
-		});
-
-		const afterSent = await service.reserve(
-			input(company, { idempotencyKey: `${suffix}-race-after-sent` }),
-		);
-		expect(afterSent.status).toBe("FOLLOW_UP_REQUIRED");
-		expect(
-			await db.outreachLedger.count({ where: { companyId: company.id } }),
-		).toBe(1);
+		).toBe(0);
 	});
 });

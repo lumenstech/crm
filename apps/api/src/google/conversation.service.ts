@@ -1,6 +1,8 @@
 import type { Db, Prisma } from "@crm/db";
+import { visibleEmailThreadWhere } from "@crm/db/mailbox-privacy";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { z } from "zod";
+import { excludedMailboxesForReader } from "../config/mailbox-exclusion";
 import { InjectDatabase } from "../database/database.constants";
 
 const storedRecipient = z.object({
@@ -17,9 +19,12 @@ const storedRecipients = z.array(z.json()).catch([]);
 export class ConversationService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	async thread(threadId: string) {
-		const thread = await this.db.emailThread.findUnique({
-			where: { id: threadId },
+	async thread(threadId: string, actingUserId: string) {
+		const thread = await this.db.emailThread.findFirst({
+			where: {
+				id: threadId,
+				...visibleEmailThreadWhere(excludedMailboxesForReader(actingUserId)),
+			},
 			select: {
 				id: true,
 				subject: true,

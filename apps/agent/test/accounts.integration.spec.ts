@@ -123,6 +123,9 @@ beforeAll(async () => {
 	const thread = await db.emailThread.create({
 		data: {
 			rootMessageId: `<root.${suffix}@example.test>`,
+			provider: "purelymail",
+			mailbox: "sales@data-gear.com",
+			providerThreadId: `visible-thread-${suffix}`,
 			subject: "Re: Contract",
 			companyId,
 			contactId: paulaId,
@@ -157,6 +160,64 @@ beforeAll(async () => {
 				sentAt: daysAgo(3),
 			},
 		],
+	});
+
+	const protectedThread = await db.emailThread.create({
+		data: {
+			rootMessageId: `<protected-root.${suffix}@example.test>`,
+			provider: "gmail",
+			mailbox: "DANNY@LUMENSNY.COM",
+			providerThreadId: `protected-thread-${suffix}`,
+			subject: "Protected mailbox thread",
+			companyId,
+			contactId: paulaId,
+			firstMessageAt: daysAgo(2),
+			lastMessageAt: daysAgo(2),
+			messageCount: 1,
+		},
+		select: { id: true },
+	});
+
+	await db.emailMessage.create({
+		data: {
+			threadId: protectedThread.id,
+			rfcMessageId: `<protected-message.${suffix}@example.test>`,
+			direction: EmailDirection.INBOUND,
+			fromEmail: "private@example.test",
+			recipients: [],
+			subject: "Protected mailbox thread",
+			body: "PROTECTED_MAILBOX_BODY_SHOULD_NOT_BE_READ",
+			sentAt: daysAgo(2),
+		},
+	});
+
+	const legacyNullThread = await db.emailThread.create({
+		data: {
+			rootMessageId: `<legacy-null-root.${suffix}@example.test>`,
+			provider: null,
+			mailbox: null,
+			providerThreadId: null,
+			subject: "Legacy thread with unknown provenance",
+			companyId,
+			contactId: paulaId,
+			firstMessageAt: daysAgo(1),
+			lastMessageAt: daysAgo(1),
+			messageCount: 1,
+		},
+		select: { id: true },
+	});
+
+	await db.emailMessage.create({
+		data: {
+			threadId: legacyNullThread.id,
+			rfcMessageId: `<legacy-null-message.${suffix}@example.test>`,
+			direction: EmailDirection.INBOUND,
+			fromEmail: "legacy-unknown@example.test",
+			recipients: [],
+			subject: "Legacy thread with unknown provenance",
+			body: "LEGACY_NULL_PROVENANCE_BODY_SHOULD_NOT_BE_READ",
+			sentAt: daysAgo(1),
+		},
 	});
 
 	await db.calendarEvent.create({
@@ -247,6 +308,35 @@ describe("readCompanyHistory", () => {
 		expect(history?.stats.theyReplied).toBe(true);
 		expect(history?.stats.lastReplyFrom).toBe("Paula Marchetti");
 		expect(history?.stats.nextMeetingAt).not.toBeNull();
+	});
+
+	it("does not return protected mailbox correspondence", async () => {
+		const history = await readCompanyHistory(companyId);
+
+		expect(history?.threads).toHaveLength(1);
+		expect(
+			history?.threads.some((thread) =>
+				thread.messages.some((message) =>
+					message.body?.includes("PROTECTED_MAILBOX_BODY_SHOULD_NOT_BE_READ"),
+				),
+			),
+		).toBe(false);
+		expect(history?.stats.emails).toBe(2);
+	});
+
+	it("does not return legacy correspondence with unknown provenance", async () => {
+		const history = await readCompanyHistory(companyId);
+
+		expect(history?.threads).toHaveLength(1);
+		expect(
+			history?.threads.some((thread) =>
+				thread.messages.some((message) =>
+					message.body?.includes(
+						"LEGACY_NULL_PROVENANCE_BODY_SHOULD_NOT_BE_READ",
+					),
+				),
+			),
+		).toBe(false);
 	});
 
 	it("leaves email and meeting projections out of the notes", async () => {

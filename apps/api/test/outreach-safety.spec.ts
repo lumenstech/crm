@@ -20,6 +20,8 @@ const otherUnit = {
 	name: "516 Labs",
 };
 
+const syntheticUserId = "synthetic-outreach-user";
+
 const company = {
 	id: "company-lambda",
 	name: "Lambda",
@@ -246,7 +248,7 @@ function input(overrides: Partial<TestInput> = {}) {
 describe("outreach safety", () => {
 	it("blocks the same company when the mailbox changes", async () => {
 		const { service } = serviceWithHistory([row()]);
-		const result = await service.preflight(input());
+		const result = await service.preflight(input(), syntheticUserId);
 		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
 		expect(result.newOutreachPermitted).toBe(false);
 	});
@@ -255,18 +257,18 @@ describe("outreach safety", () => {
 		const { service } = serviceWithHistory([
 			row({ status: OutreachStatus.BOUNCED, bouncedAt: new Date() }),
 		]);
-		const result = await service.preflight(input());
+		const result = await service.preflight(input(), syntheticUserId);
 		expect(result.status).toBe("BOUNCED_PREVIOUSLY");
 		expect(result.newOutreachPermitted).toBe(false);
 	});
 
-	it("reports prior activity from another business unit", async () => {
+	it("fails closed when prior activity is from another business unit", async () => {
 		const { service, setHistory } = serviceWithHistory([]);
 		setHistory([
 			row({ businessUnitId: otherUnit.id, businessUnit: otherUnit }),
 		]);
-		const result = await service.preflight(input());
-		expect(result.status).toBe("CROSS_BUSINESS_CONTACT");
+		const result = await service.preflight(input(), syntheticUserId);
+		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.existingBusinessUnitAssociations).toEqual([]);
 	});
 
@@ -281,9 +283,9 @@ describe("outreach safety", () => {
 				},
 			],
 		});
-		const result = await service.preflight(input());
+		const result = await service.preflight(input(), syntheticUserId);
 
-		expect(result.status).toBe("FOLLOW_UP_REQUIRED");
+		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
 		expect(result.priorCanonicalMailboxContact).toEqual({
 			count: 1,
@@ -316,7 +318,7 @@ describe("outreach safety", () => {
 				],
 			},
 		);
-		const result = await service.preflight(input());
+		const result = await service.preflight(input(), syntheticUserId);
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -334,7 +336,7 @@ describe("outreach safety", () => {
 				},
 			],
 		});
-		const result = await service.preflight(input());
+		const result = await service.preflight(input(), syntheticUserId);
 
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 		expect(result.newOutreachPermitted).toBe(false);
@@ -349,7 +351,7 @@ describe("outreach safety", () => {
 		unavailable.db.businessUnit.findUnique = async () => {
 			throw new Error("database down");
 		};
-		const result = await service.preflight(input());
+		const result = await service.preflight(input(), syntheticUserId);
 		expect(result.status).toBe("OUTBOUND_DISABLED");
 	});
 
@@ -367,27 +369,31 @@ describe("outreach safety", () => {
 		expect(dataGearOutboundBody("Hello")).toContain(DATAGEAR_SIGNATURE);
 	});
 
-	it("allows exactly one concurrent initial reservation", async () => {
+	it("fails closed for concurrent initial reservations with limited history", async () => {
 		const { service, getCreated } = serviceWithHistory([]);
 		const [first, second] = await Promise.all([
-			service.reserve(input({ idempotencyKey: "job-a" })),
-			service.reserve(input({ idempotencyKey: "job-b" })),
+			service.reserve(input({ idempotencyKey: "job-a" }), syntheticUserId),
+			service.reserve(input({ idempotencyKey: "job-b" }), syntheticUserId),
 		]);
 		expect([first.status, second.status].sort()).toEqual([
-			"BLOCKED_DUPLICATE",
-			"RESERVED",
+			"OUTBOUND_DISABLED",
+			"OUTBOUND_DISABLED",
 		]);
-		expect(getCreated()).toBe(1);
+		expect(getCreated()).toBe(0);
 	});
 
-	it("does not create a second reservation on executor retry", async () => {
+	it("does not create reservations on executor retry with limited history", async () => {
 		const { service, getCreated } = serviceWithHistory([]);
-		const first = await service.reserve(input({ idempotencyKey: "job-retry" }));
+		const first = await service.reserve(
+			input({ idempotencyKey: "job-retry" }),
+			syntheticUserId,
+		);
 		const second = await service.reserve(
 			input({ idempotencyKey: "job-retry" }),
+			syntheticUserId,
 		);
-		expect(first.status).toBe("RESERVED");
-		expect(second.status).toBe("BLOCKED_DUPLICATE");
-		expect(getCreated()).toBe(1);
+		expect(first.status).toBe("OUTBOUND_DISABLED");
+		expect(second.status).toBe("OUTBOUND_DISABLED");
+		expect(getCreated()).toBe(0);
 	});
 });
