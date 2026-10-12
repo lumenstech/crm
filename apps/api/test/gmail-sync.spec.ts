@@ -29,6 +29,32 @@ function message(index: number): GmailMessage {
 }
 
 describe("GmailSyncService batching", () => {
+	it("skips excluded user history before requesting a token or Gmail data", async () => {
+		const service = new GmailSyncService(
+			{} as never,
+			{
+				profile: async () => {
+					throw new Error("Gmail profile must not be requested");
+				},
+			} as never,
+			{
+				accessTokenFor: async () => {
+					throw new Error("Gmail token must not be requested");
+				},
+			} as never,
+			{} as never,
+			{} as never,
+		);
+
+		const outcome = await service.sync({
+			userId: "CQILDYRIiaRmf7CD28VLn8jYPu6gSeTE",
+			source: "gmail",
+		} as MailboxSync);
+
+		expect(outcome.status).toBe("skipped");
+		expect(outcome.reason).toBe("Mailbox history is excluded for this user.");
+	});
+
 	it("advances past a full batch and preserves Gmail thread identity", async () => {
 		const messages = Array.from({ length: 121 }, (_, index) => message(index));
 		const storedIds = new Set<string>();

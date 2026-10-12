@@ -31,6 +31,8 @@ export const outreachDecisionStatus = z.enum([
 	"RESERVED",
 ]);
 
+export const historyCoverage = z.enum(["complete", "limited"]);
+
 const companyResolutionInput = z.object({
 	companyId: z.string().trim().min(1).max(160).nullable().optional(),
 	companyName: z.string().trim().min(1).max(320).nullable().optional(),
@@ -152,6 +154,7 @@ export const preflightOutreachOutput = z.object({
 	existingBusinessUnitAssociations: z.array(businessUnitRefOutput),
 	previousOutreach: z.array(outreachHistoryOutput),
 	priorCanonicalMailboxContact: priorCanonicalMailboxContactOutput,
+	historyCoverage,
 	newOutreachPermitted: z.boolean(),
 	reason: z.string(),
 	requiredNextAction: z.string().nullable(),
@@ -177,6 +180,7 @@ export const reserveOutreachOutput = z.object({
 export const finalizeOutreachOutput = outreachHistoryOutput;
 export const listCompanyOutreachHistoryOutput = z.object({
 	companyId: z.string(),
+	historyCoverage,
 	rows: z.array(outreachHistoryOutput),
 });
 

@@ -10,6 +10,7 @@ import {
 	MinLength,
 	validateSync,
 } from "class-validator";
+import { parseExcludedMailboxes } from "./mailbox-exclusion";
 import {
 	parseHistoricalMailboxBindings,
 	parseVerifiedSenderBusinessUnits,
@@ -115,6 +116,10 @@ export class EnvironmentVariables {
 	@IsOptional()
 	@IsString()
 	CRM_HISTORICAL_MAILBOX_BINDINGS_JSON?: string;
+
+	@IsOptional()
+	@IsString()
+	CRM_EXCLUDED_MAILBOXES_JSON?: string;
 
 	@IsOptional()
 	@IsString()
@@ -228,6 +233,7 @@ export function validateEnv(config: RawEnvironment): EnvironmentVariables {
 	}
 
 	parseHistoricalMailboxBindings(config.CRM_HISTORICAL_MAILBOX_BINDINGS_JSON);
+	parseExcludedMailboxes(config.CRM_EXCLUDED_MAILBOXES_JSON);
 	parseVerifiedSenderBusinessUnits(
 		config.CRM_VERIFIED_SENDER_BUSINESS_UNITS_JSON,
 	);

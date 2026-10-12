@@ -1,4 +1,5 @@
 import { ActivityType, db, EmailDirection } from "@crm/db";
+import { protectedMailboxThreadWhere } from "@crm/db/mailbox-privacy";
 import { z } from "zod";
 import { isDerivedName } from "./names";
 
@@ -124,6 +125,9 @@ export async function readCompanyHistory(
 	const includeCalendar = options.includeCalendar ?? true;
 
 	const belongsToCompany = { OR: [{ companyId }, { contact: { companyId } }] };
+	const visibleBelongsToCompany = {
+		AND: [belongsToCompany, protectedMailboxThreadWhere],
+	};
 
 	const [people, deals, threads, meetings, notes, lastInbound, counts] =
 		await Promise.all([
@@ -143,7 +147,9 @@ export async function readCompanyHistory(
 						includeEmail || includeCalendar
 							? {
 									select: {
-										emailThreads: includeEmail,
+										emailThreads: includeEmail
+											? { where: protectedMailboxThreadWhere }
+											: false,
 										calendarEvents: includeCalendar,
 									},
 								}
@@ -174,7 +180,7 @@ export async function readCompanyHistory(
 			}),
 			includeEmail
 				? db.emailThread.findMany({
-						where: belongsToCompany,
+						where: visibleBelongsToCompany,
 						orderBy: { lastMessageAt: "desc" },
 						take: options.threads ?? 5,
 						select: {
@@ -222,7 +228,7 @@ export async function readCompanyHistory(
 				? db.emailMessage.findFirst({
 						where: {
 							direction: EmailDirection.INBOUND,
-							thread: belongsToCompany,
+							thread: visibleBelongsToCompany,
 						},
 						orderBy: { sentAt: "desc" },
 						select: { sentAt: true, fromEmail: true, fromName: true },
@@ -231,7 +237,9 @@ export async function readCompanyHistory(
 			Promise.all([
 				db.contact.count({ where: { companyId } }),
 				includeEmail
-					? db.emailMessage.count({ where: { thread: belongsToCompany } })
+					? db.emailMessage.count({
+							where: { thread: visibleBelongsToCompany },
+						})
 					: Promise.resolve(0),
 				includeCalendar
 					? db.calendarEvent.count({
@@ -395,6 +403,9 @@ export async function readDealHistory(
 					],
 				}
 			: { companyId: deal.company.id };
+	const visibleRelatedThreads = {
+		AND: [relatedThreads, protectedMailboxThreadWhere],
+	};
 
 	const [stageChanges, threads, meetings, notes, lastInbound] =
 		await Promise.all([
@@ -406,7 +417,7 @@ export async function readDealHistory(
 			}),
 			includeEmail
 				? db.emailThread.findMany({
-						where: relatedThreads,
+						where: visibleRelatedThreads,
 						orderBy: { lastMessageAt: "desc" },
 						take: options.threads ?? 5,
 						select: {
@@ -459,7 +470,7 @@ export async function readDealHistory(
 				? db.emailMessage.findFirst({
 						where: {
 							direction: EmailDirection.INBOUND,
-							thread: relatedThreads,
+							thread: visibleRelatedThreads,
 						},
 						orderBy: { sentAt: "desc" },
 						select: { sentAt: true, fromEmail: true, fromName: true },

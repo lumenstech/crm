@@ -1,4 +1,5 @@
 import { db, EnrichmentStatus, type Prisma } from "@crm/db";
+import { protectedMailboxThreadWhere } from "@crm/db/mailbox-privacy";
 import { domainOf, isDerivedName } from "./names";
 import type { Person } from "./socials";
 
@@ -203,7 +204,9 @@ export async function readCrmHistory(
 	const [threads, meetings, colleagues] = await Promise.all([
 		includeEmail
 			? db.emailThread.findMany({
-					where: { contactId },
+					where: {
+						AND: [{ contactId }, protectedMailboxThreadWhere],
+					},
 					orderBy: { lastMessageAt: "desc" },
 					take: options.threads ?? 5,
 					select: {
