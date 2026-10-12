@@ -121,7 +121,7 @@ export function historyCoverageForUser(
 	userId: string,
 	raw = process.env.CRM_EXCLUDED_MAILBOXES_JSON,
 ): "complete" | "limited" {
-	return excludedMailboxesForUser(userId, raw).length > 0
+	return excludedMailboxesForReader(userId, raw).length > 0
 		? "limited"
 		: "complete";
 }

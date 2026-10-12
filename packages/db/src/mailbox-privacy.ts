@@ -18,9 +18,9 @@ export function visibleEmailThreadWhere(
 	if (excluded.length === 0) return {};
 
 	return {
-		OR: [
-			{ provider: null },
-			{ mailbox: null },
+		AND: [
+			{ provider: { not: null } },
+			{ mailbox: { not: null } },
 			{
 				NOT: {
 					OR: excluded.map((row) => ({

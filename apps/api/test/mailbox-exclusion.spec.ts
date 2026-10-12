@@ -79,9 +79,9 @@ describe("per-user mailbox exclusions", () => {
 		const excluded = excludedMailboxesForUser(excludedUserId, "[]");
 
 		expect(visibleEmailThreadWhere(excluded)).toEqual({
-			OR: [
-				{ provider: null },
-				{ mailbox: null },
+			AND: [
+				{ provider: { not: null } },
+				{ mailbox: { not: null } },
 				{
 					NOT: {
 						OR: [
@@ -103,9 +103,9 @@ describe("per-user mailbox exclusions", () => {
 				{
 					emailThread: {
 						is: {
-							OR: [
-								{ provider: null },
-								{ mailbox: null },
+							AND: [
+								{ provider: { not: null } },
+								{ mailbox: { not: null } },
 								{
 									NOT: {
 										OR: [
@@ -136,12 +136,31 @@ describe("per-user mailbox exclusions", () => {
 			mailbox: "danny@lumensny.com",
 		});
 		expect(visibleEmailThreadWhere(rows)).toMatchObject({
-			OR: [
-				{ provider: null },
-				{ mailbox: null },
+			AND: [
+				{ provider: { not: null } },
+				{ mailbox: { not: null } },
 				{ NOT: { OR: [{ provider: "gmail" }] } },
 			],
 		});
+		expect(historyCoverageForUser("another-user", "[]")).toBe("limited");
 		expect(excludedMailboxesForUser("another-user", "[]")).toEqual([]);
+	});
+
+	it("fails closed for legacy threads with unknown provenance", () => {
+		const where = visibleEmailThreadWhere(
+			excludedMailboxesForReader("another-user", "[]"),
+		);
+
+		expect(where).toEqual(
+			expect.objectContaining({
+				AND: expect.arrayContaining([
+					{ provider: { not: null } },
+					{ mailbox: { not: null } },
+				]),
+			}),
+		);
+		expect(where).not.toMatchObject({
+			OR: expect.arrayContaining([{ provider: null }, { mailbox: null }]),
+		});
 	});
 });
