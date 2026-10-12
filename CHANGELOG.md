@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.1](https://github.com/lumenstech/crm/compare/v1.18.0...v1.18.1) (2026-10-12)
+
+
+### Fixes
+
+* **api:** exclude protected mailbox history ([#78](https://github.com/lumenstech/crm/issues/78)) ([59e2dc9](https://github.com/lumenstech/crm/commit/59e2dc986ac1d30f6feb7e48c1b726a8cef21c59))
+
 ## [1.18.0](https://github.com/lumenstech/crm/compare/v1.17.0...v1.18.0) (2026-10-11)
 
 
