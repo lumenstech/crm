@@ -29,4 +29,17 @@ describe("Purelymail setup route access", () => {
 		expect(layout).toContain("mailboxRequired={false}");
 		expect(layout).not.toContain("requireMailboxAccess");
 	});
+
+	it("shows a visible incomplete-history warning for skipped messages", async () => {
+		const source = await Bun.file(
+			new URL(
+				"../app/(app)/[slug]/settings/connections/purelymail-connection.tsx",
+				import.meta.url,
+			),
+		).text();
+
+		expect(source).toContain("historyIncomplete");
+		expect(source).toContain("skippedCount");
+		expect(source).toContain("History import is incomplete");
+	});
 });

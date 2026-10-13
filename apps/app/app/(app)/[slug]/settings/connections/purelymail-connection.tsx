@@ -39,6 +39,8 @@ type PurelymailStatus = {
 		status: string | null;
 		lastSyncedAt: string | null;
 		lastError: string | null;
+		skippedCount: number;
+		historyIncomplete: boolean;
 	};
 };
 
@@ -177,6 +179,14 @@ function PurelymailSetup({ status }: { status: PurelymailStatus }) {
 				) : null}
 				{status.sync.lastError ? (
 					<p className="text-destructive text-xs">{status.sync.lastError}</p>
+				) : null}
+				{status.sync.historyIncomplete ? (
+					<p className="text-amber-700 text-xs dark:text-amber-300">
+						History import is incomplete: {status.sync.skippedCount} message
+						{status.sync.skippedCount === 1 ? "" : "s"} skipped because the
+						message exceeded the import limit. Those messages are not in CRM
+						history.
+					</p>
 				) : null}
 			</CardContent>
 

@@ -10,6 +10,8 @@ export const purelymailCredentialStatusOutput = z.object({
 		status: z.string().nullable(),
 		lastSyncedAt: z.string().nullable(),
 		lastError: z.string().nullable(),
+		skippedCount: z.number().int().nonnegative(),
+		historyIncomplete: z.boolean(),
 	}),
 });
 

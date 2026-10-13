@@ -324,8 +324,11 @@ export class PurelymailImapService
 		summary: PurelymailPollSummary,
 	): Promise<void> {
 		summary.attempted += 1;
+		if (!message.source) {
+			summary.failed += 1;
+			return;
+		}
 		if (
-			!message.source ||
 			(message.size ?? message.source.length) > PURELYMAIL_IMAP.maxMessageBytes
 		) {
 			const providerMessageId = purelymailImapMessageId({

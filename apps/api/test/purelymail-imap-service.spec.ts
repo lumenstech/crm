@@ -18,7 +18,7 @@ type DispositionInput = {
 	update?: { status?: string; uid?: number; uidValidity?: string };
 };
 
-function message(uid: number, oversized = false) {
+function message(uid: number, oversized = false, missingSource = false) {
 	const source = Buffer.from(
 		[
 			`From: Sender ${uid} <sender-${uid}@example.test>`,
@@ -34,9 +34,11 @@ function message(uid: number, oversized = false) {
 		uid,
 		internalDate: new Date("2026-10-13T00:00:00.000Z"),
 		size: oversized ? PURELYMAIL_IMAP.maxMessageBytes + 1 : source.length,
-		source: oversized
-			? Buffer.concat([source, Buffer.alloc(PURELYMAIL_IMAP.maxMessageBytes)])
-			: source,
+		source: missingSource
+			? undefined
+			: oversized
+				? Buffer.concat([source, Buffer.alloc(PURELYMAIL_IMAP.maxMessageBytes)])
+				: source,
 	};
 }
 
@@ -44,6 +46,8 @@ class FakeImap {
 	mailbox = { uidValidity: 7, readOnly: true };
 	usable = true;
 	readonly fetched: number[][] = [];
+	oversizedFirst = true;
+	omitSourceOnFirstFetch = false;
 
 	onFetch: (uids: number[]) => void;
 
@@ -64,8 +68,11 @@ class FakeImap {
 
 	async fetchAll(uids: number[]): Promise<ReturnType<typeof message>[]> {
 		this.fetched.push(uids);
+		const omitSource = this.omitSourceOnFirstFetch;
 		this.onFetch(uids);
-		return uids.map((uid) => message(uid, uid === 1));
+		return uids.map((uid) =>
+			message(uid, this.oversizedFirst && uid === 1, omitSource && uid === 1),
+		);
 	}
 
 	async logout(): Promise<void> {}
@@ -73,7 +80,10 @@ class FakeImap {
 	close(): void {}
 }
 
-function buildHarness(options?: { current?: () => boolean }) {
+function buildHarness(options?: {
+	current?: () => boolean;
+	oversizedFirst?: boolean;
+}) {
 	const row = {
 		id: "sync-1",
 		userId: PURELYMAIL_OWNER_USER_ID,
@@ -96,6 +106,7 @@ function buildHarness(options?: { current?: () => boolean }) {
 	const dispositions: DispositionInput[] = [];
 	const writes: number[] = [];
 	const fakeClient = new FakeImap(() => undefined);
+	fakeClient.oversizedFirst = options?.oversizedFirst ?? true;
 	const current = options?.current ?? (() => true);
 	const db = {
 		mailboxSyncDisposition: {
@@ -203,5 +214,23 @@ describe("Purelymail IMAP service progress fencing", () => {
 		expect(harness.writes).toHaveLength(0);
 		expect(harness.row.status).toBe(GoogleSyncStatus.IDLE);
 		expect(harness.row.cursor).toBeNull();
+	});
+
+	it("retries a missing message body instead of recording a permanent skip", async () => {
+		const harness = buildHarness({ oversizedFirst: false });
+		harness.fakeClient.omitSourceOnFirstFetch = true;
+		harness.fakeClient.onFetch = () => {
+			harness.fakeClient.omitSourceOnFirstFetch = false;
+		};
+
+		const first = await harness.service.poll();
+		const second = await harness.service.poll();
+
+		expect(first.failed).toBe(1);
+		expect(first.skipped).toBe(0);
+		expect(harness.row.cursor).toContain('"uid":50');
+		expect(second.failed).toBe(0);
+		expect(second.processed).toBe(50);
+		expect(harness.dispositions).toHaveLength(0);
 	});
 });

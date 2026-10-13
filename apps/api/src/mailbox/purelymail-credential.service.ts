@@ -25,6 +25,8 @@ export type PurelymailCredentialStatus = {
 		status: string | null;
 		lastSyncedAt: string | null;
 		lastError: string | null;
+		skippedCount: number;
+		historyIncomplete: boolean;
 	};
 };
 
@@ -122,10 +124,15 @@ export class PurelymailCredentialService {
 			);
 		}
 
-		await this.db.purelymailCredential.update({
-			where: { userId },
+		const enabled = await this.db.purelymailCredential.updateMany({
+			where: { userId, updatedAt: credential.updatedAt },
 			data: { enabled: true },
 		});
+		if (enabled.count !== 1) {
+			throw new BadRequestException(
+				"Purelymail credential changed. Save it again before enabling.",
+			);
+		}
 		await this.db.mailboxSync.upsert({
 			where: { userId_source: { userId, source: PURELYMAIL_IMAP.source } },
 			create: { userId, source: PURELYMAIL_IMAP.source },
@@ -193,7 +200,7 @@ export class PurelymailCredentialService {
 	}
 
 	private async readStatus(): Promise<PurelymailCredentialStatus> {
-		const [credential, sync] = await Promise.all([
+		const [credential, sync, skippedCount] = await Promise.all([
 			this.db.purelymailCredential.findUnique({
 				where: { userId: PURELYMAIL_IMAP.ownerUserId },
 				select: { folder: true, enabled: true },
@@ -206,6 +213,13 @@ export class PurelymailCredentialService {
 					},
 				},
 				select: { status: true, lastSyncedAt: true, lastError: true },
+			}),
+			this.db.mailboxSyncDisposition.count({
+				where: {
+					userId: PURELYMAIL_IMAP.ownerUserId,
+					source: PURELYMAIL_IMAP.source,
+					status: "SKIPPED",
+				},
 			}),
 		]);
 		return {
@@ -220,6 +234,8 @@ export class PurelymailCredentialService {
 				lastError: sync?.lastError
 					? sanitizePurelymailError(sync.lastError)
 					: null,
+				skippedCount,
+				historyIncomplete: skippedCount > 0,
 			},
 		};
 	}
