@@ -36,6 +36,7 @@ export function selectPurelymailUids(
 			: null;
 	const pageUids = uids
 		.filter((uid) => matchingCursor === null || uid > matchingCursor.uid)
+		.sort((left, right) => left - right)
 		.slice(0, limit);
 
 	return {

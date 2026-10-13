@@ -25,19 +25,46 @@ import { Input } from "@crm/ui/components/input";
 import { Spinner } from "@crm/ui/components/spinner";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useTRPC } from "@/lib/trpc/client";
 
+type PurelymailStatus = {
+	mailbox: string;
+	folder: string | null;
+	configured: boolean;
+	enabled: boolean;
+	serverKeyConfigured: boolean;
+	sync: {
+		status: string | null;
+		lastSyncedAt: string | null;
+		lastError: string | null;
+	};
+};
+
 export function PurelymailConnection() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const status = useQuery(trpc.purelymail.status.queryOptions());
+
+	if (status.isError) {
+		return (
+			<p className="text-destructive text-sm">
+				Purelymail setup is not available for this account.
+			</p>
+		);
+	}
+	if (!status.data) return <Spinner size="lg" />;
+
+	return (
+		<PurelymailSetup key={status.data.folder ?? "Sent"} status={status.data} />
+	);
+}
+
+function PurelymailSetup({ status }: { status: PurelymailStatus }) {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const [password, setPassword] = useState("");
-	const [folder, setFolder] = useState("Sent");
-	useEffect(() => {
-		if (status.data?.folder) setFolder(status.data.folder);
-	}, [status.data?.folder]);
+	const [folder, setFolder] = useState(status.folder ?? "Sent");
 
 	const refresh = async () => {
 		await queryClient.invalidateQueries({
@@ -81,16 +108,10 @@ export function PurelymailConnection() {
 		}),
 	);
 
-	if (!status.data) return <Spinner size="lg" />;
-
 	const busy =
-		status.isFetching ||
-		save.isPending ||
-		enable.isPending ||
-		pause.isPending ||
-		remove.isPending;
-	const configured = status.data.configured;
-	const enabled = status.data.enabled;
+		save.isPending || enable.isPending || pause.isPending || remove.isPending;
+	const configured = status.configured;
+	const enabled = status.enabled;
 
 	return (
 		<Card className="rounded-lg border bg-card px-(--spacing-block-inline) py-4">
@@ -108,8 +129,8 @@ export function PurelymailConnection() {
 					</div>
 				</CardTitle>
 				<CardDescription className="block">
-					Read-only Sent history for {status.data.mailbox}. This page never
-					needs a Google or Microsoft mailbox grant.
+					Read-only Sent history for {status.mailbox}. This page never needs a
+					Google or Microsoft mailbox grant.
 				</CardDescription>
 			</CardHeader>
 
@@ -121,7 +142,7 @@ export function PurelymailConnection() {
 					<Input
 						id="purelymail-password"
 						autoComplete="new-password"
-						disabled={busy || !status.data.serverKeyConfigured}
+						disabled={busy || !status.serverKeyConfigured}
 						placeholder="Enter it on this device"
 						type="password"
 						value={password}
@@ -138,8 +159,8 @@ export function PurelymailConnection() {
 					</FieldLabel>
 					<Input
 						id="purelymail-folder"
-						disabled={busy || !status.data.serverKeyConfigured}
-						value={folder || status.data.folder || "Sent"}
+						disabled={busy || !status.serverKeyConfigured}
+						value={folder}
 						onChange={(event) => setFolder(event.target.value)}
 					/>
 					<FieldDescription>
@@ -148,28 +169,24 @@ export function PurelymailConnection() {
 						contents.
 					</FieldDescription>
 				</Field>
-				{!status.data.serverKeyConfigured ? (
+				{!status.serverKeyConfigured ? (
 					<p className="text-amber-700 text-xs dark:text-amber-300">
 						The server key is not provisioned yet. An administrator must
 						configure it before this page can save a credential.
 					</p>
 				) : null}
-				{status.data.sync.lastError ? (
-					<p className="text-destructive text-xs">
-						{status.data.sync.lastError}
-					</p>
+				{status.sync.lastError ? (
+					<p className="text-destructive text-xs">{status.sync.lastError}</p>
 				) : null}
 			</CardContent>
 
 			<CardFooter className="flex-wrap px-0">
 				<Button
-					disabled={
-						busy || !password.trim() || !status.data.serverKeyConfigured
-					}
+					disabled={busy || !password.trim() || !status.serverKeyConfigured}
 					onClick={() =>
 						save.mutate({
 							password,
-							folder: folder || status.data.folder || "Sent",
+							folder,
 						})
 					}
 					type="button"
