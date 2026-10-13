@@ -32,7 +32,8 @@
 				"MICROSOFT_CLIENT_SECRET",
 				"MICROSOFT_TENANT_ID",
 				"PORT",
-				"REDIS_URL"
+				"REDIS_URL",
+				"PURELYMAIL_CREDENTIAL_KEY"
 			]
 		},
 		"test": {
@@ -50,7 +51,8 @@
 				"MICROSOFT_CLIENT_SECRET",
 				"MICROSOFT_TENANT_ID",
 				"PORT",
-				"REDIS_URL"
+				"REDIS_URL",
+				"PURELYMAIL_CREDENTIAL_KEY"
 			]
 		}
 	}

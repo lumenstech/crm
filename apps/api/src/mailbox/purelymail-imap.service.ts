@@ -16,7 +16,10 @@ import { InjectDatabase } from "../database/database.constants";
 import { normaliseMessageId, rootMessageIdFrom } from "./message-text";
 import { type Participant, parseAddress } from "./participants";
 import { sanitizePurelymailError } from "./purelymail-credential.crypto";
-import { PurelymailCredentialService } from "./purelymail-credential.service";
+import {
+	type ActivePurelymailCredential,
+	PurelymailCredentialService,
+} from "./purelymail-credential.service";
 import { parseCursor, selectPurelymailUids } from "./purelymail-cursor";
 import {
 	purelymailImapMessageId,
@@ -52,6 +55,7 @@ export type PurelymailPollSummary = {
 	processed: number;
 	unresolved: number;
 	duplicates: number;
+	skipped: number;
 	failed: number;
 	evidence: PurelymailMessageEvidence[];
 };
@@ -120,6 +124,7 @@ export class PurelymailImapService
 			processed: summary.processed,
 			unresolved: summary.unresolved,
 			duplicates: summary.duplicates,
+			skipped: summary.skipped,
 			failed: summary.failed,
 		});
 	}
@@ -143,7 +148,7 @@ export class PurelymailImapService
 			name: unit.name,
 		};
 
-		const row = claimedRowId
+		let row = claimedRowId
 			? await this.state.get(credential.userId, PURELYMAIL_IMAP.source)
 			: ((await this.state.get(credential.userId, PURELYMAIL_IMAP.source)) ??
 				(await this.state.ensureUnchanged(
@@ -156,7 +161,18 @@ export class PurelymailImapService
 		if (!claimedRowId && !(await this.state.claim(row, new Date()))) {
 			return emptySummary("disabled");
 		}
-		const client = new ImapFlow({
+		if (!claimedRowId) {
+			const claimedRow = await this.state.get(
+				credential.userId,
+				PURELYMAIL_IMAP.source,
+			);
+			if (!claimedRow) return emptySummary("disabled");
+			row = claimedRow;
+		}
+		if (await this.stopIfCredentialChanged(credential, row, summary)) {
+			return summary;
+		}
+		const client = this.createClient({
 			host: PURELYMAIL_IMAP.host,
 			port: PURELYMAIL_IMAP.port,
 			secure: PURELYMAIL_IMAP.secure,
@@ -173,12 +189,21 @@ export class PurelymailImapService
 
 		try {
 			await client.connect();
+			if (await this.stopIfCredentialChanged(credential, row, summary)) {
+				return summary;
+			}
 			const folder = credential.folder;
 			summary.folder = folder;
-			const lock = await client.getMailboxLock(folder);
+			const lock = await client.getMailboxLock(folder, { readOnly: true });
 			try {
-				if (!client.mailbox) throw new Error("Purelymail did not select Sent.");
-				const uidValidity = client.mailbox.uidValidity.toString();
+				const mailbox = client.mailbox;
+				if (mailbox === false || !mailbox?.readOnly) {
+					throw new Error("Purelymail mailbox was not opened read-only.");
+				}
+				if (await this.stopIfCredentialChanged(credential, row, summary)) {
+					return summary;
+				}
+				const uidValidity = mailbox.uidValidity.toString();
 				summary.uidValidity = uidValidity;
 				const cursor = parseCursor(row.cursor);
 				const found = await client.search({ all: true }, { uid: true });
@@ -191,6 +216,9 @@ export class PurelymailImapService
 				);
 				const uids = page.uids;
 				if (uids.length > 0) {
+					if (await this.stopIfCredentialChanged(credential, row, summary)) {
+						return summary;
+					}
 					const messages = await client.fetchAll(
 						uids,
 						{
@@ -212,6 +240,9 @@ export class PurelymailImapService
 						]),
 					};
 					for (const message of messages) {
+						if (await this.stopIfCredentialChanged(credential, row, summary)) {
+							return summary;
+						}
 						await this.processMessage(
 							message,
 							folder,
@@ -222,17 +253,25 @@ export class PurelymailImapService
 						);
 					}
 				}
+				if (await this.stopIfCredentialChanged(credential, row, summary)) {
+					return summary;
+				}
 				if (summary.failed > 0) {
 					summary.status = "failed";
 					await this.state.markFailed(
 						row.id,
 						"Purelymail message processing failed.",
+						row.updatedAt,
 					);
 				} else {
-					await this.state.settle(row.id, {
-						cursor: JSON.stringify(page.nextCursor),
-						status: GoogleSyncStatus.IDLE,
-					});
+					await this.state.settle(
+						row.id,
+						{
+							cursor: JSON.stringify(page.nextCursor),
+							status: GoogleSyncStatus.IDLE,
+						},
+						row.updatedAt,
+					);
 				}
 			} finally {
 				lock.release();
@@ -243,7 +282,7 @@ export class PurelymailImapService
 			const errorCode = sanitizePurelymailError(
 				error instanceof Error ? error : "Purelymail synchronization failed.",
 			);
-			await this.state.markFailed(row.id, errorCode);
+			await this.state.markFailed(row.id, errorCode, row.updatedAt);
 			this.logger.error({
 				message: "Purelymail IMAP synchronization failed",
 				errorCode,
@@ -259,6 +298,23 @@ export class PurelymailImapService
 		return summary;
 	}
 
+	private async stopIfCredentialChanged(
+		credential: ActivePurelymailCredential,
+		row: Awaited<ReturnType<SyncStateService["get"]>>,
+		summary: PurelymailPollSummary,
+	): Promise<boolean> {
+		if (!row || (await this.credentials.isCurrent(credential))) return false;
+		summary.status = "disabled";
+		await this.state.cancel(row);
+		return true;
+	}
+
+	protected createClient(
+		options: ConstructorParameters<typeof ImapFlow>[0],
+	): ImapFlow {
+		return new ImapFlow(options);
+	}
+
 	private async processMessage(
 		message: FetchMessageObject,
 		folder: string,
@@ -272,7 +328,43 @@ export class PurelymailImapService
 			!message.source ||
 			(message.size ?? message.source.length) > PURELYMAIL_IMAP.maxMessageBytes
 		) {
-			summary.failed += 1;
+			const providerMessageId = purelymailImapMessageId({
+				mailbox: PURELYMAIL_IMAP.mailbox,
+				folder,
+				uidValidity,
+				uid: message.uid,
+			});
+			const reason = message.source
+				? `Message exceeds the ${PURELYMAIL_IMAP.maxMessageBytes}-byte import limit.`
+				: "Message source was not available for import.";
+			await this.db.mailboxSyncDisposition.upsert({
+				where: {
+					source_rfcMessageId: {
+						source: PURELYMAIL_IMAP.source,
+						rfcMessageId: providerMessageId,
+					},
+				},
+				create: {
+					source: PURELYMAIL_IMAP.source,
+					mailbox: PURELYMAIL_IMAP.mailbox,
+					userId: row.userId,
+					rfcMessageId: providerMessageId,
+					folder,
+					uidValidity,
+					uid: message.uid,
+					status: "SKIPPED",
+					reason,
+				},
+				update: {
+					status: "SKIPPED",
+					reason,
+					folder,
+					uidValidity,
+					uid: message.uid,
+				},
+				select: { id: true },
+			});
+			summary.skipped += 1;
 			return;
 		}
 		const incoming = await parseIncomingMessage(
@@ -432,6 +524,7 @@ function emptySummary(
 		processed: 0,
 		unresolved: 0,
 		duplicates: 0,
+		skipped: 0,
 		failed: 0,
 		evidence: [],
 	};

@@ -32,6 +32,7 @@ export type ActivePurelymailCredential = {
 	userId: string;
 	password: string;
 	folder: string;
+	updatedAt: Date;
 };
 
 @Injectable()
@@ -128,12 +129,9 @@ export class PurelymailCredentialService {
 		await this.db.mailboxSync.upsert({
 			where: { userId_source: { userId, source: PURELYMAIL_IMAP.source } },
 			create: { userId, source: PURELYMAIL_IMAP.source },
-			update: {
-				status: GoogleSyncStatus.IDLE,
-				lastError: null,
-				retryAfter: null,
-			},
+			update: {},
 		});
+		await this.normalizeIdleSync(userId);
 		return this.readStatus();
 	}
 
@@ -174,10 +172,24 @@ export class PurelymailCredentialService {
 					this.key,
 				),
 				folder: credential.folder,
+				updatedAt: credential.updatedAt,
 			};
 		} catch {
 			return null;
 		}
+	}
+
+	async isCurrent(credential: ActivePurelymailCredential): Promise<boolean> {
+		const current = await this.db.purelymailCredential.findUnique({
+			where: { userId: credential.userId },
+			select: { enabled: true, folder: true, updatedAt: true },
+		});
+
+		return Boolean(
+			current?.enabled &&
+				current.folder === credential.folder &&
+				current.updatedAt.getTime() === credential.updatedAt.getTime(),
+		);
 	}
 
 	private async readStatus(): Promise<PurelymailCredentialStatus> {
@@ -213,8 +225,16 @@ export class PurelymailCredentialService {
 	}
 
 	private async disableSync(userId: string): Promise<void> {
+		await this.normalizeIdleSync(userId);
+	}
+
+	private async normalizeIdleSync(userId: string): Promise<void> {
 		await this.db.mailboxSync.updateMany({
-			where: { userId, source: PURELYMAIL_IMAP.source },
+			where: {
+				userId,
+				source: PURELYMAIL_IMAP.source,
+				status: { not: GoogleSyncStatus.RUNNING },
+			},
 			data: {
 				status: GoogleSyncStatus.IDLE,
 				lastError: null,

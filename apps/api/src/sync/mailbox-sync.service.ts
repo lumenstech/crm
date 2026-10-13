@@ -5,6 +5,7 @@ import { GoogleSyncService } from "../google/google-sync.service";
 import {
 	isGoogleSyncSource,
 	isMicrosoftSyncSource,
+	type SyncSource,
 } from "../mailbox/mailbox.constants";
 import { PurelymailImapService } from "../mailbox/purelymail-imap.service";
 import { SyncStateService } from "../mailbox/sync-state.service";
@@ -61,6 +62,11 @@ export class MailboxSyncService {
 			}
 
 			if (!(await this.state.claim(row, new Date()))) continue;
+			const claimedRow = await this.state.get(
+				row.userId,
+				row.source as SyncSource,
+			);
+			if (!claimedRow) continue;
 
 			summary.attempted += 1;
 
@@ -69,7 +75,7 @@ export class MailboxSyncService {
 
 				if (outcome === null || outcome.status === "skipped") {
 					summary.skipped += 1;
-					await this.state.release(row.id);
+					await this.state.release(row.id, claimedRow.updatedAt);
 				} else if (outcome.status === "rate-limited") {
 					summary.rateLimited += 1;
 				} else if (
@@ -85,6 +91,7 @@ export class MailboxSyncService {
 				await this.state.markFailed(
 					row.id,
 					error instanceof Error ? error.message : String(error),
+					claimedRow.updatedAt,
 				);
 				this.logger.error(
 					{
