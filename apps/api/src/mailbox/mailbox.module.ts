@@ -8,6 +8,8 @@ import { MailboxRouter } from "./mailbox.router";
 import { MailboxApiClient } from "./mailbox-api.client";
 import { MailboxMatchService } from "./mailbox-match.service";
 import { MailboxTokenService } from "./mailbox-token.service";
+import { PurelymailRouter } from "./purelymail.router";
+import { PurelymailCredentialService } from "./purelymail-credential.service";
 import { PurelymailImapService } from "./purelymail-imap.service";
 import { SyncStateService } from "./sync-state.service";
 import { ThreadWriterService } from "./thread-writer.service";
@@ -25,6 +27,8 @@ import { ThreadWriterService } from "./thread-writer.service";
 		MailboxMatchService,
 		HistoricalEmailImportService,
 		MailboxRouter,
+		PurelymailRouter,
+		PurelymailCredentialService,
 		SyncStateService,
 		ThreadWriterService,
 		PurelymailImapService,

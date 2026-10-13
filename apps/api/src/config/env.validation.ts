@@ -202,11 +202,7 @@ export class EnvironmentVariables {
 
 	@IsOptional()
 	@IsString()
-	PURELYMAIL_IMAP_PASSWORD?: string;
-
-	@IsOptional()
-	@IsString()
-	PURELYMAIL_SYNC_USER_EMAIL?: string;
+	PURELYMAIL_CREDENTIAL_KEY?: string;
 }
 
 export type RawEnvironment = Record<string, string | undefined>;

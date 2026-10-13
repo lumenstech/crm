@@ -26,7 +26,8 @@
 		"./slack-inventory": "./src/slack-inventory.ts",
 		"./tracking": "./src/tracking.ts",
 		"./workspace": "./src/workspace.ts",
-		"./procurement-pricing": "./src/procurement-pricing.ts"
+		"./procurement-pricing": "./src/procurement-pricing.ts",
+		"./purelymail": "./src/purelymail.ts"
 	},
 	"scripts": {
 		"build": "prisma generate",

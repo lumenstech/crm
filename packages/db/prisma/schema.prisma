@@ -43,6 +43,8 @@ model User {
   conversationFeedback    AgentConversationFeedback[]   @relation("ConversationFeedbackAuthor")
   slackMemberMatch        SlackMemberMatch?
 
+  purelymailCredential PurelymailCredential?
+
   members     Member[]
   invitations Invitation[]
 
@@ -1390,6 +1392,22 @@ model MailboxSync {
   @@unique([userId, source])
   @@index([status])
   @@map("mailboxSync")
+}
+
+model PurelymailCredential {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedPassword  String
+  nonce              String
+  authTag            String
+  keyVersion         Int
+  folder             String
+  enabled            Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("purelymailCredential")
 }
 
 model MailboxSyncDisposition {

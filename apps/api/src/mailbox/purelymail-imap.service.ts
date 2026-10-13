@@ -5,19 +5,19 @@ import {
 	type OnApplicationShutdown,
 	type OnModuleInit,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { type FetchMessageObject, ImapFlow } from "imapflow";
 import {
 	type AddressObject,
 	type EmailAddress,
 	simpleParser,
 } from "mailparser";
-import { z } from "zod";
 import { BusinessUnitsService } from "../business-units/business-units.service";
-import type { EnvironmentVariables } from "../config/env.validation";
 import { InjectDatabase } from "../database/database.constants";
 import { normaliseMessageId, rootMessageIdFrom } from "./message-text";
 import { type Participant, parseAddress } from "./participants";
+import { sanitizePurelymailError } from "./purelymail-credential.crypto";
+import { PurelymailCredentialService } from "./purelymail-credential.service";
+import { parseCursor, selectPurelymailUids } from "./purelymail-cursor";
 import {
 	purelymailImapMessageId,
 	purelymailProviderThreadId,
@@ -61,36 +61,18 @@ export class PurelymailImapService
 	implements OnModuleInit, OnApplicationShutdown
 {
 	private readonly logger = new Logger(PurelymailImapService.name);
-	private readonly password: string | undefined;
-	private readonly userEmail: string | undefined;
 	private active: Promise<PurelymailPollSummary> | null = null;
 	private timer: ReturnType<typeof setInterval> | null = null;
 
 	constructor(
-		config: ConfigService<EnvironmentVariables, true>,
 		@InjectDatabase() private readonly db: Db,
 		private readonly state: SyncStateService,
 		private readonly writer: ThreadWriterService,
 		private readonly businessUnits: BusinessUnitsService,
-	) {
-		this.password = config
-			.get("PURELYMAIL_IMAP_PASSWORD", { infer: true })
-			?.trim();
-		this.userEmail = config
-			.get("PURELYMAIL_SYNC_USER_EMAIL", { infer: true })
-			?.trim()
-			.toLowerCase();
-	}
+		private readonly credentials: PurelymailCredentialService,
+	) {}
 
 	onModuleInit(): void {
-		if (!this.password) {
-			this.logger.log({
-				message: "Purelymail IMAP synchronization disabled",
-				mailbox: PURELYMAIL_IMAP.mailbox,
-			});
-			return;
-		}
-
 		void this.pollAndLog();
 		this.timer = setInterval(
 			() => void this.pollAndLog(),
@@ -105,11 +87,20 @@ export class PurelymailImapService
 	}
 
 	poll(): Promise<PurelymailPollSummary> {
-		if (!this.password) return Promise.resolve(emptySummary("disabled"));
 		if (this.active) return this.active;
-		this.active = this.run(this.password).finally(() => {
-			this.active = null;
-		});
+		this.active = this.run()
+			.catch((error) => {
+				this.logger.error({
+					message: "Purelymail IMAP synchronization failed before connection",
+					errorCode: sanitizePurelymailError(error),
+				});
+				const summary = emptySummary("failed");
+				summary.failed = 1;
+				return summary;
+			})
+			.finally(() => {
+				this.active = null;
+			});
 		return this.active;
 	}
 
@@ -129,7 +120,10 @@ export class PurelymailImapService
 		});
 	}
 
-	private async run(password: string): Promise<PurelymailPollSummary> {
+	private async run(): Promise<PurelymailPollSummary> {
+		const credential = await this.credentials.active();
+		if (!credential) return emptySummary("disabled");
+
 		const summary = emptySummary("ok");
 		const unit = (await this.businessUnits.list()).find(
 			(candidate) => candidate.key === "data-gear",
@@ -145,29 +139,19 @@ export class PurelymailImapService
 			name: unit.name,
 		};
 
-		if (!this.userEmail) {
-			summary.status = "failed";
-			summary.failed += 1;
-			return summary;
-		}
-		const user = await this.db.user.findUnique({
-			where: { email: this.userEmail },
-			select: { id: true },
-		});
-		if (!user) {
-			summary.status = "failed";
-			summary.failed += 1;
-			return summary;
-		}
-		const row = await this.state.ensure(user.id, PURELYMAIL_IMAP.source, {
-			autoCreate: false,
-		});
+		const row = await this.state.ensure(
+			credential.userId,
+			PURELYMAIL_IMAP.source,
+			{
+				autoCreate: false,
+			},
+		);
 		const client = new ImapFlow({
 			host: PURELYMAIL_IMAP.host,
 			port: PURELYMAIL_IMAP.port,
 			secure: PURELYMAIL_IMAP.secure,
 			servername: PURELYMAIL_IMAP.host,
-			auth: { user: PURELYMAIL_IMAP.mailbox, pass: password },
+			auth: { user: PURELYMAIL_IMAP.mailbox, pass: credential.password },
 			disableAutoIdle: true,
 			logger: false,
 			connectionTimeout: PURELYMAIL_IMAP.connectionTimeoutMs,
@@ -179,7 +163,7 @@ export class PurelymailImapService
 
 		try {
 			await client.connect();
-			const folder = await discoverSentFolder(client);
+			const folder = credential.folder;
 			summary.folder = folder;
 			const lock = await client.getMailboxLock(folder);
 			try {
@@ -188,9 +172,14 @@ export class PurelymailImapService
 				summary.uidValidity = uidValidity;
 				const cursor = parseCursor(row.cursor);
 				const found = await client.search({ all: true }, { uid: true });
-				const uids = (Array.isArray(found) ? found : [])
-					.filter((uid) => cursor === null || uid > cursor.uid)
-					.slice(0, PURELYMAIL_IMAP.maxMessagesPerTick);
+				const page = selectPurelymailUids(
+					Array.isArray(found) ? found : [],
+					cursor,
+					folder,
+					uidValidity,
+					PURELYMAIL_IMAP.maxMessagesPerTick,
+				);
+				const uids = page.uids;
 				if (uids.length > 0) {
 					const messages = await client.fetchAll(
 						uids,
@@ -223,12 +212,8 @@ export class PurelymailImapService
 						);
 					}
 				}
-				const latestUid = uids.at(-1) ?? cursor?.uid ?? null;
 				await this.state.settle(row.id, {
-					cursor:
-						latestUid === null
-							? row.cursor
-							: JSON.stringify({ folder, uidValidity, uid: latestUid }),
+					cursor: JSON.stringify(page.nextCursor),
 					status: GoogleSyncStatus.IDLE,
 				});
 			} finally {
@@ -237,14 +222,12 @@ export class PurelymailImapService
 		} catch (error) {
 			summary.status = "failed";
 			summary.failed += 1;
-			await this.state.markFailed(
-				row.id,
-				error instanceof Error ? error.message : String(error),
-			);
-			this.logger.error(
-				{ message: "Purelymail IMAP synchronization failed" },
-				error instanceof Error ? error.stack : String(error),
-			);
+			const errorCode = sanitizePurelymailError(error);
+			await this.state.markFailed(row.id, errorCode);
+			this.logger.error({
+				message: "Purelymail IMAP synchronization failed",
+				errorCode,
+			});
 		} finally {
 			if (client.usable) {
 				await client.logout().catch(() => client.close());
@@ -336,19 +319,6 @@ export class PurelymailImapService
 	}
 }
 
-async function discoverSentFolder(client: ImapFlow): Promise<string> {
-	const folders = await client.list();
-	const special = folders.find(
-		(folder) => folder.specialUse?.toLowerCase() === "\\sent",
-	);
-	if (special) return special.path;
-	const fallback = folders.find((folder) =>
-		/(^|[./ ])sent($|[./ ])?/i.test(folder.path),
-	);
-	if (fallback) return fallback.path;
-	throw new Error("Purelymail did not advertise a Sent folder.");
-}
-
 export async function parseIncomingMessage(
 	source: Buffer,
 	uid: number,
@@ -427,19 +397,6 @@ function dateOf(value?: Date | string): Date {
 		if (!Number.isNaN(parsed.getTime())) return parsed;
 	}
 	return new Date();
-}
-
-function parseCursor(value: string | null): { uid: number } | null {
-	if (!value) return null;
-	try {
-		const parsed = z
-			.object({ uid: z.number().int() })
-			.strict()
-			.safeParse(JSON.parse(value));
-		return parsed.success ? parsed.data : null;
-	} catch {
-		return null;
-	}
 }
 
 function emptySummary(

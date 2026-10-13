@@ -32,6 +32,7 @@ import { ingestSignalInput, ingestSignalOutput, ingestSignalBatchInput, ingestSi
 import { ingestGuyanaOpportunityInput, ingestGuyanaOpportunityOutput } from "../ingest/guyana-opportunity.contracts";
 import { evaluateOpportunityInput, evaluateOpportunityOutput, decideOpportunityInput, decideOpportunityOutput, opportunityReviewQueueInput, opportunityReviewQueueOutput } from "../ingest/opportunity-ops.contracts";
 import { historicalEmailImportInput, historicalEmailImportOutput } from "../mailbox/history-import.contracts";
+import { purelymailCredentialStatusOutput, savePurelymailCredentialInput } from "../mailbox/purelymail.contracts";
 import { preflightOutreachInput, preflightOutreachOutput, reserveOutreachInput, reserveOutreachOutput, finalizeOutreachInput, finalizeOutreachOutput, listCompanyOutreachHistoryInput, listCompanyOutreachHistoryOutput } from "../outreach/outreach.contracts";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
@@ -665,6 +666,24 @@ const appRouter = t.router({
     importEmail: publicProcedure
       .input(historicalEmailImportInput)
       .output(historicalEmailImportOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
+  purelymail: t.router({
+    status: publicProcedure
+      .output(purelymailCredentialStatusOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    save: publicProcedure
+      .input(savePurelymailCredentialInput)
+      .output(purelymailCredentialStatusOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    enable: publicProcedure
+      .output(purelymailCredentialStatusOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    pause: publicProcedure
+      .output(purelymailCredentialStatusOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    remove: publicProcedure
+      .output(purelymailCredentialStatusOutput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
   microsoft: t.router({

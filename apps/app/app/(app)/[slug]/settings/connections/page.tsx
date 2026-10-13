@@ -1,3 +1,4 @@
+import Plug from "@carbon/icons-react/es/Plug";
 import GoogleLogo from "@crm/ui/components/brand-logos/google";
 import MicrosoftLogo from "@crm/ui/components/brand-logos/microsoft";
 import SlackLogo from "@crm/ui/components/brand-logos/slack";
@@ -30,10 +31,13 @@ async function ConnectionsSettingsPageContent({
 	const [{ slug }, query] = await Promise.all([params, searchParams]);
 	const queryClient = getServerQueryClient();
 	const trpc = getServerTrpc();
-	const [google, microsoft, slack] = await Promise.all([
+	const [google, microsoft, slack, purelymail] = await Promise.all([
 		queryClient.fetchQuery(trpc.google.status.queryOptions()),
 		queryClient.fetchQuery(trpc.microsoft.status.queryOptions()),
 		queryClient.fetchQuery(trpc.slack.status.queryOptions()),
+		queryClient
+			.fetchQuery(trpc.purelymail.status.queryOptions())
+			.catch(() => null),
 	]);
 	const rows = [
 		...(google.linked
@@ -71,6 +75,22 @@ async function ConnectionsSettingsPageContent({
 						sends: "Nothing yet",
 						href: `/${slug}/settings/connections/microsoft`,
 						logo: MicrosoftLogo,
+					},
+				]
+			: []),
+		...(purelymail
+			? [
+					{
+						name: "Purelymail",
+						status: purelymail.enabled
+							? "Read-only sync enabled"
+							: purelymail.configured
+								? "Configured — paused"
+								: "Not configured",
+						bringsIn: "Read-only Sent history from sales@data-gear.com",
+						sends: "Nothing",
+						href: `/${slug}/settings/connections/purelymail`,
+						logo: Plug,
 					},
 				]
 			: []),

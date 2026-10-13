@@ -1,3 +1,5 @@
+import { PURELYMAIL_OWNER_USER_ID } from "@crm/db/purelymail";
+
 export const PURELYMAIL_IMAP = {
 	host: "imap.purelymail.com",
 	port: 993,
@@ -10,4 +12,5 @@ export const PURELYMAIL_IMAP = {
 	connectionTimeoutMs: 10_000,
 	greetingTimeoutMs: 10_000,
 	socketTimeoutMs: 30_000,
+	ownerUserId: PURELYMAIL_OWNER_USER_ID,
 } as const;
