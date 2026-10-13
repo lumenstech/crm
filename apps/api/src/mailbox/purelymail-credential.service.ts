@@ -114,7 +114,11 @@ export class PurelymailCredentialService {
 				key,
 			);
 		} catch (error) {
-			throw new BadRequestException(sanitizePurelymailError(error));
+			throw new BadRequestException(
+				sanitizePurelymailError(
+					error instanceof Error ? error : "Purelymail credential invalid.",
+				),
+			);
 		}
 
 		await this.db.purelymailCredential.update({

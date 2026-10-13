@@ -75,8 +75,8 @@ export function decryptPurelymailPassword(
 	]).toString("utf8");
 }
 
-export function sanitizePurelymailError(error: unknown): string {
-	const message = error instanceof Error ? error.message : String(error);
+export function sanitizePurelymailError(error: Error | string): string {
+	const message = error instanceof Error ? error.message : error;
 	const normalized = message.toLowerCase();
 
 	if (

@@ -92,7 +92,11 @@ export class PurelymailImapService
 			.catch((error) => {
 				this.logger.error({
 					message: "Purelymail IMAP synchronization failed before connection",
-					errorCode: sanitizePurelymailError(error),
+					errorCode: sanitizePurelymailError(
+						error instanceof Error
+							? error
+							: "Purelymail synchronization failed.",
+					),
 				});
 				const summary = emptySummary("failed");
 				summary.failed = 1;
@@ -236,7 +240,9 @@ export class PurelymailImapService
 		} catch (error) {
 			summary.status = "failed";
 			summary.failed += 1;
-			const errorCode = sanitizePurelymailError(error);
+			const errorCode = sanitizePurelymailError(
+				error instanceof Error ? error : "Purelymail synchronization failed.",
+			);
 			await this.state.markFailed(row.id, errorCode);
 			this.logger.error({
 				message: "Purelymail IMAP synchronization failed",

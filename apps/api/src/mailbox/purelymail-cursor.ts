@@ -6,6 +6,11 @@ export type PurelymailCursor = {
 	uid: number;
 };
 
+export type PurelymailUidPage = {
+	uids: number[];
+	nextCursor: PurelymailCursor;
+};
+
 export function parseCursor(value: string | null): PurelymailCursor | null {
 	if (!value) return null;
 	try {
@@ -29,7 +34,7 @@ export function selectPurelymailUids(
 	folder: string,
 	uidValidity: string,
 	limit: number,
-): { uids: number[]; nextCursor: PurelymailCursor } {
+): PurelymailUidPage {
 	const matchingCursor =
 		cursor?.folder === folder && cursor.uidValidity === uidValidity
 			? cursor
