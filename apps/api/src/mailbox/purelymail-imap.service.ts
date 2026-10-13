@@ -86,9 +86,9 @@ export class PurelymailImapService
 		if (this.active) await this.active;
 	}
 
-	poll(): Promise<PurelymailPollSummary> {
+	poll(claimedRowId?: string): Promise<PurelymailPollSummary> {
 		if (this.active) return this.active;
-		this.active = this.run()
+		this.active = this.run(claimedRowId)
 			.catch((error) => {
 				this.logger.error({
 					message: "Purelymail IMAP synchronization failed before connection",
@@ -120,7 +120,7 @@ export class PurelymailImapService
 		});
 	}
 
-	private async run(): Promise<PurelymailPollSummary> {
+	private async run(claimedRowId?: string): Promise<PurelymailPollSummary> {
 		const credential = await this.credentials.active();
 		if (!credential) return emptySummary("disabled");
 
@@ -139,13 +139,19 @@ export class PurelymailImapService
 			name: unit.name,
 		};
 
-		const row = await this.state.ensure(
-			credential.userId,
-			PURELYMAIL_IMAP.source,
-			{
-				autoCreate: false,
-			},
-		);
+		const row = claimedRowId
+			? await this.state.get(credential.userId, PURELYMAIL_IMAP.source)
+			: ((await this.state.get(credential.userId, PURELYMAIL_IMAP.source)) ??
+				(await this.state.ensureUnchanged(
+					credential.userId,
+					PURELYMAIL_IMAP.source,
+				)));
+		if (!row || (claimedRowId && row.id !== claimedRowId)) {
+			return emptySummary("disabled");
+		}
+		if (!claimedRowId && !(await this.state.claim(row, new Date()))) {
+			return emptySummary("disabled");
+		}
 		const client = new ImapFlow({
 			host: PURELYMAIL_IMAP.host,
 			port: PURELYMAIL_IMAP.port,
@@ -212,10 +218,18 @@ export class PurelymailImapService
 						);
 					}
 				}
-				await this.state.settle(row.id, {
-					cursor: JSON.stringify(page.nextCursor),
-					status: GoogleSyncStatus.IDLE,
-				});
+				if (summary.failed > 0) {
+					summary.status = "failed";
+					await this.state.markFailed(
+						row.id,
+						"Purelymail message processing failed.",
+					);
+				} else {
+					await this.state.settle(row.id, {
+						cursor: JSON.stringify(page.nextCursor),
+						status: GoogleSyncStatus.IDLE,
+					});
+				}
 			} finally {
 				lock.release();
 			}

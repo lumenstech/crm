@@ -65,7 +65,7 @@ export class MailboxSyncService {
 			summary.attempted += 1;
 
 			try {
-				const outcome = await this.runOne(row.userId, row.source);
+				const outcome = await this.runOne(row.userId, row.source, row.id);
 
 				if (outcome === null || outcome.status === "skipped") {
 					summary.skipped += 1;
@@ -114,7 +114,7 @@ export class MailboxSyncService {
 		return summary;
 	}
 
-	private async runOne(userId: string, source: string) {
+	private async runOne(userId: string, source: string, rowId?: string) {
 		if (isGoogleSyncSource(source)) return this.google.runOne(userId, source);
 
 		if (isMicrosoftSyncSource(source)) {
@@ -123,7 +123,7 @@ export class MailboxSyncService {
 
 		if (source === "purelymail") {
 			if (!this.purelymail) return null;
-			const outcome = await this.purelymail.poll();
+			const outcome = await this.purelymail.poll(rowId);
 			return outcome.status === "disabled" ? null : outcome;
 		}
 

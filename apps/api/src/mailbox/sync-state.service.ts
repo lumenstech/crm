@@ -80,6 +80,22 @@ export class SyncStateService {
 		});
 	}
 
+	async ensureUnchanged(
+		userId: string,
+		source: SyncSource,
+	): Promise<MailboxSync> {
+		return this.db.mailboxSync.upsert({
+			where: { userId_source: { userId, source } },
+			create: {
+				userId,
+				source,
+				status: GoogleSyncStatus.IDLE,
+				autoCreate: false,
+			},
+			update: {},
+		});
+	}
+
 	async markRunning(id: string): Promise<void> {
 		await this.db.mailboxSync.update({
 			where: { id },
