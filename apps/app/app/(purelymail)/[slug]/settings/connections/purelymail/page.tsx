@@ -7,6 +7,8 @@ import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Purelymail" };
 
+export const instant = false;
+
 export default async function PurelymailConnectionPage() {
 	const session = await requireSession();
 	if (!isPurelymailOwner(session)) notFound();
