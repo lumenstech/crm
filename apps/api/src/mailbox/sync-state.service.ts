@@ -52,10 +52,25 @@ export class SyncStateService {
 		return count === 1;
 	}
 
-	async release(id: string): Promise<void> {
+	async release(id: string, expectedUpdatedAt?: Date): Promise<void> {
 		await this.db.mailboxSync.updateMany({
-			where: { id },
+			where: fencedId(id, expectedUpdatedAt),
 			data: { retryAfter: null },
+		});
+	}
+
+	async cancel(row: MailboxSync): Promise<void> {
+		await this.db.mailboxSync.updateMany({
+			where: {
+				id: row.id,
+				status: GoogleSyncStatus.RUNNING,
+				updatedAt: row.updatedAt,
+			},
+			data: {
+				status: GoogleSyncStatus.IDLE,
+				lastError: null,
+				retryAfter: null,
+			},
 		});
 	}
 
@@ -80,6 +95,22 @@ export class SyncStateService {
 		});
 	}
 
+	async ensureUnchanged(
+		userId: string,
+		source: SyncSource,
+	): Promise<MailboxSync> {
+		return this.db.mailboxSync.upsert({
+			where: { userId_source: { userId, source } },
+			create: {
+				userId,
+				source,
+				status: GoogleSyncStatus.IDLE,
+				autoCreate: false,
+			},
+			update: {},
+		});
+	}
+
 	async markRunning(id: string): Promise<void> {
 		await this.db.mailboxSync.update({
 			where: { id },
@@ -93,9 +124,10 @@ export class SyncStateService {
 			cursor?: string | null;
 			status: GoogleSyncStatus;
 		},
+		expectedUpdatedAt?: Date,
 	): Promise<void> {
 		await this.db.mailboxSync.update({
-			where: { id },
+			where: fencedId(id, expectedUpdatedAt),
 			data: {
 				...update,
 				lastSyncedAt: new Date(),
@@ -144,9 +176,13 @@ export class SyncStateService {
 		});
 	}
 
-	async markFailed(id: string, reason: string): Promise<void> {
+	async markFailed(
+		id: string,
+		reason: string,
+		expectedUpdatedAt?: Date,
+	): Promise<void> {
 		await this.db.mailboxSync.update({
-			where: { id },
+			where: fencedId(id, expectedUpdatedAt),
 			data: {
 				status: GoogleSyncStatus.FAILED,
 				lastError: reason,
@@ -223,6 +259,11 @@ export class SyncStateService {
 
 		await this.db.mailboxSync.deleteMany({ where });
 	}
+}
+
+function fencedId(id: string, expectedUpdatedAt?: Date) {
+	if (expectedUpdatedAt) return { id, updatedAt: expectedUpdatedAt };
+	return { id };
 }
 
 function dueWhere(now: Date) {

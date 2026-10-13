@@ -5,6 +5,7 @@ import { GoogleSyncService } from "../google/google-sync.service";
 import {
 	isGoogleSyncSource,
 	isMicrosoftSyncSource,
+	type SyncSource,
 } from "../mailbox/mailbox.constants";
 import { PurelymailImapService } from "../mailbox/purelymail-imap.service";
 import { SyncStateService } from "../mailbox/sync-state.service";
@@ -61,15 +62,20 @@ export class MailboxSyncService {
 			}
 
 			if (!(await this.state.claim(row, new Date()))) continue;
+			const claimedRow = await this.state.get(
+				row.userId,
+				row.source as SyncSource,
+			);
+			if (!claimedRow) continue;
 
 			summary.attempted += 1;
 
 			try {
-				const outcome = await this.runOne(row.userId, row.source);
+				const outcome = await this.runOne(row.userId, row.source, row.id);
 
 				if (outcome === null || outcome.status === "skipped") {
 					summary.skipped += 1;
-					await this.state.release(row.id);
+					await this.state.release(row.id, claimedRow.updatedAt);
 				} else if (outcome.status === "rate-limited") {
 					summary.rateLimited += 1;
 				} else if (
@@ -85,6 +91,7 @@ export class MailboxSyncService {
 				await this.state.markFailed(
 					row.id,
 					error instanceof Error ? error.message : String(error),
+					claimedRow.updatedAt,
 				);
 				this.logger.error(
 					{
@@ -114,7 +121,7 @@ export class MailboxSyncService {
 		return summary;
 	}
 
-	private async runOne(userId: string, source: string) {
+	private async runOne(userId: string, source: string, rowId?: string) {
 		if (isGoogleSyncSource(source)) return this.google.runOne(userId, source);
 
 		if (isMicrosoftSyncSource(source)) {
@@ -123,7 +130,7 @@ export class MailboxSyncService {
 
 		if (source === "purelymail") {
 			if (!this.purelymail) return null;
-			const outcome = await this.purelymail.poll();
+			const outcome = await this.purelymail.poll(rowId);
 			return outcome.status === "disabled" ? null : outcome;
 		}
 

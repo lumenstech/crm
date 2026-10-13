@@ -44,6 +44,14 @@ class FakeState {
 		return [...this.rows.values()].filter((row) => this.isDue(row, now));
 	}
 
+	async get(userId: string, source: string): Promise<MailboxSync | null> {
+		return (
+			[...this.rows.values()].find(
+				(row) => row.userId === userId && row.source === source,
+			) ?? null
+		);
+	}
+
 	async claim(row: MailboxSync, now: Date): Promise<boolean> {
 		const stored = this.rows.get(row.id);
 		if (!stored) return false;

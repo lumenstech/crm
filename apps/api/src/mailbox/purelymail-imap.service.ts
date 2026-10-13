@@ -5,19 +5,22 @@ import {
 	type OnApplicationShutdown,
 	type OnModuleInit,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { type FetchMessageObject, ImapFlow } from "imapflow";
 import {
 	type AddressObject,
 	type EmailAddress,
 	simpleParser,
 } from "mailparser";
-import { z } from "zod";
 import { BusinessUnitsService } from "../business-units/business-units.service";
-import type { EnvironmentVariables } from "../config/env.validation";
 import { InjectDatabase } from "../database/database.constants";
 import { normaliseMessageId, rootMessageIdFrom } from "./message-text";
 import { type Participant, parseAddress } from "./participants";
+import { sanitizePurelymailError } from "./purelymail-credential.crypto";
+import {
+	type ActivePurelymailCredential,
+	PurelymailCredentialService,
+} from "./purelymail-credential.service";
+import { parseCursor, selectPurelymailUids } from "./purelymail-cursor";
 import {
 	purelymailImapMessageId,
 	purelymailProviderThreadId,
@@ -52,6 +55,7 @@ export type PurelymailPollSummary = {
 	processed: number;
 	unresolved: number;
 	duplicates: number;
+	skipped: number;
 	failed: number;
 	evidence: PurelymailMessageEvidence[];
 };
@@ -61,36 +65,18 @@ export class PurelymailImapService
 	implements OnModuleInit, OnApplicationShutdown
 {
 	private readonly logger = new Logger(PurelymailImapService.name);
-	private readonly password: string | undefined;
-	private readonly userEmail: string | undefined;
 	private active: Promise<PurelymailPollSummary> | null = null;
 	private timer: ReturnType<typeof setInterval> | null = null;
 
 	constructor(
-		config: ConfigService<EnvironmentVariables, true>,
 		@InjectDatabase() private readonly db: Db,
 		private readonly state: SyncStateService,
 		private readonly writer: ThreadWriterService,
 		private readonly businessUnits: BusinessUnitsService,
-	) {
-		this.password = config
-			.get("PURELYMAIL_IMAP_PASSWORD", { infer: true })
-			?.trim();
-		this.userEmail = config
-			.get("PURELYMAIL_SYNC_USER_EMAIL", { infer: true })
-			?.trim()
-			.toLowerCase();
-	}
+		private readonly credentials: PurelymailCredentialService,
+	) {}
 
 	onModuleInit(): void {
-		if (!this.password) {
-			this.logger.log({
-				message: "Purelymail IMAP synchronization disabled",
-				mailbox: PURELYMAIL_IMAP.mailbox,
-			});
-			return;
-		}
-
 		void this.pollAndLog();
 		this.timer = setInterval(
 			() => void this.pollAndLog(),
@@ -104,12 +90,25 @@ export class PurelymailImapService
 		if (this.active) await this.active;
 	}
 
-	poll(): Promise<PurelymailPollSummary> {
-		if (!this.password) return Promise.resolve(emptySummary("disabled"));
+	poll(claimedRowId?: string): Promise<PurelymailPollSummary> {
 		if (this.active) return this.active;
-		this.active = this.run(this.password).finally(() => {
-			this.active = null;
-		});
+		this.active = this.run(claimedRowId)
+			.catch((error) => {
+				this.logger.error({
+					message: "Purelymail IMAP synchronization failed before connection",
+					errorCode: sanitizePurelymailError(
+						error instanceof Error
+							? error
+							: "Purelymail synchronization failed.",
+					),
+				});
+				const summary = emptySummary("failed");
+				summary.failed = 1;
+				return summary;
+			})
+			.finally(() => {
+				this.active = null;
+			});
 		return this.active;
 	}
 
@@ -125,11 +124,15 @@ export class PurelymailImapService
 			processed: summary.processed,
 			unresolved: summary.unresolved,
 			duplicates: summary.duplicates,
+			skipped: summary.skipped,
 			failed: summary.failed,
 		});
 	}
 
-	private async run(password: string): Promise<PurelymailPollSummary> {
+	private async run(claimedRowId?: string): Promise<PurelymailPollSummary> {
+		const credential = await this.credentials.active();
+		if (!credential) return emptySummary("disabled");
+
 		const summary = emptySummary("ok");
 		const unit = (await this.businessUnits.list()).find(
 			(candidate) => candidate.key === "data-gear",
@@ -145,29 +148,36 @@ export class PurelymailImapService
 			name: unit.name,
 		};
 
-		if (!this.userEmail) {
-			summary.status = "failed";
-			summary.failed += 1;
+		let row = claimedRowId
+			? await this.state.get(credential.userId, PURELYMAIL_IMAP.source)
+			: ((await this.state.get(credential.userId, PURELYMAIL_IMAP.source)) ??
+				(await this.state.ensureUnchanged(
+					credential.userId,
+					PURELYMAIL_IMAP.source,
+				)));
+		if (!row || (claimedRowId && row.id !== claimedRowId)) {
+			return emptySummary("disabled");
+		}
+		if (!claimedRowId && !(await this.state.claim(row, new Date()))) {
+			return emptySummary("disabled");
+		}
+		if (!claimedRowId) {
+			const claimedRow = await this.state.get(
+				credential.userId,
+				PURELYMAIL_IMAP.source,
+			);
+			if (!claimedRow) return emptySummary("disabled");
+			row = claimedRow;
+		}
+		if (await this.stopIfCredentialChanged(credential, row, summary)) {
 			return summary;
 		}
-		const user = await this.db.user.findUnique({
-			where: { email: this.userEmail },
-			select: { id: true },
-		});
-		if (!user) {
-			summary.status = "failed";
-			summary.failed += 1;
-			return summary;
-		}
-		const row = await this.state.ensure(user.id, PURELYMAIL_IMAP.source, {
-			autoCreate: false,
-		});
-		const client = new ImapFlow({
+		const client = this.createClient({
 			host: PURELYMAIL_IMAP.host,
 			port: PURELYMAIL_IMAP.port,
 			secure: PURELYMAIL_IMAP.secure,
 			servername: PURELYMAIL_IMAP.host,
-			auth: { user: PURELYMAIL_IMAP.mailbox, pass: password },
+			auth: { user: PURELYMAIL_IMAP.mailbox, pass: credential.password },
 			disableAutoIdle: true,
 			logger: false,
 			connectionTimeout: PURELYMAIL_IMAP.connectionTimeoutMs,
@@ -179,19 +189,36 @@ export class PurelymailImapService
 
 		try {
 			await client.connect();
-			const folder = await discoverSentFolder(client);
+			if (await this.stopIfCredentialChanged(credential, row, summary)) {
+				return summary;
+			}
+			const folder = credential.folder;
 			summary.folder = folder;
-			const lock = await client.getMailboxLock(folder);
+			const lock = await client.getMailboxLock(folder, { readOnly: true });
 			try {
-				if (!client.mailbox) throw new Error("Purelymail did not select Sent.");
-				const uidValidity = client.mailbox.uidValidity.toString();
+				const mailbox = client.mailbox;
+				if (mailbox === false || !mailbox?.readOnly) {
+					throw new Error("Purelymail mailbox was not opened read-only.");
+				}
+				if (await this.stopIfCredentialChanged(credential, row, summary)) {
+					return summary;
+				}
+				const uidValidity = mailbox.uidValidity.toString();
 				summary.uidValidity = uidValidity;
 				const cursor = parseCursor(row.cursor);
 				const found = await client.search({ all: true }, { uid: true });
-				const uids = (Array.isArray(found) ? found : [])
-					.filter((uid) => cursor === null || uid > cursor.uid)
-					.slice(0, PURELYMAIL_IMAP.maxMessagesPerTick);
+				const page = selectPurelymailUids(
+					Array.isArray(found) ? found : [],
+					cursor,
+					folder,
+					uidValidity,
+					PURELYMAIL_IMAP.maxMessagesPerTick,
+				);
+				const uids = page.uids;
 				if (uids.length > 0) {
+					if (await this.stopIfCredentialChanged(credential, row, summary)) {
+						return summary;
+					}
 					const messages = await client.fetchAll(
 						uids,
 						{
@@ -213,6 +240,9 @@ export class PurelymailImapService
 						]),
 					};
 					for (const message of messages) {
+						if (await this.stopIfCredentialChanged(credential, row, summary)) {
+							return summary;
+						}
 						await this.processMessage(
 							message,
 							folder,
@@ -223,28 +253,40 @@ export class PurelymailImapService
 						);
 					}
 				}
-				const latestUid = uids.at(-1) ?? cursor?.uid ?? null;
-				await this.state.settle(row.id, {
-					cursor:
-						latestUid === null
-							? row.cursor
-							: JSON.stringify({ folder, uidValidity, uid: latestUid }),
-					status: GoogleSyncStatus.IDLE,
-				});
+				if (await this.stopIfCredentialChanged(credential, row, summary)) {
+					return summary;
+				}
+				if (summary.failed > 0) {
+					summary.status = "failed";
+					await this.state.markFailed(
+						row.id,
+						"Purelymail message processing failed.",
+						row.updatedAt,
+					);
+				} else {
+					await this.state.settle(
+						row.id,
+						{
+							cursor: JSON.stringify(page.nextCursor),
+							status: GoogleSyncStatus.IDLE,
+						},
+						row.updatedAt,
+					);
+				}
 			} finally {
 				lock.release();
 			}
 		} catch (error) {
 			summary.status = "failed";
 			summary.failed += 1;
-			await this.state.markFailed(
-				row.id,
-				error instanceof Error ? error.message : String(error),
+			const errorCode = sanitizePurelymailError(
+				error instanceof Error ? error : "Purelymail synchronization failed.",
 			);
-			this.logger.error(
-				{ message: "Purelymail IMAP synchronization failed" },
-				error instanceof Error ? error.stack : String(error),
-			);
+			await this.state.markFailed(row.id, errorCode, row.updatedAt);
+			this.logger.error({
+				message: "Purelymail IMAP synchronization failed",
+				errorCode,
+			});
 		} finally {
 			if (client.usable) {
 				await client.logout().catch(() => client.close());
@@ -256,6 +298,23 @@ export class PurelymailImapService
 		return summary;
 	}
 
+	private async stopIfCredentialChanged(
+		credential: ActivePurelymailCredential,
+		row: Awaited<ReturnType<SyncStateService["get"]>>,
+		summary: PurelymailPollSummary,
+	): Promise<boolean> {
+		if (!row || (await this.credentials.isCurrent(credential))) return false;
+		summary.status = "disabled";
+		await this.state.cancel(row);
+		return true;
+	}
+
+	protected createClient(
+		options: ConstructorParameters<typeof ImapFlow>[0],
+	): ImapFlow {
+		return new ImapFlow(options);
+	}
+
 	private async processMessage(
 		message: FetchMessageObject,
 		folder: string,
@@ -265,11 +324,50 @@ export class PurelymailImapService
 		summary: PurelymailPollSummary,
 	): Promise<void> {
 		summary.attempted += 1;
+		if (!message.source) {
+			summary.failed += 1;
+			return;
+		}
 		if (
-			!message.source ||
 			(message.size ?? message.source.length) > PURELYMAIL_IMAP.maxMessageBytes
 		) {
-			summary.failed += 1;
+			const providerMessageId = purelymailImapMessageId({
+				mailbox: PURELYMAIL_IMAP.mailbox,
+				folder,
+				uidValidity,
+				uid: message.uid,
+			});
+			const reason = message.source
+				? `Message exceeds the ${PURELYMAIL_IMAP.maxMessageBytes}-byte import limit.`
+				: "Message source was not available for import.";
+			await this.db.mailboxSyncDisposition.upsert({
+				where: {
+					source_rfcMessageId: {
+						source: PURELYMAIL_IMAP.source,
+						rfcMessageId: providerMessageId,
+					},
+				},
+				create: {
+					source: PURELYMAIL_IMAP.source,
+					mailbox: PURELYMAIL_IMAP.mailbox,
+					userId: row.userId,
+					rfcMessageId: providerMessageId,
+					folder,
+					uidValidity,
+					uid: message.uid,
+					status: "SKIPPED",
+					reason,
+				},
+				update: {
+					status: "SKIPPED",
+					reason,
+					folder,
+					uidValidity,
+					uid: message.uid,
+				},
+				select: { id: true },
+			});
+			summary.skipped += 1;
 			return;
 		}
 		const incoming = await parseIncomingMessage(
@@ -334,19 +432,6 @@ export class PurelymailImapService
 		}
 		summary.evidence.push(evidence);
 	}
-}
-
-async function discoverSentFolder(client: ImapFlow): Promise<string> {
-	const folders = await client.list();
-	const special = folders.find(
-		(folder) => folder.specialUse?.toLowerCase() === "\\sent",
-	);
-	if (special) return special.path;
-	const fallback = folders.find((folder) =>
-		/(^|[./ ])sent($|[./ ])?/i.test(folder.path),
-	);
-	if (fallback) return fallback.path;
-	throw new Error("Purelymail did not advertise a Sent folder.");
 }
 
 export async function parseIncomingMessage(
@@ -429,19 +514,6 @@ function dateOf(value?: Date | string): Date {
 	return new Date();
 }
 
-function parseCursor(value: string | null): { uid: number } | null {
-	if (!value) return null;
-	try {
-		const parsed = z
-			.object({ uid: z.number().int() })
-			.strict()
-			.safeParse(JSON.parse(value));
-		return parsed.success ? parsed.data : null;
-	} catch {
-		return null;
-	}
-}
-
 function emptySummary(
 	status: PurelymailPollSummary["status"],
 ): PurelymailPollSummary {
@@ -455,6 +527,7 @@ function emptySummary(
 		processed: 0,
 		unresolved: 0,
 		duplicates: 0,
+		skipped: 0,
 		failed: 0,
 		evidence: [],
 	};
