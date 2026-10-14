@@ -74,6 +74,26 @@ const overdueTaskOutput = z.object({
 	dueAt: z.string().nullable(),
 });
 
+const relationshipContactOutput = z.object({
+	id: z.string(),
+	firstName: z.string(),
+	lastName: z.string().nullable(),
+	title: z.string().nullable(),
+	email: z.string().nullable(),
+	company: linkedRecordOutput.nullable(),
+	lastInboundAt: z.string().nullable(),
+	lastOutboundAt: z.string().nullable(),
+});
+
+const relationshipPulseOutput = z.object({
+	needsReplyCount: z.number(),
+	waitingOnThemCount: z.number(),
+	staleCount: z.number(),
+	needsReply: z.array(relationshipContactOutput),
+	waitingOnThem: z.array(relationshipContactOutput),
+	stale: z.array(relationshipContactOutput),
+});
+
 const recentActivityOutput = z.object({
 	id: z.string(),
 	type: z.nativeEnum(ActivityType),
@@ -110,4 +130,5 @@ export const dashboardSummaryOutput = z.object({
 	biggestOpen: z.array(biggestOpenDealOutput),
 	overdueTasks: z.array(overdueTaskOutput),
 	recentActivity: z.array(recentActivityOutput),
+	relationshipPulse: relationshipPulseOutput,
 });

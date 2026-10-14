@@ -9,6 +9,7 @@ import {
 } from "@crm/ui/components/data-table";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import { PersonAvatar } from "@crm/ui/components/person-avatar";
+import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { useSearchInput } from "@crm/ui/hooks/use-search-input";
 import { useTableSelection } from "@crm/ui/hooks/use-table-selection";
 import { useQuery } from "@tanstack/react-query";
@@ -31,6 +32,32 @@ import { ContactsBulkActions } from "./contacts-bulk-actions";
 import { contactsSearchParams } from "./contacts-search-params";
 
 type ContactRow = RouterOutputs["contacts"]["list"]["rows"][number];
+
+function relationshipLabel(status: ContactRow["relationshipStatus"]) {
+	switch (status) {
+		case "needs_reply":
+			return "Needs reply";
+		case "waiting_on_them":
+			return "Waiting";
+		case "active":
+			return "Active";
+		default:
+			return "No email";
+	}
+}
+
+function relationshipTone(status: ContactRow["relationshipStatus"]) {
+	switch (status) {
+		case "needs_reply":
+			return "error" as const;
+		case "waiting_on_them":
+			return "warning" as const;
+		case "active":
+			return "success" as const;
+		default:
+			return "neutral" as const;
+	}
+}
 
 const COLUMNS: DataTableColumn<ContactRow>[] = [
 	{
@@ -83,6 +110,63 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 		sortable: true,
 		width: "w-[18%]",
 		cell: (row) => <CompanyCell company={row.company} />,
+	},
+	{
+		id: "relationshipStatus",
+		header: "Relationship",
+		width: "w-[12%]",
+		cell: (row) => (
+			<StatusIndicator
+				tone={relationshipTone(row.relationshipStatus)}
+				label={relationshipLabel(row.relationshipStatus)}
+			/>
+		),
+	},
+	{
+		id: "lastInboundAt",
+		header: "Last inbound",
+		align: "right",
+		width: "w-[11%]",
+		hideBelow: "lg",
+		cell: (row) => (
+			<span className="text-muted-foreground">
+				{row.lastInboundAt ? (
+					<LocalRelativeTime date={row.lastInboundAt} />
+				) : (
+					<EmptyCellValue />
+				)}
+			</span>
+		),
+	},
+	{
+		id: "lastOutboundAt",
+		header: "Last outbound",
+		align: "right",
+		width: "w-[11%]",
+		hideBelow: "lg",
+		cell: (row) => (
+			<span className="text-muted-foreground">
+				{row.lastOutboundAt ? (
+					<LocalRelativeTime date={row.lastOutboundAt} />
+				) : (
+					<EmptyCellValue />
+				)}
+			</span>
+		),
+	},
+	{
+		id: "businessUnits",
+		header: "Business units",
+		width: "w-[14%]",
+		hideBelow: "lg",
+		cell: (row) =>
+			row.businessUnits.length > 0 ? (
+				<span className="truncate text-muted-foreground">
+					{row.businessUnits.map((unit) => unit.name).join(", ")}
+				</span>
+			) : (
+				<EmptyCellValue />
+			),
 	},
 	{
 		id: "owner",

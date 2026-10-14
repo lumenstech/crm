@@ -40,6 +40,7 @@ import { dealStageColor } from "@/lib/deal-stage";
 import { SEARCH_PARAM } from "@/lib/search-param-keys";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 import { overviewParsers } from "./overview-search-params";
 import { SalesDashboard } from "./sales-dashboard";
@@ -122,7 +123,8 @@ export function DashboardSummary() {
 		);
 	}
 
-	const { biggestOpen, overdueTasks, recentActivity } = summary;
+	const { biggestOpen, overdueTasks, recentActivity, relationshipPulse } =
+		summary;
 
 	const mine = scope === "me";
 	const largestOpenCents = biggestOpen[0]?.baseAmountCents ?? 0;
@@ -130,6 +132,7 @@ export function DashboardSummary() {
 	return (
 		<div className="flex flex-col gap-6">
 			<SalesDashboard summary={summary} />
+			<RelationshipPulse pulse={relationshipPulse} />
 
 			<div className="grid gap-6 @3xl/page-content:grid-cols-2">
 				<Card className="min-w-0">
@@ -381,5 +384,123 @@ function ValueMeter({ share, color }: { share: number; color: string }) {
 				}
 			/>
 		</span>
+	);
+}
+
+type RelationshipPulseData =
+	RouterOutputs["dashboard"]["summary"]["relationshipPulse"];
+
+function RelationshipPulse({ pulse }: { pulse: RelationshipPulseData }) {
+	const workspaceUrl = useWorkspaceUrl();
+
+	return (
+		<div className="grid gap-6 @3xl/page-content:grid-cols-3">
+			<RelationshipCard
+				title="Needs your reply"
+				count={pulse.needsReplyCount}
+				description="The latest email came from them"
+				rows={pulse.needsReply}
+				date={(row) => row.lastInboundAt}
+				empty="No inbound replies are waiting on you."
+				contactsHref={workspaceUrl("/contacts")}
+			/>
+			<RelationshipCard
+				title="Waiting on them"
+				count={pulse.waitingOnThemCount}
+				description="Your latest email has not been answered"
+				rows={pulse.waitingOnThem}
+				date={(row) => row.lastOutboundAt}
+				empty="Nothing is currently waiting on a reply."
+				contactsHref={workspaceUrl("/contacts")}
+			/>
+			<RelationshipCard
+				title="Going stale"
+				count={pulse.staleCount}
+				description="No email touch in 60+ days"
+				rows={pulse.stale}
+				date={(row) => {
+					const inbound = row.lastInboundAt
+						? new Date(row.lastInboundAt).getTime()
+						: 0;
+					const outbound = row.lastOutboundAt
+						? new Date(row.lastOutboundAt).getTime()
+						: 0;
+					return inbound >= outbound ? row.lastInboundAt : row.lastOutboundAt;
+				}}
+				empty="No emailed relationships are stale."
+				contactsHref={workspaceUrl("/contacts")}
+			/>
+		</div>
+	);
+}
+
+type RelationshipRow = RelationshipPulseData["needsReply"][number];
+
+function RelationshipCard({
+	title,
+	count,
+	description,
+	rows,
+	date,
+	empty,
+	contactsHref,
+}: {
+	title: string;
+	count: number;
+	description: string;
+	rows: RelationshipRow[];
+	date: (row: RelationshipRow) => string | null;
+	empty: string;
+	contactsHref: string;
+}) {
+	return (
+		<Card className="min-w-0">
+			<CardHeader>
+				<CardTitle>{title}</CardTitle>
+				<CardDescription>
+					{count === 0
+						? description
+						: `${formatCount(count, "contact")} · ${description}`}
+				</CardDescription>
+				<CardAction>
+					<Button asChild variant="ghost" size="sm">
+						<Link href={contactsHref}>Contacts</Link>
+					</Button>
+				</CardAction>
+			</CardHeader>
+			<CardPanel>
+				{rows.length === 0 ? (
+					<CardPanelEmpty>{empty}</CardPanelEmpty>
+				) : (
+					<div className="divide-y">
+						{rows.slice(0, 4).map((row) => (
+							<div
+								key={row.id}
+								className="flex min-w-0 items-center justify-between gap-3 py-2.5"
+							>
+								<span className="min-w-0">
+									<RecordLink kind="contact" id={row.id}>
+										{[row.firstName, row.lastName].filter(Boolean).join(" ")}
+									</RecordLink>
+									<span className="block truncate text-muted-foreground">
+										{row.company?.name ??
+											row.title ??
+											row.email ??
+											"No company"}
+									</span>
+								</span>
+								<span className="shrink-0 text-right text-muted-foreground">
+									{date(row) ? (
+										<LocalRelativeTime date={date(row) ?? ""} />
+									) : (
+										"—"
+									)}
+								</span>
+							</div>
+						))}
+					</div>
+				)}
+			</CardPanel>
+		</Card>
 	);
 }
