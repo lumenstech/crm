@@ -21,6 +21,13 @@ import {
 import { Badge } from "@crm/ui/components/badge";
 import { Button } from "@crm/ui/components/button";
 import { DotMatrix } from "@crm/ui/components/dot-matrix";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
+	DropdownMenuTrigger,
+} from "@crm/ui/components/dropdown-menu";
 import { Icon } from "@crm/ui/components/icon";
 import { Markdown } from "@crm/ui/components/markdown";
 import {
@@ -746,6 +753,12 @@ function SharedAgentChat({
 	);
 }
 
+const PERMISSION_MODES = [
+	{ id: "manual", label: "Ask before changes" },
+	{ id: "auto", label: "Ask before risky changes" },
+	{ id: "bypass", label: "Allow risky changes" },
+] as const;
+
 function ChatHeader({
 	conversation,
 	working,
@@ -756,6 +769,17 @@ function ChatHeader({
 	creatingAgent: boolean;
 }) {
 	const workspaceUrl = useWorkspaceUrl();
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const setPermissionMode = useMutation(
+		trpc.conversations.setBuilderPermissionMode.mutationOptions({
+			onSuccess: () =>
+				queryClient.invalidateQueries({
+					queryKey: trpc.conversations.builderById.pathKey(),
+				}),
+			onError: (error) => toast.error(error.message),
+		}),
+	);
 	const title =
 		(creatingAgent ? conversation.agent?.name : null) ??
 		conversation.title ??
@@ -782,6 +806,44 @@ function ChatHeader({
 					</span>
 				) : null}
 			</div>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={setPermissionMode.isPending}
+					>
+						{PERMISSION_MODES.find(
+							(mode) => mode.id === conversation.permissionMode,
+						)?.label ?? "Ask before changes"}
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					<DropdownMenuRadioGroup
+						value={conversation.permissionMode}
+						onValueChange={(permissionMode) => {
+							if (
+								permissionMode !== "manual" &&
+								permissionMode !== "auto" &&
+								permissionMode !== "bypass"
+							) {
+								return;
+							}
+							setPermissionMode.mutate({
+								id: conversation.id,
+								permissionMode,
+							});
+						}}
+					>
+						{PERMISSION_MODES.map((mode) => (
+							<DropdownMenuRadioItem key={mode.id} value={mode.id}>
+								{mode.label}
+							</DropdownMenuRadioItem>
+						))}
+					</DropdownMenuRadioGroup>
+				</DropdownMenuContent>
+			</DropdownMenu>
 			<Button asChild variant="ghost" size="icon-sm">
 				<Link href={workspaceUrl("/chat")} aria-label="Start a new chat">
 					<Icon icon={Add} />

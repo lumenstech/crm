@@ -52,6 +52,8 @@ agent and the API both need it.
 | **Visible** | `brand`, `portrait` | Directly — no `receive`, no model | 60, six at a time |
 | **Research** | everything else | One eve session per row | 12 |
 
+`mcp-tool-discovery` is a direct kind. It lists tools from a connected outside MCP server. It does not call a model. This is separate from the inbound Comp CRM MCP server.
+
 **Neither visible kind has anything to decide**, and through a session they queued
 behind sixty LLM runs for 25 minutes (`test/lanes.integration.spec.ts`). **The row says
 what the work is; the lane only says whether it needs a conversation.**

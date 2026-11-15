@@ -17,6 +17,7 @@ import {
 	builderConversationDetailOutput,
 	builderConversationSubmitInput,
 	builderListOutput,
+	builderPermissionModeInput,
 	builderQuestionResponseInput,
 	builderResourceSearchInput,
 	builderResourcesOutput,
@@ -162,6 +163,20 @@ export class ConversationsRouter {
 		@Input() input: z.infer<typeof builderResponseRatingInput>,
 	) {
 		return this.conversations.rateBuilderResponse(input, ctx.user.id);
+	}
+
+	@Mutation({
+		input: builderPermissionModeInput,
+		output: conversationIdOutput,
+		meta: restMeta("PATCH", "/conversations/{id}/permission-mode", [
+			"Conversations",
+		]),
+	})
+	async setBuilderPermissionMode(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof builderPermissionModeInput>,
+	) {
+		return this.conversations.setBuilderPermissionMode(input, ctx.user.id);
 	}
 
 	@Mutation({

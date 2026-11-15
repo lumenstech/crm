@@ -7,6 +7,7 @@ import {
 	AgentTriggerType,
 	AgentVersionStatus,
 } from "@crm/db";
+import { agentPermissionMode } from "@crm/validation/agent-permission";
 import { z } from "zod";
 
 const agentManifestSummaryOutput = z.object({
@@ -350,11 +351,17 @@ const builderSubmissionOutput = z.object({
 	acceptedAt: z.string().nullable(),
 });
 
+export const builderPermissionModeInput = z.object({
+	id: z.string().min(1),
+	permissionMode: agentPermissionMode,
+});
+
 export const builderConversationDetailOutput = z.object({
 	id: z.string(),
 	sessionId: z.string().nullable(),
 	continuationToken: z.string().nullable(),
 	streamIndex: z.number(),
+	permissionMode: agentPermissionMode,
 	title: z.string().nullable(),
 	messageCount: z.number(),
 	lastMessageAt: z.string(),
