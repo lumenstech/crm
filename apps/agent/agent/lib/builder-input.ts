@@ -2,6 +2,7 @@ import { db, type Prisma } from "@crm/db";
 import { lockIdempotencyKey } from "@crm/db/idempotency";
 import { type InputRequested, parse, schemas } from "@crm/validation";
 import type { ChannelEvents } from "eve/channels";
+import { readBuilderEvent, storeBuilderEvent } from "./builder-event-storage";
 import {
 	builderIdFromToken,
 	builderToken,
@@ -59,25 +60,38 @@ export async function persistBuilderInputRequest(
 				id: { startsWith: eventPrefix(conversation.id) },
 			},
 			orderBy: [{ emittedAt: "desc" }, { id: "desc" }],
-			select: { id: true, data: true },
+			select: { id: true, data: true, encryptedData: true },
 		});
+		const recordedData = recorded
+			? readBuilderEvent(recorded, {
+					conversationId: conversation.id,
+					eventId: recorded.id,
+				})
+			: null;
+		if (recorded && !recordedData) return false;
 		if (
 			recorded &&
+			recordedData &&
 			!supersedes(
 				event,
-				parse(schemas.agents.inputRequested, recorded.data, recorded.id),
+				parse(schemas.agents.inputRequested, recordedData, recorded.id),
 			)
 		) {
 			return false;
 		}
 
+		const stored = storeBuilderEvent(event as Prisma.InputJsonValue, {
+			conversationId: conversation.id,
+			eventId,
+		});
 		await tx.agentEvent.create({
 			data: {
 				id: eventId,
 				sessionId: conversation.sessionId,
 				conversationId: conversation.id,
 				type: BUILDER_INPUT.eventType,
-				data: event as Prisma.InputJsonValue,
+				data: stored.data,
+				encryptedData: stored.encryptedData,
 				emittedAt: new Date(),
 			},
 		});

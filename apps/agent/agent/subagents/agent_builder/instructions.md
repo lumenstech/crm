@@ -34,6 +34,8 @@ exactly when it runs, which CRM records it may read, what output or CRM action
 it may produce, and when it must stop. Preserve the user's meaning and wording
 where that is clearer than a rewrite.
 
+`availableConnections.mcp` lists reviewed MCP platforms. Each entry has a slug, connection status, access mode, and reviewed tools with name, fingerprint, and call kind. Grant a platform only when the user asks the agent to use it and the status is `CONNECTED`. Copy the reviewed tool name, fingerprint, and call kind into `mcp`. Use the resource id `mcp:<slug>`. Do not invent tools. A read-only connection can grant only `read` tools. A tool that is missing, changed, or not reviewed cannot be granted.
+
 The currently executable action types are `crm.activity.create` for CRM notes
 and tasks, `run.summary` for a logged result with no external side effect, and
 `slack.message.post` for a message to one approved Slack channel or person.

@@ -1,3 +1,4 @@
+import { vendors } from "@crm/mcp-integrations/catalog";
 import GoogleLogo from "@crm/ui/components/brand-logos/google";
 import MicrosoftLogo from "@crm/ui/components/brand-logos/microsoft";
 import SlackLogo from "@crm/ui/components/brand-logos/slack";
@@ -5,7 +6,7 @@ import { Button } from "@crm/ui/components/button";
 import { Spinner } from "@crm/ui/components/spinner";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type SVGProps } from "react";
 import { requireSession } from "@/lib/session";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 import { AddConnectionDialog } from "./add-connection-dialog";
@@ -30,10 +31,11 @@ async function ConnectionsSettingsPageContent({
 	const [{ slug }, query] = await Promise.all([params, searchParams]);
 	const queryClient = getServerQueryClient();
 	const trpc = getServerTrpc();
-	const [google, microsoft, slack] = await Promise.all([
+	const [google, microsoft, slack, mcp] = await Promise.all([
 		queryClient.fetchQuery(trpc.google.status.queryOptions()),
 		queryClient.fetchQuery(trpc.microsoft.status.queryOptions()),
 		queryClient.fetchQuery(trpc.slack.status.queryOptions()),
+		queryClient.fetchQuery(trpc.mcp.list.queryOptions()),
 	]);
 	const rows = [
 		...(google.linked
@@ -74,7 +76,34 @@ async function ConnectionsSettingsPageContent({
 					},
 				]
 			: []),
+		...mcp.entries.flatMap((entry) => {
+			if (!entry.connection || entry.connection.status === "disconnected") {
+				return [];
+			}
+			const vendor = vendors.find((item) => item.slug === entry.slug);
+			if (!vendor) return [];
+			return [
+				{
+					name: vendor.name,
+					status: mcpStatusLabel(entry.connection.status),
+					bringsIn: vendor.presentation.bringsIn,
+					sends:
+						entry.connection.accessMode === "read_only"
+							? vendor.presentation.sendsReadOnly
+							: vendor.presentation.sendsReadWrite,
+					href: `/${slug}/settings/connections/${vendor.slug}`,
+					logo: McpMark,
+				},
+			];
+		}),
 	];
+	const mcpCatalog = vendors
+		.filter((vendor) => !rows.some((row) => row.name === vendor.name))
+		.map((vendor) => ({
+			name: vendor.name,
+			description: vendor.presentation.description,
+			href: `/${slug}/settings/connections/${vendor.slug}`,
+		}));
 
 	return (
 		<main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-(--spacing-page-inline) pt-(--spacing-page-top) pb-(--spacing-page-bottom)">
@@ -149,6 +178,7 @@ async function ConnectionsSettingsPageContent({
 				slug={slug}
 				open={first(query.add) === "1"}
 				connected={rows.map((row) => row.name)}
+				extra={mcpCatalog}
 			/>
 		</main>
 	);
@@ -228,6 +258,28 @@ function StarterRow({
 				<Link href={href}>Connect</Link>
 			</Button>
 		</div>
+	);
+}
+
+function mcpStatusLabel(status: string): string {
+	if (status === "connected") return "Connected";
+	if (status === "connecting") return "Connecting";
+	if (status === "error") return "Needs attention";
+	return "Disconnected";
+}
+
+function McpMark(props: SVGProps<SVGSVGElement>) {
+	return (
+		<svg viewBox="0 0 20 20" aria-hidden="true" {...props}>
+			<circle
+				cx="10"
+				cy="10"
+				r="7"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.5"
+			/>
+		</svg>
 	);
 }
 

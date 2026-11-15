@@ -15,15 +15,18 @@ import {
 } from "@crm/ui/components/dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { SVGProps } from "react";
 
 export function AddConnectionDialog({
 	slug,
 	open,
 	connected,
+	extra = [],
 }: {
 	slug: string;
 	open: boolean;
 	connected: string[];
+	extra?: { name: string; description: string; href: string }[];
 }) {
 	const router = useRouter();
 	return (
@@ -65,6 +68,15 @@ export function AddConnectionDialog({
 							href={`/${slug}/settings/connections/microsoft`}
 						/>
 					) : null}
+					{extra.map((item) => (
+						<CatalogRow
+							key={item.href}
+							logo={McpMark}
+							name={item.name}
+							description={item.description}
+							href={item.href}
+						/>
+					))}
 					<CatalogRow
 						logo={StripeLogo}
 						name="Stripe"
@@ -89,6 +101,21 @@ export function AddConnectionDialog({
 				</p>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+function McpMark(props: SVGProps<SVGSVGElement>) {
+	return (
+		<svg viewBox="0 0 20 20" aria-hidden="true" {...props}>
+			<circle
+				cx="10"
+				cy="10"
+				r="7"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.5"
+			/>
+		</svg>
 	);
 }
 

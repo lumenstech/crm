@@ -60,6 +60,20 @@ sign in on different paths and never reach the guard.
 A workspace with no owner and no admin lets any member connect. There is nobody
 left to ask, and a fresh install must not be locked out of its first connection.
 
+## Reviewed MCP connections
+
+An MCP connection here is an outbound capability for an outside MCP server.
+It is not the inbound Comp CRM MCP server. Settings connects the platform and
+reviews its tools. The builder grants only reviewed tools. The runner calls
+only tools on the deployed version.
+
+Owners and admins connect, reconnect, and disconnect. The server enforces that
+rule. A missing `MCP_ENCRYPTION_KEY` disables outbound MCP connections and
+leaves every other connection working.
+
+Tool discovery is an `AgentTask` of kind `mcp-tool-discovery`. The API does not
+call MCP tools and does not decide which tools an agent needs.
+
 ## Direction is the organising idea
 
 Every connection declares what it **brings in** and what it **sends**. Use those

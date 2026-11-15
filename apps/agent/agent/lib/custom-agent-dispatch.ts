@@ -149,6 +149,7 @@ export async function dispatchBuilderSubmission(
 						title: true,
 						userId: true,
 						kind: true,
+						permissionMode: true,
 					},
 				},
 			},
@@ -178,6 +179,9 @@ export async function dispatchBuilderSubmission(
 						conversationId,
 						userId: submission.conversation.userId,
 						submissionId: submission.id,
+						permissionMode: permissionModeAttribute(
+							submission.conversation.permissionMode,
+						),
 					},
 				},
 				continuationToken: builderToken(conversationId),
@@ -897,6 +901,12 @@ function advance(from: Date, intervalMinutes: number, now: Date): Date {
 		Math.floor((now.getTime() - from.getTime()) / intervalMs) + 1,
 	);
 	return new Date(from.getTime() + missed * intervalMs);
+}
+
+function permissionModeAttribute(mode: string): string {
+	if (mode === "AUTO") return "auto";
+	if (mode === "BYPASS") return "bypass";
+	return "manual";
 }
 
 function idFromToken(token: string | undefined, marker: string): string | null {

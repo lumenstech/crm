@@ -1,6 +1,15 @@
 import { WORKSPACE_ID } from "@crm/auth";
-import { type Db, type Prisma, Prisma as PrismaNamespace } from "@crm/db";
+import {
+	AgentConversationPermissionMode,
+	type Db,
+	type Prisma,
+	Prisma as PrismaNamespace,
+} from "@crm/db";
 import { readAgentManifestSummary } from "@crm/validation/agent-manifest";
+import {
+	type AgentPermissionMode,
+	agentPermissionMode,
+} from "@crm/validation/agent-permission";
 import {
 	type BuilderQuestion,
 	builderQuestion,
@@ -18,6 +27,7 @@ import {
 	builderMessageWithAttachments,
 	isPreviewableImage,
 } from "./conversation-attachments";
+import { readStoredChatEvent } from "./conversation-events";
 import { conversationShareTokenHash } from "./conversation-share-token";
 import type {
 	BuilderConversationCreateInput,
@@ -252,6 +262,7 @@ export class ConversationsService {
 				continuationToken: true,
 				pendingInputRequest: true,
 				streamIndex: true,
+				permissionMode: true,
 				title: true,
 				messageCount: true,
 				lastMessageAt: true,
@@ -357,6 +368,7 @@ export class ConversationsService {
 
 		return {
 			...conversation,
+			permissionMode: permissionModeOutput(row.permissionMode),
 			pendingQuestion: pendingBuilderQuestionOf(pendingInputRequest),
 			lastMessageAt: row.lastMessageAt.toISOString(),
 			lastAssistantAt: row.lastAssistantAt?.toISOString() ?? null,
@@ -627,6 +639,25 @@ export class ConversationsService {
 		}
 	}
 
+	async setBuilderPermissionMode(
+		input: { id: string; permissionMode: AgentPermissionMode },
+		userId: string,
+	): Promise<{ id: string }> {
+		await this.assertWorkspaceMember(userId);
+		const updated = await this.db.agentConversation.updateMany({
+			where: { id: input.id, userId, kind: "BUILDER" },
+			data: { permissionMode: permissionModeInput(input.permissionMode) },
+		});
+
+		if (updated.count !== 1) {
+			throw new NotFoundException(
+				`No builder conversation with id ${input.id}.`,
+			);
+		}
+
+		return { id: input.id };
+	}
+
 	async markRead(id: string, userId: string): Promise<{ id: string }> {
 		await this.assertWorkspaceMember(userId);
 		const updated = await this.db.agentConversation.updateMany({
@@ -875,12 +906,19 @@ export class ConversationsService {
 			where: eventWhere,
 			orderBy: [{ emittedAt: "desc" }, { id: "desc" }],
 			take: input.limit,
-			select: { id: true, type: true, data: true, emittedAt: true },
+			select: {
+				id: true,
+				type: true,
+				data: true,
+				encryptedData: true,
+				conversationId: true,
+				emittedAt: true,
+			},
 		});
 
 		return events.reverse().map((event) => ({
 			type: event.type,
-			data: event.data,
+			data: readStoredChatEvent(event),
 			meta: { id: event.id, at: event.emittedAt.toISOString() },
 		}));
 	}
@@ -1103,4 +1141,21 @@ function pendingBuilderQuestionOf(
 	value: Prisma.JsonValue,
 ): BuilderQuestion | null {
 	return builderQuestion.parse(value);
+}
+
+function permissionModeInput(
+	mode: AgentPermissionMode,
+): AgentConversationPermissionMode {
+	const parsed = agentPermissionMode.parse(mode);
+	if (parsed === "auto") return AgentConversationPermissionMode.AUTO;
+	if (parsed === "bypass") return AgentConversationPermissionMode.BYPASS;
+	return AgentConversationPermissionMode.MANUAL;
+}
+
+function permissionModeOutput(
+	mode: AgentConversationPermissionMode,
+): AgentPermissionMode {
+	if (mode === AgentConversationPermissionMode.AUTO) return "auto";
+	if (mode === AgentConversationPermissionMode.BYPASS) return "bypass";
+	return "manual";
 }

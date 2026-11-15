@@ -67,6 +67,17 @@ export type DraftAction =
 			};
 	  };
 
+export type DraftMcpGrant = {
+	platformSlug: string;
+	summary: string;
+	tools: {
+		name: string;
+		fingerprint: string;
+		callKind: "read" | "change" | "risky";
+		summary: string;
+	}[];
+};
+
 export type DraftAgentInput = {
 	name: string;
 	description: string;
@@ -76,6 +87,7 @@ export type DraftAgentInput = {
 	resources: BuilderResource[];
 	actions: DraftAction[];
 	access: string[];
+	mcp?: DraftMcpGrant[];
 };
 
 export const BUILDER_ARTIFACT_PATHS = [
@@ -255,6 +267,7 @@ export async function saveBuilderDraft(
 		},
 		actions: input.actions,
 		access: input.access,
+		mcp: input.mcp ?? [],
 	};
 	const sandboxPolicy = {
 		backend: "eve-default",
@@ -528,24 +541,9 @@ async function validateDraft(
 		resourceKeys.add(key);
 
 		if (resource.kind !== "integration") continue;
-		if (resource.id === "google:gmail" && !connections.gmail) {
-			issues.push("Gmail is not connected for the chat owner.");
-		}
-		if (resource.id === "google:calendar" && !connections.calendar) {
-			issues.push("Google Calendar is not connected for the chat owner.");
-		}
-		if (resource.id === "slack:workspace" && !connections.slack) {
-			issues.push("Slack is not connected for this workspace.");
-		}
-		if (
-			!["google:gmail", "google:calendar", "slack:workspace"].includes(
-				resource.id,
-			)
-		) {
-			issues.push(`${resource.label} is not an available integration.`);
-			continue;
-		}
-		capabilities.add(`${resource.id}.read`);
+		const integration = integrationResourceIssues(resource, input, connections);
+		issues.push(...integration.issues);
+		if (integration.readable) capabilities.add(`${resource.id}.read`);
 	}
 
 	const actionTypes = new Set<string>();
@@ -679,10 +677,34 @@ async function connectionStatus(userId: string) {
 			: [];
 	});
 
+	const mcpConnections = await db.mcpConnection.findMany({
+		where: { organizationId: WORKSPACE_ID },
+		select: {
+			platformSlug: true,
+			status: true,
+			accessMode: true,
+			toolSnapshots: {
+				where: { reviewState: "REVIEWED" },
+				select: {
+					name: true,
+					fingerprint: true,
+					callKind: true,
+					description: true,
+				},
+			},
+		},
+	});
+
 	return {
 		gmail: scopes.has(GMAIL_SCOPE),
 		calendar: scopes.has(CALENDAR_SCOPE),
 		slack: Boolean(slackAccount),
+		mcp: mcpConnections.map((connection) => ({
+			slug: connection.platformSlug,
+			status: connection.status,
+			accessMode: connection.accessMode,
+			tools: connection.toolSnapshots,
+		})),
 		slackChannels: slackChannels.map((channel) => ({
 			id: channel.id,
 			label: `#${channel.name}`,
@@ -694,6 +716,75 @@ async function connectionStatus(userId: string) {
 }
 
 type SlackConnections = Awaited<ReturnType<typeof connectionStatus>>;
+
+function integrationResourceIssues(
+	resource: BuilderResource,
+	input: DraftAgentInput,
+	connections: SlackConnections,
+): { issues: string[]; readable: boolean } {
+	const issues: string[] = [];
+	if (resource.id === "google:gmail" && !connections.gmail) {
+		issues.push("Gmail is not connected for the chat owner.");
+	}
+	if (resource.id === "google:calendar" && !connections.calendar) {
+		issues.push("Google Calendar is not connected for the chat owner.");
+	}
+	if (resource.id === "slack:workspace" && !connections.slack) {
+		issues.push("Slack is not connected for this workspace.");
+	}
+	if (resource.id.startsWith("mcp:")) {
+		issues.push(
+			...mcpGrantIssues(
+				resource.id.slice("mcp:".length),
+				input.mcp ?? [],
+				connections.mcp,
+			),
+		);
+		return { issues, readable: true };
+	}
+	if (
+		!["google:gmail", "google:calendar", "slack:workspace"].includes(
+			resource.id,
+		)
+	) {
+		issues.push(`${resource.label} is not an available integration.`);
+		return { issues, readable: false };
+	}
+	return { issues, readable: true };
+}
+
+function mcpGrantIssues(
+	platformSlug: string,
+	grants: NonNullable<DraftAgentInput["mcp"]>,
+	connections: SlackConnections["mcp"],
+): string[] {
+	const connection = connections.find((entry) => entry.slug === platformSlug);
+	if (connection?.status !== "CONNECTED") {
+		return [`${platformSlug} is not connected.`];
+	}
+	const grant = grants.find((entry) => entry.platformSlug === platformSlug);
+	if (!grant) return [`${platformSlug} needs an MCP tool grant.`];
+	const issues: string[] = [];
+	for (const tool of grant.tools) {
+		const reviewed = connection.tools.find(
+			(entry) =>
+				entry.name === tool.name && entry.fingerprint === tool.fingerprint,
+		);
+		if (!reviewed) {
+			issues.push(`${platformSlug} tool ${tool.name} is not reviewed.`);
+			continue;
+		}
+		if (reviewed.callKind !== tool.callKind) {
+			issues.push(`${platformSlug} tool ${tool.name} changed its access kind.`);
+		}
+		if (connection.accessMode === "READ_ONLY" && tool.callKind !== "read") {
+			issues.push(
+				`${platformSlug} is read-only and cannot grant ${tool.name}.`,
+			);
+		}
+	}
+	return issues;
+}
 
 export function actionIntegrationIssues(
 	actions: DraftAction[],

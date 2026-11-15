@@ -1,5 +1,8 @@
 import { CRM_EVENT_TYPES } from "@crm/db/crm-events";
-import { AGENT_ACTION_TYPES } from "@crm/validation/agent-manifest";
+import {
+	AGENT_ACTION_TYPES,
+	agentManifestMcpGrant,
+} from "@crm/validation/agent-manifest";
 import { z } from "zod";
 import type { DraftAgentInput } from "../../../lib/builder-runtime";
 
@@ -28,6 +31,10 @@ const trigger = z.discriminatedUnion("type", [
 		event: z.enum(CRM_EVENT_TYPES),
 	}),
 ]);
+
+const mcpGrant = agentManifestMcpGrant.extend({
+	tools: agentManifestMcpGrant.shape.tools.max(100),
+});
 
 const action = z.discriminatedUnion("type", [
 	z.object({
@@ -65,6 +72,7 @@ export const builderDraftToolInput = z.object({
 	recordScope: z.enum(["SELECTED", "WORKSPACE"]),
 	resources: z.array(recordResource).max(30),
 	integrations: z.array(z.enum(["gmail", "calendar", "slack"])).max(3),
+	mcp: z.array(mcpGrant).max(10).default([]),
 	actions: z.array(action).min(1).max(10),
 });
 
@@ -90,7 +98,7 @@ const INTEGRATIONS = {
 export function draftInputFromTool(
 	input: BuilderDraftToolInput,
 ): DraftAgentInput {
-	const { integrations: requestedIntegrations, ...draft } = input;
+	const { integrations: requestedIntegrations, mcp, ...draft } = input;
 	const integrations = [...new Set(requestedIntegrations)];
 	const activityTypes = new Set(
 		input.actions.flatMap((entry) =>
@@ -113,6 +121,11 @@ export function draftInputFromTool(
 		...ACTIVITY_ORDER.filter((type) => activityTypes.has(type)).map(
 			(type) => ACTIVITY_ACCESS[type],
 		),
+		...mcp.flatMap((grant) =>
+			grant.tools.map(
+				(tool) => `${grant.platformSlug}: ${tool.summary} (${tool.callKind})`,
+			),
+		),
 	];
 
 	return {
@@ -120,7 +133,13 @@ export function draftInputFromTool(
 		resources: [
 			...input.resources,
 			...integrations.map((integration) => INTEGRATIONS[integration]),
+			...mcp.map((grant) => ({
+				kind: "integration" as const,
+				id: `mcp:${grant.platformSlug}`,
+				label: grant.summary,
+			})),
 		],
+		mcp,
 		access,
 	};
 }

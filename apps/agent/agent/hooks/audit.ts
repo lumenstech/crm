@@ -1,6 +1,7 @@
 import { db, Prisma } from "@crm/db";
 import { defineHook } from "eve/hooks";
 import { z } from "zod";
+import { storeBuilderEvent } from "../lib/builder-event-storage";
 import { isTransportOnlyEvent } from "../lib/event-persistence";
 import { currentFocus } from "../lib/focus";
 import { lockAgentRun } from "../lib/run-state";
@@ -39,6 +40,13 @@ export default defineHook({
 				const purpose = purposeOf(ctx);
 				const conversationId =
 					purpose === "builder" ? attribute(ctx, "conversationId") : null;
+				const stored =
+					purpose === "builder" && conversationId
+						? storeBuilderEvent(data, {
+								conversationId,
+								eventId: id,
+							})
+						: { data, encryptedData: null };
 				await db.$transaction(async (tx) => {
 					await tx.agentEvent.createMany({
 						data: [
@@ -48,7 +56,8 @@ export default defineHook({
 								contactId: currentFocus().contactId,
 								conversationId,
 								type: event.type,
-								data,
+								data: stored.data,
+								encryptedData: stored.encryptedData,
 								emittedAt,
 							},
 						],
